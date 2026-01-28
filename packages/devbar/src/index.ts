@@ -40,6 +40,8 @@ export {
   BUTTON_COLORS,
   CATEGORY_COLORS,
   DEVBAR_THEME,
+  COLORS,
+  FONT_MONO,
   generateThemeCSSVars,
   injectThemeCSS,
   generateBreakpointCSS,

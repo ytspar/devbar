@@ -36,6 +36,8 @@ import {
   BUTTON_COLORS,
   CATEGORY_COLORS,
   TOOLTIP_STYLES,
+  COLORS,
+  FONT_MONO,
 } from './constants.js';
 
 import {
@@ -188,7 +190,7 @@ export class GlobalDevBar {
   constructor(options: GlobalDevBarOptions = {}) {
     this.options = {
       position: options.position ?? 'bottom-left',
-      accentColor: options.accentColor ?? '#10b981',
+      accentColor: options.accentColor ?? COLORS.primary,
       showMetrics: {
         breakpoint: options.showMetrics?.breakpoint ?? true,
         fcp: options.showMetrics?.fcp ?? true,
@@ -901,7 +903,7 @@ export class GlobalDevBar {
       maxHeight: '400px',
       display: 'flex',
       flexDirection: 'column',
-      fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily: FONT_MONO,
     });
 
     // Header
@@ -959,7 +961,7 @@ export class GlobalDevBar {
       Object.assign(emptyMsg.style, {
         padding: '20px',
         textAlign: 'center',
-        color: '#6b7280',
+        color: COLORS.textMuted,
         fontSize: '0.75rem',
       });
       emptyMsg.textContent = `No ${filterType}s recorded`;
@@ -986,7 +988,7 @@ export class GlobalDevBar {
 
       const timestamp = document.createElement('span');
       Object.assign(timestamp.style, {
-        color: '#6b7280',
+        color: COLORS.textMuted,
         fontSize: '0.625rem',
         marginRight: '8px',
       });
@@ -1070,7 +1072,7 @@ export class GlobalDevBar {
       if (node.category) {
         const categorySpan = document.createElement('span');
         Object.assign(categorySpan.style, {
-          color: '#6b7280',
+          color: COLORS.textMuted,
           fontSize: '0.625rem',
           marginLeft: '6px',
         });
@@ -1144,9 +1146,9 @@ export class GlobalDevBar {
       content.appendChild(createEmptyMessage('No structured data found on this page'));
     } else {
       this.renderSchemaSection(content, 'JSON-LD', schema.jsonLd, color);
-      this.renderSchemaSection(content, 'Open Graph', schema.openGraph, '#3b82f6');
-      this.renderSchemaSection(content, 'Twitter Cards', schema.twitter, '#1da1f2');
-      this.renderSchemaSection(content, 'Meta Tags', schema.metaTags, '#6b7280');
+      this.renderSchemaSection(content, 'Open Graph', schema.openGraph, COLORS.info);
+      this.renderSchemaSection(content, 'Twitter Cards', schema.twitter, COLORS.cyan);
+      this.renderSchemaSection(content, 'Meta Tags', schema.metaTags, COLORS.textMuted);
     }
 
     modal.appendChild(content);
@@ -1234,12 +1236,12 @@ export class GlobalDevBar {
   private appendHighlightedJson(container: HTMLElement, json: string): void {
     // Color map for different token types
     const colors: Record<string, string> = {
-      key: '#10b981',      // green
-      string: '#fbbf24',   // amber/yellow
-      number: '#c084fc',   // purple
-      boolean: '#60a5fa',  // blue
-      nullVal: '#f87171',  // red
-      punct: '#9ca3af',    // gray
+      key: COLORS.primary,     // green
+      string: COLORS.warning,  // amber/yellow
+      number: COLORS.purple,   // purple
+      boolean: COLORS.info,    // blue
+      nullVal: COLORS.error,   // red
+      punct: COLORS.textMuted, // gray
     };
 
     // Simple tokenizer for JSON using matchAll for safety
@@ -1397,8 +1399,8 @@ export class GlobalDevBar {
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: this.sweetlinkConnected ? '#10b981' : '#6b7280',
-      boxShadow: this.sweetlinkConnected ? '0 0 6px #10b981' : 'none'
+      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none'
     });
     wrapper.appendChild(dot);
 
@@ -1519,7 +1521,7 @@ export class GlobalDevBar {
       padding: '0.5rem 0.75rem',
       minWidth: '0',
       boxSizing: 'border-box',
-      fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily: FONT_MONO,
       fontSize: '0.6875rem',
       lineHeight: '1rem'
     });
@@ -1550,8 +1552,8 @@ export class GlobalDevBar {
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: this.sweetlinkConnected ? '#10b981' : '#6b7280',
-      boxShadow: this.sweetlinkConnected ? '0 0 6px #10b981' : 'none',
+      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none',
       transition: 'all 300ms'
     });
     connIndicator.appendChild(connDot);
@@ -1681,7 +1683,7 @@ export class GlobalDevBar {
         borderTop: `1px solid ${accentColor}30`,
         marginTop: '0',
         paddingTop: '0.5rem',
-        fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        fontFamily: FONT_MONO,
         fontSize: '0.6875rem',
       });
 

@@ -27,6 +27,31 @@ import {
   handleHmrScreenshot,
 } from './handlers/index.js';
 
+/**
+ * Send a success response to the WebSocket client
+ */
+function sendSuccess(ws: WebSocket, type: string, data: Record<string, unknown>): void {
+  ws.send(JSON.stringify({
+    success: true,
+    type,
+    timestamp: Date.now(),
+    ...data,
+  }));
+}
+
+/**
+ * Send an error response to the WebSocket client
+ */
+function sendError(ws: WebSocket, type: string, error: unknown): void {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  ws.send(JSON.stringify({
+    success: false,
+    type,
+    error: errorMessage,
+    timestamp: Date.now(),
+  }));
+}
+
 // Import Anthropic settings for API key check
 import { CLAUDE_MODEL, CLAUDE_PRICING } from './anthropic.js';
 
@@ -259,14 +284,7 @@ function setupServerHandlers(server: WebSocketServer) {
           if (command.data && clientInfo?.type === 'browser') {
             const savedPath = await handleSaveScreenshot(command.data as Parameters<typeof handleSaveScreenshot>[0]);
             console.log(`[Sweetlink] Screenshot saved to ${savedPath}`);
-
-            // Send confirmation back to browser
-            ws.send(JSON.stringify({
-              success: true,
-              type: 'screenshot-saved',
-              path: savedPath,
-              timestamp: Date.now()
-            }));
+            sendSuccess(ws, 'screenshot-saved', { path: savedPath });
             return;
           }
         }
@@ -280,25 +298,13 @@ function setupServerHandlers(server: WebSocketServer) {
             try {
               const result = await handleDesignReviewScreenshot(command.data as Parameters<typeof handleDesignReviewScreenshot>[0]);
               console.log(`[Sweetlink] Design review saved to ${result.reviewPath}`);
-
-              // Send confirmation back to browser
-              ws.send(JSON.stringify({
-                success: true,
-                type: 'design-review-saved',
+              sendSuccess(ws, 'design-review-saved', {
                 screenshotPath: result.screenshotPath,
                 reviewPath: result.reviewPath,
-                timestamp: Date.now()
-              }));
+              });
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              console.error('[Sweetlink] Design review failed:', errorMessage);
-
-              ws.send(JSON.stringify({
-                success: false,
-                type: 'design-review-error',
-                error: errorMessage,
-                timestamp: Date.now()
-              }));
+              console.error('[Sweetlink] Design review failed:', error instanceof Error ? error.message : error);
+              sendError(ws, 'design-review-error', error);
             }
             return;
           }
@@ -313,24 +319,10 @@ function setupServerHandlers(server: WebSocketServer) {
             try {
               const result = await handleSaveOutline(command.data as Parameters<typeof handleSaveOutline>[0]);
               console.log(`[Sweetlink] Outline saved to ${result.outlinePath}`);
-
-              // Send confirmation back to browser
-              ws.send(JSON.stringify({
-                success: true,
-                type: 'outline-saved',
-                outlinePath: result.outlinePath,
-                timestamp: Date.now()
-              }));
+              sendSuccess(ws, 'outline-saved', { outlinePath: result.outlinePath });
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              console.error('[Sweetlink] Outline save failed:', errorMessage);
-
-              ws.send(JSON.stringify({
-                success: false,
-                type: 'outline-error',
-                error: errorMessage,
-                timestamp: Date.now()
-              }));
+              console.error('[Sweetlink] Outline save failed:', error instanceof Error ? error.message : error);
+              sendError(ws, 'outline-error', error);
             }
             return;
           }
@@ -345,24 +337,10 @@ function setupServerHandlers(server: WebSocketServer) {
             try {
               const result = await handleSaveSchema(command.data as Parameters<typeof handleSaveSchema>[0]);
               console.log(`[Sweetlink] Schema saved to ${result.schemaPath}`);
-
-              // Send confirmation back to browser
-              ws.send(JSON.stringify({
-                success: true,
-                type: 'schema-saved',
-                schemaPath: result.schemaPath,
-                timestamp: Date.now()
-              }));
+              sendSuccess(ws, 'schema-saved', { schemaPath: result.schemaPath });
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-              console.error('[Sweetlink] Schema save failed:', errorMessage);
-
-              ws.send(JSON.stringify({
-                success: false,
-                type: 'schema-error',
-                error: errorMessage,
-                timestamp: Date.now()
-              }));
+              console.error('[Sweetlink] Schema save failed:', error instanceof Error ? error.message : error);
+              sendError(ws, 'schema-error', error);
             }
             return;
           }
@@ -458,11 +436,7 @@ function setupServerHandlers(server: WebSocketServer) {
               channelSubscriptions.set(channel, []);
             }
             channelSubscriptions.get(channel)!.push({ channel, clientWs: ws });
-            ws.send(JSON.stringify({
-              type: 'subscribed',
-              channel,
-              timestamp: Date.now()
-            }));
+            sendSuccess(ws, 'subscribed', { channel });
             return;
           }
         }
@@ -477,11 +451,7 @@ function setupServerHandlers(server: WebSocketServer) {
               subs.splice(idx, 1);
               console.log(`[Sweetlink] Client unsubscribed from channel: ${channel}`);
             }
-            ws.send(JSON.stringify({
-              type: 'unsubscribed',
-              channel,
-              timestamp: Date.now()
-            }));
+            sendSuccess(ws, 'unsubscribed', { channel });
             return;
           }
         }
@@ -495,11 +465,7 @@ function setupServerHandlers(server: WebSocketServer) {
             clientWs: ws,
             filters: command.filters
           });
-          ws.send(JSON.stringify({
-            type: 'log-subscribed',
-            subscriptionId,
-            timestamp: Date.now()
-          }));
+          sendSuccess(ws, 'log-subscribed', { subscriptionId });
           return;
         }
 
@@ -508,11 +474,7 @@ function setupServerHandlers(server: WebSocketServer) {
           if (command.subscriptionId && logSubscriptions.has(command.subscriptionId)) {
             logSubscriptions.delete(command.subscriptionId);
             console.log(`[Sweetlink] Log subscription removed: ${command.subscriptionId}`);
-            ws.send(JSON.stringify({
-              type: 'log-unsubscribed',
-              subscriptionId: command.subscriptionId,
-              timestamp: Date.now()
-            }));
+            sendSuccess(ws, 'log-unsubscribed', { subscriptionId: command.subscriptionId });
           }
           return;
         }
@@ -534,32 +496,28 @@ function setupServerHandlers(server: WebSocketServer) {
 
             // Notify all subscribers on 'hmr-screenshots' channel
             const subscribers = channelSubscriptions.get('hmr-screenshots') || [];
-            const notification = {
-              type: 'hmr-screenshot-saved',
+            const notificationData = {
               screenshotPath: result.screenshotPath,
               logsPath: result.logsPath,
               trigger: hmrData.trigger,
               changedFile: hmrData.changedFile,
               timestamp: hmrData.timestamp,
               sequenceNumber: hmrSequenceNumber,
-              logSummary: result.logSummary
+              logSummary: result.logSummary,
             };
 
             for (const sub of subscribers) {
               if (sub.clientWs.readyState === WebSocket.OPEN) {
-                sub.clientWs.send(JSON.stringify(notification));
+                sendSuccess(sub.clientWs, 'hmr-screenshot-saved', notificationData);
               }
             }
 
             // Send confirmation back to browser
-            ws.send(JSON.stringify({
-              success: true,
-              type: 'hmr-screenshot-saved',
+            sendSuccess(ws, 'hmr-screenshot-saved', {
               screenshotPath: result.screenshotPath,
               logsPath: result.logsPath,
               sequenceNumber: hmrSequenceNumber,
-              timestamp: Date.now()
-            }));
+            });
             return;
           }
         }

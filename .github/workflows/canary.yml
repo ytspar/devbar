@@ -20,6 +20,11 @@ on:
         required: false
         type: string
 
+# Permissions for OIDC trusted publishing to npm
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   canary:
     runs-on: ubuntu-latest
@@ -74,16 +79,15 @@ jobs:
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$CANARY_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/devbar@$CANARY_VERSION"
 
-      - name: Configure npm auth
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-
       - name: Publish sweetlink canary
-        run: pnpm --filter @ytspar/sweetlink publish --tag canary --access public --no-git-checks
+        run: |
+          cd packages/sweetlink
+          npm publish --tag canary --access public --provenance
 
       - name: Publish devbar canary
-        run: pnpm --filter @ytspar/devbar publish --tag canary --access public --no-git-checks
+        run: |
+          cd packages/devbar
+          npm publish --tag canary --access public --provenance
 
       - name: Summary
         env:

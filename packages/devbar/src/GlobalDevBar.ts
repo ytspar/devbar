@@ -60,6 +60,7 @@ import {
   createModalHeader,
   createModalContent,
   createEmptyMessage,
+  createInfoBox,
 } from './ui/index.js';
 
 // Re-export types for backwards compatibility
@@ -976,70 +977,35 @@ export class GlobalDevBar {
   }
 
   private renderDesignReviewConfirmModal(): void {
-    const overlay = document.createElement('div');
-    overlay.setAttribute('data-devbar', 'true');
-    Object.assign(overlay.style, {
-      position: 'fixed',
-      top: '0',
-      left: '0',
-      right: '0',
-      bottom: '0',
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
-      zIndex: '10003',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    });
-    overlay.onclick = (e) => {
-      if (e.target === overlay) this.closeDesignReviewConfirm();
-    };
+    const color = BUTTON_COLORS.review;
+    const closeModal = () => this.closeDesignReviewConfirm();
 
-    const modal = document.createElement('div');
-    Object.assign(modal.style, {
-      backgroundColor: 'rgba(17, 24, 39, 0.98)',
-      border: `1px solid ${BUTTON_COLORS.review}`,
-      borderRadius: '12px',
-      boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${BUTTON_COLORS.review}33`,
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
-      width: '90%',
-      maxWidth: '450px',
-      fontFamily: FONT_MONO,
-      overflow: 'hidden',
-    });
+    const overlay = createModalOverlay(closeModal);
+    // Override z-index for this modal to be above others
+    overlay.style.zIndex = '10003';
 
-    // Header
+    const modal = createModalBox(color);
+    modal.style.maxWidth = '450px';
+
+    // Header with title and close button
     const header = document.createElement('div');
     Object.assign(header.style, {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '14px 18px',
-      borderBottom: `1px solid ${BUTTON_COLORS.review}40`,
-      backgroundColor: `${BUTTON_COLORS.review}15`,
+      borderBottom: `1px solid ${color}40`,
+      backgroundColor: `${color}15`,
     });
 
     const title = document.createElement('span');
-    Object.assign(title.style, {
-      color: BUTTON_COLORS.review,
-      fontSize: '0.875rem',
-      fontWeight: '600',
-    });
+    Object.assign(title.style, { color, fontSize: '0.875rem', fontWeight: '600' });
     title.textContent = 'AI Design Review';
     header.appendChild(title);
 
-    const closeBtn = document.createElement('button');
-    Object.assign(closeBtn.style, {
-      background: 'transparent',
-      border: 'none',
-      color: COLORS.textMuted,
-      fontSize: '1.25rem',
-      cursor: 'pointer',
-      padding: '0',
-      lineHeight: '1',
-    });
-    closeBtn.textContent = '×';
-    closeBtn.onclick = () => this.closeDesignReviewConfirm();
+    const closeBtn = createStyledButton({ color: COLORS.textMuted, text: '×', padding: '0', fontSize: '1.25rem' });
+    closeBtn.style.border = 'none';
+    closeBtn.onclick = closeModal;
     header.appendChild(closeBtn);
     modal.appendChild(header);
 
@@ -1053,147 +1019,11 @@ export class GlobalDevBar {
     });
 
     if (this.apiKeyStatus === null) {
-      // Loading state
-      const loading = document.createElement('div');
-      Object.assign(loading.style, {
-        textAlign: 'center',
-        padding: '20px',
-        color: COLORS.textMuted,
-      });
-      loading.textContent = 'Checking API key configuration...';
-      content.appendChild(loading);
+      content.appendChild(createEmptyMessage('Checking API key configuration...'));
     } else if (!this.apiKeyStatus.configured) {
-      // No API key configured
-      const errorDiv = document.createElement('div');
-      Object.assign(errorDiv.style, {
-        backgroundColor: `${COLORS.error}15`,
-        border: `1px solid ${COLORS.error}40`,
-        borderRadius: '8px',
-        padding: '14px',
-        marginBottom: '16px',
-      });
-
-      const errorTitle = document.createElement('div');
-      Object.assign(errorTitle.style, {
-        color: COLORS.error,
-        fontWeight: '600',
-        marginBottom: '8px',
-      });
-      errorTitle.textContent = 'API Key Not Configured';
-      errorDiv.appendChild(errorTitle);
-
-      const errorText = document.createElement('div');
-      Object.assign(errorText.style, { color: COLORS.textSecondary });
-      errorText.textContent = 'The ANTHROPIC_API_KEY environment variable is not set.';
-      errorDiv.appendChild(errorText);
-      content.appendChild(errorDiv);
-
-      // Instructions
-      const instructions = document.createElement('div');
-      Object.assign(instructions.style, { marginBottom: '12px' });
-
-      const instructTitle = document.createElement('div');
-      Object.assign(instructTitle.style, {
-        color: COLORS.textSecondary,
-        fontWeight: '600',
-        marginBottom: '8px',
-      });
-      instructTitle.textContent = 'To configure:';
-      instructions.appendChild(instructTitle);
-
-      const steps = [
-        '1. Get an API key from console.anthropic.com',
-        '2. Add to your .env file:',
-        '   ANTHROPIC_API_KEY=sk-ant-...',
-        '3. Restart your dev server',
-      ];
-
-      steps.forEach((step) => {
-        const stepDiv = document.createElement('div');
-        Object.assign(stepDiv.style, {
-          color: step.startsWith('   ') ? COLORS.primary : COLORS.textMuted,
-          fontSize: '0.75rem',
-          marginBottom: '4px',
-          fontFamily: FONT_MONO,
-        });
-        stepDiv.textContent = step;
-        instructions.appendChild(stepDiv);
-      });
-
-      content.appendChild(instructions);
+      content.appendChild(this.renderApiKeyNotConfiguredContent());
     } else {
-      // API key configured - show confirmation with cost estimate
-      const infoDiv = document.createElement('div');
-      Object.assign(infoDiv.style, { marginBottom: '16px' });
-
-      const desc = document.createElement('p');
-      Object.assign(desc.style, {
-        color: COLORS.textSecondary,
-        marginBottom: '12px',
-      });
-      desc.textContent = 'This will capture a screenshot and send it to Claude for design analysis.';
-      infoDiv.appendChild(desc);
-
-      // Cost estimate
-      const estimate = this.calculateCostEstimate();
-      if (estimate) {
-        const costDiv = document.createElement('div');
-        Object.assign(costDiv.style, {
-          backgroundColor: `${COLORS.primary}15`,
-          border: `1px solid ${COLORS.primary}40`,
-          borderRadius: '8px',
-          padding: '12px',
-        });
-
-        const costTitle = document.createElement('div');
-        Object.assign(costTitle.style, {
-          color: COLORS.primary,
-          fontWeight: '600',
-          marginBottom: '6px',
-        });
-        costTitle.textContent = 'Estimated Cost';
-        costDiv.appendChild(costTitle);
-
-        const costDetails = document.createElement('div');
-        Object.assign(costDetails.style, {
-          display: 'flex',
-          justifyContent: 'space-between',
-          color: COLORS.textSecondary,
-          fontSize: '0.75rem',
-        });
-
-        const tokensSpan = document.createElement('span');
-        tokensSpan.textContent = `~${estimate.tokens.toLocaleString()} tokens`;
-        costDetails.appendChild(tokensSpan);
-
-        const priceSpan = document.createElement('span');
-        Object.assign(priceSpan.style, {
-          color: COLORS.warning,
-          fontWeight: '600',
-        });
-        priceSpan.textContent = estimate.cost;
-        costDetails.appendChild(priceSpan);
-
-        costDiv.appendChild(costDetails);
-        infoDiv.appendChild(costDiv);
-      }
-
-      // Model info
-      if (this.apiKeyStatus.model) {
-        const modelDiv = document.createElement('div');
-        Object.assign(modelDiv.style, {
-          color: COLORS.textMuted,
-          fontSize: '0.6875rem',
-          marginTop: '12px',
-        });
-        modelDiv.textContent = `Model: ${this.apiKeyStatus.model}`;
-        if (this.apiKeyStatus.maskedKey) {
-          modelDiv.textContent += ` | Key: ${this.apiKeyStatus.maskedKey}`;
-        }
-        infoDiv.appendChild(modelDiv);
-      }
-
-      content.appendChild(infoDiv);
+      content.appendChild(this.renderApiKeyConfiguredContent());
     }
 
     modal.appendChild(content);
@@ -1208,36 +1038,13 @@ export class GlobalDevBar {
       borderTop: `1px solid ${COLORS.border}`,
     });
 
-    const cancelBtn = document.createElement('button');
-    Object.assign(cancelBtn.style, {
-      padding: '8px 16px',
-      fontSize: '0.75rem',
-      fontFamily: FONT_MONO,
-      fontWeight: '500',
-      backgroundColor: 'transparent',
-      border: `1px solid ${COLORS.textMuted}`,
-      borderRadius: '6px',
-      color: COLORS.textMuted,
-      cursor: 'pointer',
-    });
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.onclick = () => this.closeDesignReviewConfirm();
+    const cancelBtn = createStyledButton({ color: COLORS.textMuted, text: 'Cancel', padding: '8px 16px' });
+    cancelBtn.onclick = closeModal;
     footer.appendChild(cancelBtn);
 
     if (this.apiKeyStatus?.configured) {
-      const proceedBtn = document.createElement('button');
-      Object.assign(proceedBtn.style, {
-        padding: '8px 16px',
-        fontSize: '0.75rem',
-        fontFamily: FONT_MONO,
-        fontWeight: '500',
-        backgroundColor: `${BUTTON_COLORS.review}20`,
-        border: `1px solid ${BUTTON_COLORS.review}`,
-        borderRadius: '6px',
-        color: BUTTON_COLORS.review,
-        cursor: 'pointer',
-      });
-      proceedBtn.textContent = 'Run Review';
+      const proceedBtn = createStyledButton({ color, text: 'Run Review', padding: '8px 16px' });
+      proceedBtn.style.backgroundColor = `${color}20`;
       proceedBtn.onclick = () => this.proceedWithDesignReview();
       footer.appendChild(proceedBtn);
     }
@@ -1245,6 +1052,105 @@ export class GlobalDevBar {
     modal.appendChild(footer);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+  }
+
+  /**
+   * Render content when API key is not configured
+   */
+  private renderApiKeyNotConfiguredContent(): HTMLElement {
+    const wrapper = document.createElement('div');
+
+    wrapper.appendChild(createInfoBox(
+      COLORS.error,
+      'API Key Not Configured',
+      'The ANTHROPIC_API_KEY environment variable is not set.'
+    ));
+
+    // Instructions
+    const instructions = document.createElement('div');
+    Object.assign(instructions.style, { marginBottom: '12px' });
+
+    const instructTitle = document.createElement('div');
+    Object.assign(instructTitle.style, { color: COLORS.textSecondary, fontWeight: '600', marginBottom: '8px' });
+    instructTitle.textContent = 'To configure:';
+    instructions.appendChild(instructTitle);
+
+    const steps = [
+      { text: '1. Get an API key from console.anthropic.com', highlight: false },
+      { text: '2. Add to your .env file:', highlight: false },
+      { text: '   ANTHROPIC_API_KEY=sk-ant-...', highlight: true },
+      { text: '3. Restart your dev server', highlight: false },
+    ];
+
+    steps.forEach(({ text, highlight }) => {
+      const stepDiv = document.createElement('div');
+      Object.assign(stepDiv.style, {
+        color: highlight ? COLORS.primary : COLORS.textMuted,
+        fontSize: '0.75rem',
+        marginBottom: '4px',
+        fontFamily: FONT_MONO,
+      });
+      stepDiv.textContent = text;
+      instructions.appendChild(stepDiv);
+    });
+
+    wrapper.appendChild(instructions);
+    return wrapper;
+  }
+
+  /**
+   * Render content when API key is configured (cost estimate and model info)
+   */
+  private renderApiKeyConfiguredContent(): HTMLElement {
+    const wrapper = document.createElement('div');
+    Object.assign(wrapper.style, { marginBottom: '16px' });
+
+    const desc = document.createElement('p');
+    Object.assign(desc.style, { color: COLORS.textSecondary, marginBottom: '12px' });
+    desc.textContent = 'This will capture a screenshot and send it to Claude for design analysis.';
+    wrapper.appendChild(desc);
+
+    // Cost estimate
+    const estimate = this.calculateCostEstimate();
+    if (estimate) {
+      const costBox = createInfoBox(COLORS.primary, 'Estimated Cost', []);
+      // Remove default margin and adjust padding
+      costBox.style.marginBottom = '0';
+      costBox.style.padding = '12px';
+
+      const costDetails = document.createElement('div');
+      Object.assign(costDetails.style, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        color: COLORS.textSecondary,
+        fontSize: '0.75rem',
+      });
+
+      const tokensSpan = document.createElement('span');
+      tokensSpan.textContent = `~${estimate.tokens.toLocaleString()} tokens`;
+      costDetails.appendChild(tokensSpan);
+
+      const priceSpan = document.createElement('span');
+      Object.assign(priceSpan.style, { color: COLORS.warning, fontWeight: '600' });
+      priceSpan.textContent = estimate.cost;
+      costDetails.appendChild(priceSpan);
+
+      costBox.appendChild(costDetails);
+      wrapper.appendChild(costBox);
+    }
+
+    // Model info
+    if (this.apiKeyStatus?.model) {
+      const modelDiv = document.createElement('div');
+      Object.assign(modelDiv.style, { color: COLORS.textMuted, fontSize: '0.6875rem', marginTop: '12px' });
+      modelDiv.textContent = `Model: ${this.apiKeyStatus.model}`;
+      if (this.apiKeyStatus.maskedKey) {
+        modelDiv.textContent += ` | Key: ${this.apiKeyStatus.maskedKey}`;
+      }
+      wrapper.appendChild(modelDiv);
+    }
+
+    return wrapper;
   }
 
   private renderConsolePopup(): void {

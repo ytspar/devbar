@@ -134,3 +134,54 @@ export function createEmptyMessage(text: string): HTMLDivElement {
   emptyMsg.textContent = text;
   return emptyMsg;
 }
+
+/**
+ * Create a styled text element with common patterns
+ */
+export function createStyledText(
+  text: string,
+  styles: Partial<CSSStyleDeclaration>
+): HTMLDivElement {
+  const el = document.createElement('div');
+  Object.assign(el.style, styles);
+  el.textContent = text;
+  return el;
+}
+
+/**
+ * Create a colored info box (for error states, cost estimates, etc.)
+ */
+export function createInfoBox(
+  color: string,
+  title: string,
+  content: string | HTMLElement[]
+): HTMLDivElement {
+  const box = document.createElement('div');
+  Object.assign(box.style, {
+    backgroundColor: `${color}15`,
+    border: `1px solid ${color}40`,
+    borderRadius: '8px',
+    padding: '14px',
+    marginBottom: '16px',
+  });
+
+  const titleEl = document.createElement('div');
+  Object.assign(titleEl.style, {
+    color,
+    fontWeight: '600',
+    marginBottom: '8px',
+  });
+  titleEl.textContent = title;
+  box.appendChild(titleEl);
+
+  if (typeof content === 'string') {
+    const textEl = document.createElement('div');
+    Object.assign(textEl.style, { color: '#94a3b8' });
+    textEl.textContent = content;
+    box.appendChild(textEl);
+  } else {
+    content.forEach(el => box.appendChild(el));
+  }
+
+  return box;
+}

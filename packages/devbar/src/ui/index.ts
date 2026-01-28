@@ -12,5 +12,7 @@ export {
   createModalHeader,
   createModalContent,
   createEmptyMessage,
+  createStyledText,
+  createInfoBox,
   type ModalConfig
 } from './modals.js';

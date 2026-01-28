@@ -31,6 +31,78 @@ let currentOptions = { ...DEFAULT_OPTIONS };
 let controlsCollapsed = false;
 
 /**
+ * Toggle control configuration
+ */
+interface ToggleConfig {
+  label: string;
+  id: string;
+  getValue: () => boolean;
+  setValue: (value: boolean) => void;
+}
+
+/**
+ * Define all toggle controls in a single configuration array
+ */
+function getToggleConfigs(): ToggleConfig[] {
+  return [
+    {
+      label: 'Show Tooltips',
+      id: 'showTooltips',
+      getValue: () => currentOptions.showTooltips ?? true,
+      setValue: (v) => { currentOptions.showTooltips = v; },
+    },
+    {
+      label: 'Show Screenshot',
+      id: 'showScreenshot',
+      getValue: () => currentOptions.showScreenshot ?? true,
+      setValue: (v) => { currentOptions.showScreenshot = v; },
+    },
+    {
+      label: 'Console Badges',
+      id: 'showConsoleBadges',
+      getValue: () => currentOptions.showConsoleBadges ?? true,
+      setValue: (v) => { currentOptions.showConsoleBadges = v; },
+    },
+  ];
+}
+
+/**
+ * Define metrics toggle controls
+ */
+function getMetricsToggleConfigs(): ToggleConfig[] {
+  const ensureMetrics = () => {
+    if (!currentOptions.showMetrics) currentOptions.showMetrics = {};
+  };
+
+  return [
+    {
+      label: 'Breakpoint',
+      id: 'metrics-breakpoint',
+      getValue: () => currentOptions.showMetrics?.breakpoint ?? true,
+      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.breakpoint = v; },
+    },
+    {
+      label: 'FCP',
+      id: 'metrics-fcp',
+      getValue: () => currentOptions.showMetrics?.fcp ?? true,
+      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.fcp = v; },
+    },
+    {
+      label: 'LCP',
+      id: 'metrics-lcp',
+      getValue: () => currentOptions.showMetrics?.lcp ?? true,
+      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.lcp = v; },
+    },
+    {
+      label: 'Page Size',
+      id: 'metrics-pageSize',
+      getValue: () => currentOptions.showMetrics?.pageSize ?? true,
+      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.pageSize = v; },
+    },
+  ];
+}
+
+/**
  * Initialize playground controls
  */
 export function initPlaygroundControls(): void {
@@ -93,21 +165,10 @@ function createControlsPanel(): HTMLElement {
     }
   ));
 
-  // Toggle controls
-  content.appendChild(createToggleControl('Show Tooltips', 'showTooltips', currentOptions.showTooltips ?? true, (value) => {
-    currentOptions.showTooltips = value;
-    reinitDevBar();
-  }));
-
-  content.appendChild(createToggleControl('Show Screenshot', 'showScreenshot', currentOptions.showScreenshot ?? true, (value) => {
-    currentOptions.showScreenshot = value;
-    reinitDevBar();
-  }));
-
-  content.appendChild(createToggleControl('Console Badges', 'showConsoleBadges', currentOptions.showConsoleBadges ?? true, (value) => {
-    currentOptions.showConsoleBadges = value;
-    reinitDevBar();
-  }));
+  // Add main toggle controls
+  getToggleConfigs().forEach(config => {
+    content.appendChild(createToggleFromConfig(config));
+  });
 
   // Metrics section
   const metricsHeader = document.createElement('div');
@@ -115,29 +176,10 @@ function createControlsPanel(): HTMLElement {
   metricsHeader.textContent = 'Metrics';
   content.appendChild(metricsHeader);
 
-  content.appendChild(createToggleControl('Breakpoint', 'metrics-breakpoint', currentOptions.showMetrics?.breakpoint ?? true, (value) => {
-    if (!currentOptions.showMetrics) currentOptions.showMetrics = {};
-    currentOptions.showMetrics.breakpoint = value;
-    reinitDevBar();
-  }));
-
-  content.appendChild(createToggleControl('FCP', 'metrics-fcp', currentOptions.showMetrics?.fcp ?? true, (value) => {
-    if (!currentOptions.showMetrics) currentOptions.showMetrics = {};
-    currentOptions.showMetrics.fcp = value;
-    reinitDevBar();
-  }));
-
-  content.appendChild(createToggleControl('LCP', 'metrics-lcp', currentOptions.showMetrics?.lcp ?? true, (value) => {
-    if (!currentOptions.showMetrics) currentOptions.showMetrics = {};
-    currentOptions.showMetrics.lcp = value;
-    reinitDevBar();
-  }));
-
-  content.appendChild(createToggleControl('Page Size', 'metrics-pageSize', currentOptions.showMetrics?.pageSize ?? true, (value) => {
-    if (!currentOptions.showMetrics) currentOptions.showMetrics = {};
-    currentOptions.showMetrics.pageSize = value;
-    reinitDevBar();
-  }));
+  // Add metrics toggle controls
+  getMetricsToggleConfigs().forEach(config => {
+    content.appendChild(createToggleFromConfig(config));
+  });
 
   // Reset button
   const resetBtn = document.createElement('button');
@@ -227,27 +269,25 @@ function updatePositionSelector(): void {
 }
 
 /**
- * Create a toggle (checkbox) control
+ * Create a toggle (checkbox) control from a configuration object
  */
-function createToggleControl(
-  label: string,
-  id: string,
-  checked: boolean,
-  onChange: (value: boolean) => void
-): HTMLElement {
+function createToggleFromConfig(config: ToggleConfig): HTMLElement {
   const group = document.createElement('div');
   group.className = 'control-group toggle';
 
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
-  checkbox.id = id;
-  checkbox.checked = checked;
-  checkbox.onchange = () => onChange(checkbox.checked);
+  checkbox.id = config.id;
+  checkbox.checked = config.getValue();
+  checkbox.onchange = () => {
+    config.setValue(checkbox.checked);
+    reinitDevBar();
+  };
   group.appendChild(checkbox);
 
   const labelEl = document.createElement('label');
-  labelEl.htmlFor = id;
-  labelEl.textContent = label;
+  labelEl.htmlFor = config.id;
+  labelEl.textContent = config.label;
   group.appendChild(labelEl);
 
   return group;
@@ -257,22 +297,11 @@ function createToggleControl(
  * Update all controls UI to match current options
  */
 function updateControlsUI(): void {
-  // Position mini-map
   updatePositionSelector();
 
-  // Toggles
-  const toggleMap: Record<string, boolean> = {
-    'showTooltips': currentOptions.showTooltips ?? true,
-    'showScreenshot': currentOptions.showScreenshot ?? true,
-    'showConsoleBadges': currentOptions.showConsoleBadges ?? true,
-    'metrics-breakpoint': currentOptions.showMetrics?.breakpoint ?? true,
-    'metrics-fcp': currentOptions.showMetrics?.fcp ?? true,
-    'metrics-lcp': currentOptions.showMetrics?.lcp ?? true,
-    'metrics-pageSize': currentOptions.showMetrics?.pageSize ?? true,
-  };
-
-  Object.entries(toggleMap).forEach(([id, value]) => {
-    const checkbox = document.getElementById(id) as HTMLInputElement;
-    if (checkbox) checkbox.checked = value;
+  // Update all toggles from their configs
+  [...getToggleConfigs(), ...getMetricsToggleConfigs()].forEach(config => {
+    const checkbox = document.getElementById(config.id) as HTMLInputElement;
+    if (checkbox) checkbox.checked = config.getValue();
   });
 }

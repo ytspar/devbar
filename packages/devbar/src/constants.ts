@@ -74,29 +74,48 @@ export const TAILWIND_BREAKPOINTS = {
 export type TailwindBreakpoint = keyof typeof TAILWIND_BREAKPOINTS;
 
 // ============================================================================
+// Base Color Palette (single source of truth)
+// ============================================================================
+
+/** Core color palette - all other color constants reference these */
+const PALETTE = {
+  emerald: '#10b981',
+  emeraldHover: '#059669',
+  emeraldGlow: 'rgba(16, 185, 129, 0.4)',
+  red: '#ef4444',
+  amber: '#f59e0b',
+  blue: '#3b82f6',
+  purple: '#a855f7',
+  cyan: '#06b6d4',
+  pink: '#ec4899',
+  lime: '#84cc16',
+  gray: '#6b7280',
+} as const;
+
+// ============================================================================
 // Button Colors
 // ============================================================================
 
 /** Button colors for devbar toolbar buttons */
 export const BUTTON_COLORS = {
-  screenshot: '#10b981', // emerald - matches accent color
-  review: '#a855f7',     // purple
-  outline: '#06b6d4',    // cyan
-  schema: '#f59e0b',     // amber
-  error: '#ef4444',      // red
-  warning: '#f59e0b',    // amber
+  screenshot: PALETTE.emerald,
+  review: PALETTE.purple,
+  outline: PALETTE.cyan,
+  schema: PALETTE.amber,
+  error: PALETTE.red,
+  warning: PALETTE.amber,
 } as const;
 
 /** Category colors for outline display */
 export const CATEGORY_COLORS: Record<string, string> = {
-  heading: '#10b981',    // emerald
-  sectioning: '#3b82f6', // blue
-  landmark: '#a855f7',   // purple
-  grouping: '#06b6d4',   // cyan
-  form: '#f59e0b',       // amber
-  table: '#ec4899',      // pink
-  list: '#84cc16',       // lime
-  other: '#6b7280',      // gray
+  heading: PALETTE.emerald,
+  sectioning: PALETTE.blue,
+  landmark: PALETTE.purple,
+  grouping: PALETTE.cyan,
+  form: PALETTE.amber,
+  table: PALETTE.pink,
+  list: PALETTE.lime,
+  other: PALETTE.gray,
 };
 
 // ============================================================================
@@ -107,20 +126,20 @@ export const CATEGORY_COLORS: Record<string, string> = {
 export const DEVBAR_THEME = {
   colors: {
     // Primary accent
-    primary: '#10b981',
-    primaryHover: '#059669',
-    primaryGlow: 'rgba(16, 185, 129, 0.4)',
+    primary: PALETTE.emerald,
+    primaryHover: PALETTE.emeraldHover,
+    primaryGlow: PALETTE.emeraldGlow,
 
     // Semantic colors
-    error: '#ef4444',
-    warning: '#f59e0b',
-    info: '#3b82f6',
+    error: PALETTE.red,
+    warning: PALETTE.amber,
+    info: PALETTE.blue,
 
     // Extended palette
-    purple: '#a855f7',
-    cyan: '#06b6d4',
-    pink: '#ec4899',
-    lime: '#84cc16',
+    purple: PALETTE.purple,
+    cyan: PALETTE.cyan,
+    pink: PALETTE.pink,
+    lime: PALETTE.lime,
 
     // Backgrounds
     bg: '#0a0f1a',
@@ -131,7 +150,7 @@ export const DEVBAR_THEME = {
     // Text
     text: '#f1f5f9',
     textSecondary: '#94a3b8',
-    textMuted: '#6b7280',
+    textMuted: PALETTE.gray,
 
     // Borders
     border: 'rgba(16, 185, 129, 0.2)',

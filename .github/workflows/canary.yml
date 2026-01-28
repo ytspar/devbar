@@ -61,7 +61,7 @@ jobs:
           cd packages/sweetlink
           VERSION=$(node -p "require('./package.json').version")
           CANARY_VERSION="${VERSION}-canary.${VERSION_SUFFIX}"
-          npm version "$CANARY_VERSION" --no-git-tag-version
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$CANARY_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/sweetlink@$CANARY_VERSION"
 
       - name: Update devbar version for canary
@@ -71,20 +71,16 @@ jobs:
           cd packages/devbar
           VERSION=$(node -p "require('./package.json').version")
           CANARY_VERSION="${VERSION}-canary.${VERSION_SUFFIX}"
-          npm version "$CANARY_VERSION" --no-git-tag-version
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$CANARY_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/devbar@$CANARY_VERSION"
 
       - name: Publish sweetlink canary
-        run: |
-          cd packages/sweetlink
-          npm publish --tag canary --access public
+        run: pnpm --filter @ytspar/sweetlink publish --tag canary --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish devbar canary
-        run: |
-          cd packages/devbar
-          npm publish --tag canary --access public
+        run: pnpm --filter @ytspar/devbar publish --tag canary --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

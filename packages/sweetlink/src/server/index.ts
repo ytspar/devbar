@@ -27,6 +27,9 @@ import {
   handleHmrScreenshot,
 } from './handlers/index.js';
 
+// Import Anthropic settings for API key check
+import { CLAUDE_MODEL, CLAUDE_PRICING } from './anthropic.js';
+
 // Import subscription management
 import {
   logSubscriptions,
@@ -203,6 +206,32 @@ function setupServerHandlers(server: WebSocketServer) {
             appPort: associatedAppPort,
             wsPort: activePort,
             projectDir: process.cwd(),
+            timestamp: Date.now()
+          }));
+          return;
+        }
+
+        // Handle API key check request from browser
+        if (command.type === 'check-api-key') {
+          const apiKey = process.env.ANTHROPIC_API_KEY;
+          const hasKey = Boolean(apiKey && apiKey.length > 0);
+
+          // Mask the key for display (show first 8 chars + last 4)
+          let maskedKey: string | undefined;
+          if (hasKey && apiKey) {
+            if (apiKey.length > 12) {
+              maskedKey = `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`;
+            } else {
+              maskedKey = '***';
+            }
+          }
+
+          ws.send(JSON.stringify({
+            type: 'api-key-status',
+            configured: hasKey,
+            maskedKey,
+            model: CLAUDE_MODEL,
+            pricing: CLAUDE_PRICING,
             timestamp: Date.now()
           }));
           return;

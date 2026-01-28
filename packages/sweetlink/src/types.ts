@@ -37,6 +37,8 @@ export interface SweetlinkCommand {
     | 'browser-client-ready'
     | 'save-screenshot'
     | 'design-review-screenshot'
+    | 'check-api-key'
+    | 'api-key-status'
     | 'save-outline'
     | 'save-schema'
     | 'refresh'

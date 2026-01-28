@@ -156,6 +156,13 @@ export class GlobalDevBar {
   private designReviewInProgress = false;
   private lastDesignReview: string | null = null;
   private designReviewError: string | null = null;
+  private showDesignReviewConfirm = false;
+  private apiKeyStatus: {
+    configured: boolean;
+    maskedKey?: string;
+    model?: string;
+    pricing?: { input: number; output: number };
+  } | null = null;
   private lastOutline: string | null = null;
   private lastSchema: string | null = null;
   private consoleFilter: 'error' | 'warn' | null = null;
@@ -454,6 +461,24 @@ export class GlobalDevBar {
         }, DESIGN_REVIEW_NOTIFICATION_MS);
         this.render();
         break;
+      case 'api-key-status': {
+        // Properties are at top level of the response
+        const response = command as unknown as {
+          configured?: boolean;
+          maskedKey?: string;
+          model?: string;
+          pricing?: { input: number; output: number };
+        };
+        this.apiKeyStatus = {
+          configured: response.configured ?? false,
+          maskedKey: response.maskedKey,
+          model: response.model,
+          pricing: response.pricing,
+        };
+        // Re-render to update the confirmation modal
+        this.render();
+        break;
+      }
       case 'outline-saved':
         this.handleNotification('outline', command.outlinePath, SCREENSHOT_NOTIFICATION_MS);
         break;
@@ -603,10 +628,11 @@ export class GlobalDevBar {
     this.keydownHandler = (e: KeyboardEvent) => {
       // Close modals on Escape
       if (e.key === 'Escape') {
-        if (this.consoleFilter || this.showOutlineModal || this.showSchemaModal) {
+        if (this.consoleFilter || this.showOutlineModal || this.showSchemaModal || this.showDesignReviewConfirm) {
           this.consoleFilter = null;
           this.showOutlineModal = false;
           this.showSchemaModal = false;
+          this.showDesignReviewConfirm = false;
           this.render();
           return;
         }
@@ -763,6 +789,73 @@ export class GlobalDevBar {
     }
   }
 
+  /**
+   * Show the design review confirmation modal
+   * Checks API key status first
+   */
+  private showDesignReviewConfirmation(): void {
+    if (!this.sweetlinkConnected) return;
+
+    // Request API key status from server
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'check-api-key' }));
+    }
+
+    // Show the confirmation modal
+    this.showDesignReviewConfirm = true;
+    this.showOutlineModal = false;
+    this.showSchemaModal = false;
+    this.consoleFilter = null;
+    this.render();
+  }
+
+  /**
+   * Calculate estimated cost for design review based on viewport size
+   */
+  private calculateCostEstimate(): { tokens: number; cost: string } | null {
+    if (!this.apiKeyStatus?.pricing) return null;
+
+    // Image token estimation for Claude Vision:
+    // Images are resized to fit within a bounding box, then tokenized
+    // Rough estimate: ~1 token per 1.5x1.5 pixels, or (width * height) / 750
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const imageTokens = Math.ceil((width * height) / 750);
+
+    // Prompt is ~500 tokens, output up to 2048 tokens
+    const promptTokens = 500;
+    const estimatedOutputTokens = 1500; // Conservative estimate
+
+    const totalInputTokens = imageTokens + promptTokens;
+    const { input: inputPrice, output: outputPrice } = this.apiKeyStatus.pricing;
+
+    const inputCost = (totalInputTokens / 1_000_000) * inputPrice;
+    const outputCost = (estimatedOutputTokens / 1_000_000) * outputPrice;
+    const totalCost = inputCost + outputCost;
+
+    return {
+      tokens: totalInputTokens + estimatedOutputTokens,
+      cost: totalCost < 0.01 ? '<$0.01' : `~$${totalCost.toFixed(2)}`,
+    };
+  }
+
+  /**
+   * Close the design review confirmation modal
+   */
+  private closeDesignReviewConfirm(): void {
+    this.showDesignReviewConfirm = false;
+    this.apiKeyStatus = null; // Reset so it's re-fetched next time
+    this.render();
+  }
+
+  /**
+   * Proceed with design review after confirmation
+   */
+  private proceedWithDesignReview(): void {
+    this.showDesignReviewConfirm = false;
+    this.handleDesignReview();
+  }
+
   private handleDocumentOutline(): void {
     // Toggle outline modal
     this.showOutlineModal = !this.showOutlineModal;
@@ -875,6 +968,283 @@ export class GlobalDevBar {
     if (this.showSchemaModal) {
       this.renderSchemaModal();
     }
+
+    // Render design review confirmation modal
+    if (this.showDesignReviewConfirm) {
+      this.renderDesignReviewConfirmModal();
+    }
+  }
+
+  private renderDesignReviewConfirmModal(): void {
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-devbar', 'true');
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      right: '0',
+      bottom: '0',
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      zIndex: '10003',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    });
+    overlay.onclick = (e) => {
+      if (e.target === overlay) this.closeDesignReviewConfirm();
+    };
+
+    const modal = document.createElement('div');
+    Object.assign(modal.style, {
+      backgroundColor: 'rgba(17, 24, 39, 0.98)',
+      border: `1px solid ${BUTTON_COLORS.review}`,
+      borderRadius: '12px',
+      boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${BUTTON_COLORS.review}33`,
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
+      width: '90%',
+      maxWidth: '450px',
+      fontFamily: FONT_MONO,
+      overflow: 'hidden',
+    });
+
+    // Header
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '14px 18px',
+      borderBottom: `1px solid ${BUTTON_COLORS.review}40`,
+      backgroundColor: `${BUTTON_COLORS.review}15`,
+    });
+
+    const title = document.createElement('span');
+    Object.assign(title.style, {
+      color: BUTTON_COLORS.review,
+      fontSize: '0.875rem',
+      fontWeight: '600',
+    });
+    title.textContent = 'AI Design Review';
+    header.appendChild(title);
+
+    const closeBtn = document.createElement('button');
+    Object.assign(closeBtn.style, {
+      background: 'transparent',
+      border: 'none',
+      color: COLORS.textMuted,
+      fontSize: '1.25rem',
+      cursor: 'pointer',
+      padding: '0',
+      lineHeight: '1',
+    });
+    closeBtn.textContent = '×';
+    closeBtn.onclick = () => this.closeDesignReviewConfirm();
+    header.appendChild(closeBtn);
+    modal.appendChild(header);
+
+    // Content
+    const content = document.createElement('div');
+    Object.assign(content.style, {
+      padding: '18px',
+      color: COLORS.text,
+      fontSize: '0.8125rem',
+      lineHeight: '1.6',
+    });
+
+    if (this.apiKeyStatus === null) {
+      // Loading state
+      const loading = document.createElement('div');
+      Object.assign(loading.style, {
+        textAlign: 'center',
+        padding: '20px',
+        color: COLORS.textMuted,
+      });
+      loading.textContent = 'Checking API key configuration...';
+      content.appendChild(loading);
+    } else if (!this.apiKeyStatus.configured) {
+      // No API key configured
+      const errorDiv = document.createElement('div');
+      Object.assign(errorDiv.style, {
+        backgroundColor: `${COLORS.error}15`,
+        border: `1px solid ${COLORS.error}40`,
+        borderRadius: '8px',
+        padding: '14px',
+        marginBottom: '16px',
+      });
+
+      const errorTitle = document.createElement('div');
+      Object.assign(errorTitle.style, {
+        color: COLORS.error,
+        fontWeight: '600',
+        marginBottom: '8px',
+      });
+      errorTitle.textContent = 'API Key Not Configured';
+      errorDiv.appendChild(errorTitle);
+
+      const errorText = document.createElement('div');
+      Object.assign(errorText.style, { color: COLORS.textSecondary });
+      errorText.textContent = 'The ANTHROPIC_API_KEY environment variable is not set.';
+      errorDiv.appendChild(errorText);
+      content.appendChild(errorDiv);
+
+      // Instructions
+      const instructions = document.createElement('div');
+      Object.assign(instructions.style, { marginBottom: '12px' });
+
+      const instructTitle = document.createElement('div');
+      Object.assign(instructTitle.style, {
+        color: COLORS.textSecondary,
+        fontWeight: '600',
+        marginBottom: '8px',
+      });
+      instructTitle.textContent = 'To configure:';
+      instructions.appendChild(instructTitle);
+
+      const steps = [
+        '1. Get an API key from console.anthropic.com',
+        '2. Add to your .env file:',
+        '   ANTHROPIC_API_KEY=sk-ant-...',
+        '3. Restart your dev server',
+      ];
+
+      steps.forEach((step) => {
+        const stepDiv = document.createElement('div');
+        Object.assign(stepDiv.style, {
+          color: step.startsWith('   ') ? COLORS.primary : COLORS.textMuted,
+          fontSize: '0.75rem',
+          marginBottom: '4px',
+          fontFamily: FONT_MONO,
+        });
+        stepDiv.textContent = step;
+        instructions.appendChild(stepDiv);
+      });
+
+      content.appendChild(instructions);
+    } else {
+      // API key configured - show confirmation with cost estimate
+      const infoDiv = document.createElement('div');
+      Object.assign(infoDiv.style, { marginBottom: '16px' });
+
+      const desc = document.createElement('p');
+      Object.assign(desc.style, {
+        color: COLORS.textSecondary,
+        marginBottom: '12px',
+      });
+      desc.textContent = 'This will capture a screenshot and send it to Claude for design analysis.';
+      infoDiv.appendChild(desc);
+
+      // Cost estimate
+      const estimate = this.calculateCostEstimate();
+      if (estimate) {
+        const costDiv = document.createElement('div');
+        Object.assign(costDiv.style, {
+          backgroundColor: `${COLORS.primary}15`,
+          border: `1px solid ${COLORS.primary}40`,
+          borderRadius: '8px',
+          padding: '12px',
+        });
+
+        const costTitle = document.createElement('div');
+        Object.assign(costTitle.style, {
+          color: COLORS.primary,
+          fontWeight: '600',
+          marginBottom: '6px',
+        });
+        costTitle.textContent = 'Estimated Cost';
+        costDiv.appendChild(costTitle);
+
+        const costDetails = document.createElement('div');
+        Object.assign(costDetails.style, {
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: COLORS.textSecondary,
+          fontSize: '0.75rem',
+        });
+
+        const tokensSpan = document.createElement('span');
+        tokensSpan.textContent = `~${estimate.tokens.toLocaleString()} tokens`;
+        costDetails.appendChild(tokensSpan);
+
+        const priceSpan = document.createElement('span');
+        Object.assign(priceSpan.style, {
+          color: COLORS.warning,
+          fontWeight: '600',
+        });
+        priceSpan.textContent = estimate.cost;
+        costDetails.appendChild(priceSpan);
+
+        costDiv.appendChild(costDetails);
+        infoDiv.appendChild(costDiv);
+      }
+
+      // Model info
+      if (this.apiKeyStatus.model) {
+        const modelDiv = document.createElement('div');
+        Object.assign(modelDiv.style, {
+          color: COLORS.textMuted,
+          fontSize: '0.6875rem',
+          marginTop: '12px',
+        });
+        modelDiv.textContent = `Model: ${this.apiKeyStatus.model}`;
+        if (this.apiKeyStatus.maskedKey) {
+          modelDiv.textContent += ` | Key: ${this.apiKeyStatus.maskedKey}`;
+        }
+        infoDiv.appendChild(modelDiv);
+      }
+
+      content.appendChild(infoDiv);
+    }
+
+    modal.appendChild(content);
+
+    // Footer with buttons
+    const footer = document.createElement('div');
+    Object.assign(footer.style, {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: '10px',
+      padding: '14px 18px',
+      borderTop: `1px solid ${COLORS.border}`,
+    });
+
+    const cancelBtn = document.createElement('button');
+    Object.assign(cancelBtn.style, {
+      padding: '8px 16px',
+      fontSize: '0.75rem',
+      fontFamily: FONT_MONO,
+      fontWeight: '500',
+      backgroundColor: 'transparent',
+      border: `1px solid ${COLORS.textMuted}`,
+      borderRadius: '6px',
+      color: COLORS.textMuted,
+      cursor: 'pointer',
+    });
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => this.closeDesignReviewConfirm();
+    footer.appendChild(cancelBtn);
+
+    if (this.apiKeyStatus?.configured) {
+      const proceedBtn = document.createElement('button');
+      Object.assign(proceedBtn.style, {
+        padding: '8px 16px',
+        fontSize: '0.75rem',
+        fontFamily: FONT_MONO,
+        fontWeight: '500',
+        backgroundColor: `${BUTTON_COLORS.review}20`,
+        border: `1px solid ${BUTTON_COLORS.review}`,
+        borderRadius: '6px',
+        color: BUTTON_COLORS.review,
+        cursor: 'pointer',
+      });
+      proceedBtn.textContent = 'Run Review';
+      proceedBtn.onclick = () => this.proceedWithDesignReview();
+      footer.appendChild(proceedBtn);
+    }
+
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   }
 
   private renderConsolePopup(): void {
@@ -1878,7 +2248,7 @@ export class GlobalDevBar {
     if (!this.sweetlinkConnected) btn.style.opacity = '0.5';
 
     btn.disabled = isDisabled;
-    btn.onclick = () => this.handleDesignReview();
+    btn.onclick = () => this.showDesignReviewConfirmation();
 
     if (this.designReviewInProgress) {
       btn.textContent = '~';

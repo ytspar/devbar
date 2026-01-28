@@ -243,21 +243,13 @@ function createControlsPanel(): HTMLElement {
   const content = document.createElement('div');
   content.className = 'controls-content';
 
-  // Position select
-  content.appendChild(createSelectControl(
-    'Position',
-    'position',
-    [
-      { value: 'bottom-left', label: 'Bottom Left' },
-      { value: 'bottom-right', label: 'Bottom Right' },
-      { value: 'top-left', label: 'Top Left' },
-      { value: 'top-right', label: 'Top Right' },
-      { value: 'bottom-center', label: 'Bottom Center' },
-    ],
+  // Position selector (visual mini-map)
+  content.appendChild(createPositionSelector(
     currentOptions.position ?? 'bottom-left',
     (value) => {
       currentOptions.position = value as GlobalDevBarOptions['position'];
       reinitDevBar();
+      updatePositionSelector();
     }
   ));
 
@@ -326,39 +318,74 @@ function createControlsPanel(): HTMLElement {
 }
 
 /**
- * Create a select control
+ * Position values matching GlobalDevBar positioning
+ * These use CSS custom properties for the mini-map scaling
  */
-function createSelectControl(
-  label: string,
-  id: string,
-  options: { value: string; label: string }[],
+const POSITION_CONFIG: Record<string, { top?: string; bottom?: string; left?: string; right?: string; transform?: string }> = {
+  'top-left': { top: '10%', left: '12%' },
+  'top-right': { top: '10%', right: '8%' },
+  'bottom-left': { bottom: '10%', left: '12%' },
+  'bottom-right': { bottom: '10%', right: '8%' },
+  'bottom-center': { bottom: '8%', left: '50%', transform: 'translateX(-50%)' },
+};
+
+/**
+ * Create a visual position selector (mini-map)
+ */
+function createPositionSelector(
   currentValue: string,
   onChange: (value: string) => void
 ): HTMLElement {
   const group = document.createElement('div');
   group.className = 'control-group';
 
-  const labelEl = document.createElement('label');
-  labelEl.htmlFor = id;
-  labelEl.textContent = label;
-  group.appendChild(labelEl);
+  const label = document.createElement('label');
+  label.textContent = 'Position';
+  group.appendChild(label);
 
-  const select = document.createElement('select');
-  select.id = id;
-  select.name = id;
+  const miniMap = document.createElement('div');
+  miniMap.className = 'position-minimap';
+  miniMap.id = 'position-minimap';
 
-  options.forEach(opt => {
-    const option = document.createElement('option');
-    option.value = opt.value;
-    option.textContent = opt.label;
-    option.selected = opt.value === currentValue;
-    select.appendChild(option);
+  // Create position indicators
+  const positions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'bottom-center'];
+  positions.forEach(pos => {
+    const indicator = document.createElement('button');
+    indicator.type = 'button';
+    indicator.className = `position-indicator ${pos === currentValue ? 'active' : ''}`;
+    indicator.dataset.position = pos;
+    indicator.title = pos.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+    // Apply position styles
+    const posConfig = POSITION_CONFIG[pos];
+    if (posConfig.top) indicator.style.top = posConfig.top;
+    if (posConfig.bottom) indicator.style.bottom = posConfig.bottom;
+    if (posConfig.left) indicator.style.left = posConfig.left;
+    if (posConfig.right) indicator.style.right = posConfig.right;
+    if (posConfig.transform) indicator.style.transform = posConfig.transform;
+
+    indicator.onclick = () => {
+      onChange(pos);
+    };
+
+    miniMap.appendChild(indicator);
   });
 
-  select.onchange = () => onChange(select.value);
-  group.appendChild(select);
-
+  group.appendChild(miniMap);
   return group;
+}
+
+/**
+ * Update position selector to reflect current state
+ */
+function updatePositionSelector(): void {
+  const miniMap = document.getElementById('position-minimap');
+  if (!miniMap) return;
+
+  miniMap.querySelectorAll('.position-indicator').forEach(btn => {
+    const indicator = btn as HTMLButtonElement;
+    indicator.classList.toggle('active', indicator.dataset.position === currentOptions.position);
+  });
 }
 
 /**
@@ -392,9 +419,8 @@ function createToggleControl(
  * Update all controls UI to match current options
  */
 function updateControlsUI(): void {
-  // Position select
-  const posSelect = document.getElementById('position') as HTMLSelectElement;
-  if (posSelect) posSelect.value = currentOptions.position ?? 'bottom-left';
+  // Position mini-map
+  updatePositionSelector();
 
   // Toggles
   const toggleMap: Record<string, boolean> = {

@@ -833,6 +833,41 @@ body {
   transform: rotate(45deg);
 }
 
+/* Position selector mini-map */
+.position-minimap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background-color: var(--devbar-color-bg-input);
+  border: 1px solid var(--devbar-color-border);
+  border-radius: var(--devbar-radius-sm);
+  margin-top: 0.25rem;
+}
+
+.position-indicator {
+  position: absolute;
+  width: 24px;
+  height: 8px;
+  background-color: var(--devbar-color-border);
+  border: 1px solid var(--devbar-color-border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all var(--devbar-transition-fast);
+  padding: 0;
+}
+
+.position-indicator:hover {
+  background-color: var(--devbar-color-primary);
+  border-color: var(--devbar-color-primary);
+  box-shadow: 0 0 8px var(--devbar-color-primary-glow);
+}
+
+.position-indicator.active {
+  background-color: var(--devbar-color-primary);
+  border-color: var(--devbar-color-primary);
+  box-shadow: 0 0 12px var(--devbar-color-primary-glow);
+}
+
 .controls-reset {
   margin-top: 0.5rem;
   padding: 0.5rem;

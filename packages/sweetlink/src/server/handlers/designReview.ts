@@ -14,6 +14,10 @@ import {
   MAX_LOG_MESSAGE_LENGTH,
 } from '../../urlUtils.js';
 import {
+  extractBase64FromDataUrl,
+  getMediaTypeFromDataUrl,
+} from '../../browser/screenshotUtils.js';
+import {
   getAnthropicClient,
   CLAUDE_MODEL,
   CLAUDE_MAX_TOKENS,
@@ -108,7 +112,8 @@ export async function handleDesignReviewScreenshot(data: {
 
   // Save screenshot (PNG for better quality in design review)
   const screenshotPath = join(dir, `${baseFilename}.png`);
-  const base64Data = screenshot.replace(/^data:image\/(png|jpeg);base64,/, '');
+  const base64Data = extractBase64FromDataUrl(screenshot);
+  const mediaType = getMediaTypeFromDataUrl(screenshot);
   await fs.writeFile(screenshotPath, Buffer.from(base64Data, 'base64'));
   console.log(`[Sweetlink] Design review screenshot saved: ${screenshotPath}`);
 
@@ -116,9 +121,6 @@ export async function handleDesignReviewScreenshot(data: {
   console.log('[Sweetlink] Calling Claude Vision API for design review...');
 
   const client = getAnthropicClient();
-
-  // Determine media type from data URL
-  const mediaType = screenshot.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
 
   const response = await client.messages.create({
     model: CLAUDE_MODEL,

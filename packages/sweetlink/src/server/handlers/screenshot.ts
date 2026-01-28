@@ -10,6 +10,7 @@ import {
   generateBaseFilename,
   SCREENSHOT_DIR,
 } from '../../urlUtils.js';
+import { extractBase64FromDataUrl } from '../../browser/screenshotUtils.js';
 import { getProjectRoot } from '../index.js';
 
 /**
@@ -33,9 +34,9 @@ export async function handleSaveScreenshot(data: {
   // Generate filename with timestamp using shared utility
   const baseFilename = generateBaseFilename('screenshot', timestamp);
 
-  // Save screenshot (remove data URL prefix, support both PNG and JPEG)
+  // Save screenshot
   const screenshotPath = join(dir, `${baseFilename}.jpg`);
-  const base64Data = screenshot.replace(/^data:image\/(png|jpeg);base64,/, '');
+  const base64Data = extractBase64FromDataUrl(screenshot);
   await fs.writeFile(screenshotPath, Buffer.from(base64Data, 'base64'));
 
   // Save console logs only if provided

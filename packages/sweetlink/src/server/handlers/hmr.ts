@@ -11,6 +11,7 @@ import {
   generateBaseFilename,
   HMR_SCREENSHOT_DIR,
 } from '../../urlUtils.js';
+import { extractBase64FromDataUrl } from '../../browser/screenshotUtils.js';
 import { getProjectRoot } from '../index.js';
 
 export interface HmrScreenshotResult {
@@ -21,6 +22,27 @@ export interface HmrScreenshotResult {
     errorCount: number;
     warningCount: number;
     hasNewErrors: boolean;
+  };
+}
+
+interface FormattedLog {
+  timestamp: string;
+  level: string;
+  message: string;
+  stack?: string;
+  source?: string;
+}
+
+/**
+ * Format a console log for JSON serialization
+ */
+function formatLogForJson(log: { timestamp: number; level: string; message: string; stack?: string; source?: string }): FormattedLog {
+  return {
+    timestamp: new Date(log.timestamp).toISOString(),
+    level: log.level,
+    message: log.message,
+    stack: log.stack,
+    source: log.source
   };
 }
 
@@ -39,7 +61,7 @@ export async function handleHmrScreenshot(data: HmrScreenshotData): Promise<HmrS
 
   // Save screenshot
   const screenshotPath = join(dir, `${baseFilename}.jpg`);
-  const base64Data = screenshot.replace(/^data:image\/(png|jpeg);base64,/, '');
+  const base64Data = extractBase64FromDataUrl(screenshot);
   await fs.writeFile(screenshotPath, Buffer.from(base64Data, 'base64'));
 
   // Calculate log summary
@@ -64,27 +86,9 @@ export async function handleHmrScreenshot(data: HmrScreenshotData): Promise<HmrS
     },
     summary: logSummary,
     logs: {
-      all: logs.all.map((log) => ({
-        timestamp: new Date(log.timestamp).toISOString(),
-        level: log.level,
-        message: log.message,
-        stack: log.stack,
-        source: log.source
-      })),
-      errors: logs.errors.map((log) => ({
-        timestamp: new Date(log.timestamp).toISOString(),
-        level: log.level,
-        message: log.message,
-        stack: log.stack,
-        source: log.source
-      })),
-      warnings: logs.warnings.map((log) => ({
-        timestamp: new Date(log.timestamp).toISOString(),
-        level: log.level,
-        message: log.message,
-        stack: log.stack,
-        source: log.source
-      }))
+      all: logs.all.map(formatLogForJson),
+      errors: logs.errors.map(formatLogForJson),
+      warnings: logs.warnings.map(formatLogForJson)
     }
   };
   await fs.writeFile(logsPath, JSON.stringify(logsJson, null, 2), 'utf-8');

@@ -136,19 +136,6 @@ export function createEmptyMessage(text: string): HTMLDivElement {
 }
 
 /**
- * Create a styled text element with common patterns
- */
-export function createStyledText(
-  text: string,
-  styles: Partial<CSSStyleDeclaration>
-): HTMLDivElement {
-  const el = document.createElement('div');
-  Object.assign(el.style, styles);
-  el.textContent = text;
-  return el;
-}
-
-/**
  * Create a colored info box (for error states, cost estimates, etc.)
  */
 export function createInfoBox(

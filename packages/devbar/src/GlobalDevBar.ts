@@ -222,6 +222,45 @@ export class GlobalDevBar {
     return ['devbar-tooltip', `devbar-tooltip-${direction}`, ...additionalClasses].join(' ');
   }
 
+  /**
+   * Get current error and warning counts from the log array
+   */
+  private getLogCounts(): { errorCount: number; warningCount: number } {
+    const logs = earlyConsoleCapture.logs;
+    let errorCount = 0;
+    let warningCount = 0;
+    for (const log of logs) {
+      if (log.level === 'error') errorCount++;
+      else if (log.level === 'warn') warningCount++;
+    }
+    return { errorCount, warningCount };
+  }
+
+  /**
+   * Create a collapsed count badge (used for error/warning counts in minimized state)
+   */
+  private createCollapsedBadge(count: number, bgColor: string, rightPos: string): HTMLSpanElement {
+    const badge = document.createElement('span');
+    Object.assign(badge.style, {
+      position: 'absolute',
+      top: '-6px',
+      right: rightPos,
+      minWidth: '16px',
+      height: '16px',
+      padding: '0 4px',
+      borderRadius: '9999px',
+      backgroundColor: bgColor,
+      color: '#fff',
+      fontSize: '0.5625rem',
+      fontWeight: '600',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    });
+    badge.textContent = count > 99 ? '!' : String(count);
+    return badge;
+  }
+
   // ============================================================================
   // Static Methods for Custom Controls
   // ============================================================================
@@ -1614,8 +1653,7 @@ export class GlobalDevBar {
     if (!this.container) return;
 
     const { position, accentColor } = this.options;
-    const errorCount = earlyConsoleCapture.logs.filter(log => log.level === 'error').length;
-    const warningCount = earlyConsoleCapture.logs.filter(log => log.level === 'warn').length;
+    const { errorCount, warningCount } = this.getLogCounts();
 
     // Calculate position so the collapsed dot aligns with where it appears in expanded state
     // Expanded: left:80 + border:1 + padding:12 + half-indicator:6 = 99px horizontal center
@@ -1680,50 +1718,18 @@ export class GlobalDevBar {
     });
     wrapper.appendChild(dot);
 
-    // Error badge (absolute, top-right of circle)
+    // Error badge (absolute, top-right of circle, shifted left if warning badge exists)
     if (errorCount > 0) {
-      const errorBadge = document.createElement('span');
-      Object.assign(errorBadge.style, {
-        position: 'absolute',
-        top: '-6px',
-        right: warningCount > 0 ? '12px' : '-6px',
-        minWidth: '16px',
-        height: '16px',
-        padding: '0 4px',
-        borderRadius: '9999px',
-        backgroundColor: 'rgba(239, 68, 68, 0.95)',
-        color: '#fff',
-        fontSize: '0.5625rem',
-        fontWeight: '600',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      });
-      errorBadge.textContent = errorCount > 99 ? '!' : String(errorCount);
-      wrapper.appendChild(errorBadge);
+      wrapper.appendChild(this.createCollapsedBadge(
+        errorCount,
+        'rgba(239, 68, 68, 0.95)',
+        warningCount > 0 ? '12px' : '-6px'
+      ));
     }
 
     // Warning badge (absolute, top-right)
     if (warningCount > 0) {
-      const warnBadge = document.createElement('span');
-      Object.assign(warnBadge.style, {
-        position: 'absolute',
-        top: '-6px',
-        right: '-6px',
-        minWidth: '16px',
-        height: '16px',
-        padding: '0 4px',
-        borderRadius: '9999px',
-        backgroundColor: 'rgba(245, 158, 11, 0.95)',
-        color: '#fff',
-        fontSize: '0.5625rem',
-        fontWeight: '600',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      });
-      warnBadge.textContent = warningCount > 99 ? '!' : String(warningCount);
-      wrapper.appendChild(warnBadge);
+      wrapper.appendChild(this.createCollapsedBadge(warningCount, 'rgba(245, 158, 11, 0.95)', '-6px'));
     }
   }
 
@@ -1731,8 +1737,7 @@ export class GlobalDevBar {
     if (!this.container) return;
 
     const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = this.options;
-    const errorCount = earlyConsoleCapture.logs.filter(log => log.level === 'error').length;
-    const warningCount = earlyConsoleCapture.logs.filter(log => log.level === 'warn').length;
+    const { errorCount, warningCount } = this.getLogCounts();
 
     const positionStyles: Record<string, { bottom?: string; left?: string; top?: string; right?: string; transform?: string }> = {
       'bottom-left': { bottom: '20px', left: '80px' },

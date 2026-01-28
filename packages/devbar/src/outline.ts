@@ -42,71 +42,79 @@ function getSemanticCategory(tag: string): string {
 }
 
 /**
+ * Get trimmed text content from an element with optional max length
+ */
+function getTextContent(el: Element | null, maxLen: number): string {
+  return el?.textContent?.trim().slice(0, maxLen) || '';
+}
+
+/**
+ * Mapping of tag names to their child element selector for text extraction
+ */
+const childTextSelectors: Record<string, string> = {
+  figure: 'figcaption',
+  details: 'summary',
+  fieldset: 'legend',
+  table: 'caption',
+};
+
+/**
  * Get descriptive text for an element
  */
 function getElementText(el: Element, tagName: string): string {
+  // Check ARIA attributes first
   const ariaLabel = el.getAttribute('aria-label');
   if (ariaLabel) return ariaLabel;
 
   const labelledBy = el.getAttribute('aria-labelledby');
   if (labelledBy) {
     const labelEl = document.getElementById(labelledBy);
-    if (labelEl) return labelEl.textContent?.trim().slice(0, 80) || '';
+    if (labelEl) return getTextContent(labelEl, 80);
   }
 
+  // Headings: use direct text content
   if (headingElements.has(tagName)) {
-    return el.textContent?.trim().slice(0, 100) || '';
+    return getTextContent(el, 100);
   }
 
-  if (tagName === 'figure') {
-    const caption = el.querySelector('figcaption');
-    if (caption) return caption.textContent?.trim().slice(0, 80) || '';
+  // Elements with child selectors (figure, details, fieldset, table)
+  const childSelector = childTextSelectors[tagName];
+  if (childSelector) {
+    const childEl = el.querySelector(childSelector);
+    if (childEl) return getTextContent(childEl, 80);
   }
 
-  if (tagName === 'details') {
-    const summary = el.querySelector('summary');
-    if (summary) return summary.textContent?.trim().slice(0, 80) || '';
-  }
-
+  // Form: use name or id attribute
   if (tagName === 'form') {
     const name = el.getAttribute('name') || el.getAttribute('id');
     if (name) return name;
   }
 
-  if (tagName === 'fieldset') {
-    const legend = el.querySelector('legend');
-    if (legend) return legend.textContent?.trim().slice(0, 80) || '';
-  }
-
-  if (tagName === 'table') {
-    const caption = el.querySelector('caption');
-    if (caption) return caption.textContent?.trim().slice(0, 80) || '';
-  }
-
+  // Nav: try heading first, then first link
   if (tagName === 'nav') {
     const heading = el.querySelector('h1, h2, h3, h4, h5, h6');
-    if (heading) return heading.textContent?.trim().slice(0, 50) || '';
+    if (heading) return getTextContent(heading, 50);
     const firstLink = el.querySelector('a');
-    if (firstLink) return `Navigation (${firstLink.textContent?.trim().slice(0, 30)}...)`;
+    if (firstLink) return `Navigation (${getTextContent(firstLink, 30)}...)`;
   }
 
+  // Sectioning elements: try direct child heading, then class name
   if (['section', 'article', 'aside'].includes(tagName)) {
     const heading = el.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6');
-    if (heading) return heading.textContent?.trim().slice(0, 80) || '';
+    if (heading) return getTextContent(heading, 80);
     const className = el.className?.toString().split(' ')[0];
     if (className && className.length < 30) return className;
   }
 
+  // Lists: count items
   if (['ul', 'ol'].includes(tagName)) {
-    const items = el.querySelectorAll(':scope > li');
-    return `${items.length} items`;
+    return `${el.querySelectorAll(':scope > li').length} items`;
   }
-
   if (tagName === 'dl') {
-    const terms = el.querySelectorAll(':scope > dt');
-    return `${terms.length} terms`;
+    return `${el.querySelectorAll(':scope > dt').length} terms`;
   }
 
+  // Fallback to role attribute
   const role = el.getAttribute('role');
   if (role) return `[role="${role}"]`;
 

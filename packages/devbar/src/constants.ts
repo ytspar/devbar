@@ -192,6 +192,16 @@ export const DEVBAR_THEME = {
 
 export type DevBarTheme = typeof DEVBAR_THEME;
 
+// ============================================================================
+// Shorthand Exports (for cleaner imports)
+// ============================================================================
+
+/** Shorthand for common colors */
+export const COLORS = DEVBAR_THEME.colors;
+
+/** Shorthand for font stack */
+export const FONT_MONO = DEVBAR_THEME.fonts.mono;
+
 /** Flexible input type for theme customization */
 export type DevBarThemeInput = {
   colors: { [K in keyof DevBarTheme['colors']]: string };
@@ -377,14 +387,14 @@ export const MODAL_OVERLAY_STYLES: Record<string, string> = {
 
 /** Common modal box styles */
 export const MODAL_BOX_BASE_STYLES: Record<string, string> = {
-  backgroundColor: 'rgba(17, 24, 39, 0.98)',
+  backgroundColor: COLORS.bgElevated,
   borderRadius: '12px',
   width: '90%',
   maxWidth: '700px',
   maxHeight: '80vh',
   display: 'flex',
   flexDirection: 'column',
-  fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+  fontFamily: FONT_MONO,
 };
 
 // ============================================================================
@@ -426,13 +436,13 @@ export const TOOLTIP_STYLES = `
   left: 50%;
   transform: translateX(-50%) scale(0.95);
   padding: 0.625rem 1rem;
-  background: rgba(17, 24, 39, 0.98);
-  color: #10b981;
-  font-family: 'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: ${COLORS.bgElevated};
+  color: ${COLORS.primary};
+  font-family: ${FONT_MONO};
   font-size: 0.75rem;
   line-height: 1.5;
   border-radius: 6px;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid ${COLORS.border};
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.1);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -481,7 +491,7 @@ export const TOOLTIP_STYLES = `
 }
 .devbar-item:hover {
   opacity: 1 !important;
-  color: #10b981;
+  color: ${COLORS.primary};
 }
 .devbar-clickable {
   transition: transform 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
@@ -489,7 +499,7 @@ export const TOOLTIP_STYLES = `
 .devbar-clickable:hover {
   transform: scale(1.1);
   background-color: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 8px ${COLORS.primaryGlow};
 }
 .devbar-badge {
   transition: transform 150ms ease-out, box-shadow 150ms ease-out;
@@ -504,8 +514,8 @@ export const TOOLTIP_STYLES = `
 .devbar-collapse:hover {
   transform: scale(1.08);
   background-color: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
-  border-color: #10b981;
+  box-shadow: 0 0 12px ${COLORS.primaryGlow};
+  border-color: ${COLORS.primary};
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -539,18 +549,30 @@ export const TOOLTIP_STYLES = `
   [data-devbar] {
     width: auto !important;
     min-width: auto !important;
-    max-width: calc(100vw - 100px) !important;
+    max-width: calc(100vw - 40px) !important;
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%) !important;
+    overflow: hidden !important;
   }
   .devbar-main {
     flex-wrap: wrap;
     justify-content: center;
+    width: 100%;
+  }
+  .devbar-status {
+    flex-wrap: wrap !important;
+    justify-content: center;
+    width: 100%;
   }
   .devbar-info {
     justify-content: center;
     flex-wrap: wrap;
+    white-space: normal !important;
+    width: 100%;
+  }
+  .devbar-info > span {
+    flex-shrink: 1 !important;
   }
   .devbar-actions {
     width: 100%;

@@ -149,6 +149,7 @@ export class GlobalDevBar {
   private collapsed = false;
   private capturing = false;
   private copiedToClipboard = false;
+  private copiedPath = false;
   private lastScreenshot: string | null = null;
   private designReviewInProgress = false;
   private lastDesignReview: string | null = null;
@@ -169,6 +170,7 @@ export class GlobalDevBar {
 
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private screenshotTimeout: ReturnType<typeof setTimeout> | null = null;
+  private copiedPathTimeout: ReturnType<typeof setTimeout> | null = null;
   private designReviewTimeout: ReturnType<typeof setTimeout> | null = null;
   private designReviewErrorTimeout: ReturnType<typeof setTimeout> | null = null;
   private outlineTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -289,6 +291,7 @@ export class GlobalDevBar {
 
     // Clear timeouts
     if (this.screenshotTimeout) clearTimeout(this.screenshotTimeout);
+    if (this.copiedPathTimeout) clearTimeout(this.copiedPathTimeout);
     if (this.designReviewTimeout) clearTimeout(this.designReviewTimeout);
     if (this.outlineTimeout) clearTimeout(this.outlineTimeout);
     if (this.schemaTimeout) clearTimeout(this.schemaTimeout);
@@ -616,6 +619,21 @@ export class GlobalDevBar {
     window.addEventListener('keydown', this.keydownHandler);
   }
 
+  private async copyPathToClipboard(path: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(path);
+      this.copiedPath = true;
+      if (this.copiedPathTimeout) clearTimeout(this.copiedPathTimeout);
+      this.copiedPathTimeout = setTimeout(() => {
+        this.copiedPath = false;
+        this.render();
+      }, CLIPBOARD_NOTIFICATION_MS);
+      this.render();
+    } catch (error) {
+      console.error('[GlobalDevBar] Failed to copy path:', error);
+    }
+  }
+
   private async handleScreenshot(copyToClipboard = false): Promise<void> {
     if (this.capturing) return;
     if (!copyToClipboard && !this.sweetlinkConnected) return;
@@ -872,7 +890,7 @@ export class GlobalDevBar {
       maxHeight: '400px',
       display: 'flex',
       flexDirection: 'column',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
     });
 
     // Header
@@ -1483,7 +1501,7 @@ export class GlobalDevBar {
       padding: '0.5rem 0.75rem',
       minWidth: '0',
       boxSizing: 'border-box',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       fontSize: '0.6875rem',
       lineHeight: '1rem'
     });
@@ -1543,7 +1561,7 @@ export class GlobalDevBar {
       letterSpacing: '0.05em',
       flexShrink: '1',
       minWidth: '0',
-      overflow: 'hidden'
+      overflow: 'visible'
     });
 
     // Breakpoint info
@@ -1554,7 +1572,7 @@ export class GlobalDevBar {
       const bpSpan = document.createElement('span');
       bpSpan.className = 'devbar-tooltip devbar-tooltip-left devbar-item';
       Object.assign(bpSpan.style, { opacity: '0.9', cursor: 'default' });
-      bpSpan.setAttribute('data-tooltip', `${breakpointData?.label || bp}\nViewport: ${this.breakpointInfo.dimensions}`);
+      bpSpan.setAttribute('data-tooltip', `Tailwind Breakpoint: ${bp}\n${breakpointData?.label || ''}\n\nViewport: ${this.breakpointInfo.dimensions}\n\nBreakpoints:\nbase: <640px | sm: >=640px\nmd: >=768px | lg: >=1024px\nxl: >=1280px | 2xl: >=1536px`);
 
       let bpText: string = bp;
       if (bp !== 'base') {
@@ -1645,7 +1663,7 @@ export class GlobalDevBar {
         borderTop: `1px solid ${accentColor}30`,
         marginTop: '0',
         paddingTop: '0.5rem',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontFamily: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         fontSize: '0.6875rem',
       });
 
@@ -1738,11 +1756,15 @@ export class GlobalDevBar {
     btn.type = 'button';
     btn.className = 'devbar-tooltip devbar-tooltip-right';
 
+    const hasSuccessState = this.copiedToClipboard || this.copiedPath || this.lastScreenshot;
+
     const tooltip = this.copiedToClipboard
       ? 'Copied to clipboard!'
-      : this.lastScreenshot
-        ? `Screenshot saved to:\n${this.lastScreenshot}`
-        : `Screenshot\n\nClick: Save to file\nShift+Click: Copy to clipboard\n\nKeyboard:\nCmd/Ctrl+Shift+S: Save\nCmd/Ctrl+Shift+C: Copy${!this.sweetlinkConnected ? '\n\nWarning: Sweetlink not connected' : ''}`;
+      : this.copiedPath
+        ? 'Path copied to clipboard!'
+        : this.lastScreenshot
+          ? `Screenshot saved!\n${this.lastScreenshot}\n\nClick to copy path`
+          : `Screenshot\n\nClick: Save to file\nShift+Click: Copy to clipboard\n\nKeyboard:\nCmd/Ctrl+Shift+S: Save\nCmd/Ctrl+Shift+C: Copy${!this.sweetlinkConnected ? '\n\nWarning: Sweetlink not connected' : ''}`;
     btn.setAttribute('data-tooltip', tooltip);
 
     Object.assign(btn.style, {
@@ -1756,24 +1778,28 @@ export class GlobalDevBar {
       flexShrink: '0',
       borderRadius: '50%',
       border: '1px solid',
-      borderColor: this.copiedToClipboard || this.lastScreenshot ? accentColor : `${accentColor}80`,
-      backgroundColor: this.copiedToClipboard || this.lastScreenshot ? `${accentColor}33` : 'transparent',
-      color: this.copiedToClipboard || this.lastScreenshot ? accentColor : `${accentColor}99`,
+      borderColor: hasSuccessState ? accentColor : `${accentColor}80`,
+      backgroundColor: hasSuccessState ? `${accentColor}33` : 'transparent',
+      color: hasSuccessState ? accentColor : `${accentColor}99`,
       cursor: !this.capturing ? 'pointer' : 'not-allowed',
       opacity: '1',
       transition: 'all 150ms'
     });
 
     btn.disabled = this.capturing;
-    btn.onclick = (e) => this.handleScreenshot(e.shiftKey);
+    btn.onclick = (e) => {
+      // If we have a saved screenshot path, clicking copies the path
+      if (this.lastScreenshot && !e.shiftKey) {
+        this.copyPathToClipboard(this.lastScreenshot);
+      } else {
+        this.handleScreenshot(e.shiftKey);
+      }
+    };
 
     // Button content
-    if (this.copiedToClipboard) {
-      btn.textContent = '!';
-      btn.style.fontSize = '0.5rem';
-    } else if (this.lastScreenshot) {
-      btn.textContent = 'v';
-      btn.style.fontSize = '0.5rem';
+    if (this.copiedToClipboard || this.copiedPath || this.lastScreenshot) {
+      btn.textContent = '✓';
+      btn.style.fontSize = '0.6rem';
     } else if (this.capturing) {
       btn.textContent = '...';
       btn.style.fontSize = '0.5rem';

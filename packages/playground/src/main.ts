@@ -2,15 +2,27 @@
  * DevTools Playground - Main entry point
  *
  * Initializes the DevBar and renders demo content for testing.
+ * Uses shared theme from @ytspar/devbar for consistent styling.
  */
 
-import { initGlobalDevBar } from '@ytspar/devbar';
+import {
+  initGlobalDevBar,
+  injectThemeCSS,
+  DEVBAR_THEME,
+} from '@ytspar/devbar';
 import { createDemoContent } from './demo-content';
+import { injectBreakpointIndicator } from './theme';
+
+// Inject DevBar theme CSS variables (used by playground styles)
+injectThemeCSS();
+
+// Inject breakpoint indicator styles
+injectBreakpointIndicator();
 
 // Initialize DevBar
 initGlobalDevBar({
   position: 'bottom-left',
-  accentColor: '#10b981',
+  accentColor: DEVBAR_THEME.colors.primary,
   showMetrics: {
     breakpoint: true,
     fcp: true,

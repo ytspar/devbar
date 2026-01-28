@@ -34,12 +34,18 @@ export {
 export { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 export { extractPageSchema, schemaToMarkdown } from './schema.js';
 
-// Re-export constants
+// Re-export constants and theme utilities
 export {
   TAILWIND_BREAKPOINTS,
   BUTTON_COLORS,
   CATEGORY_COLORS,
+  DEVBAR_THEME,
+  generateThemeCSSVars,
+  injectThemeCSS,
+  generateBreakpointCSS,
   type TailwindBreakpoint,
+  type DevBarTheme,
+  type DevBarThemeInput,
 } from './constants.js';
 
 // Early console capture script for injection

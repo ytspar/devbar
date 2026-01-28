@@ -549,10 +549,10 @@ export const TOOLTIP_STYLES = `
   [data-devbar] {
     width: auto !important;
     min-width: auto !important;
-    max-width: calc(100vw - 24px) !important;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%) !important;
+    max-width: calc(100vw - 16px) !important;
+    left: 8px !important;
+    right: 8px !important;
+    transform: none !important;
   }
   .devbar-main {
     flex-wrap: wrap;
@@ -567,8 +567,8 @@ export const TOOLTIP_STYLES = `
   }
   .devbar-info {
     justify-content: center;
-    flex-wrap: wrap;
-    white-space: normal !important;
+    flex-wrap: nowrap;
+    white-space: nowrap !important;
   }
   .devbar-info > span {
     flex-shrink: 1 !important;

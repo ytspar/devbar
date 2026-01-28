@@ -579,5 +579,19 @@ export const TOOLTIP_STYLES = `
     margin-top: 0.25rem;
     flex-wrap: nowrap;
   }
+  /* Constrain tooltips to viewport on mobile */
+  .devbar-tooltip::after {
+    left: auto !important;
+    right: 0 !important;
+    transform: translateX(0) scale(0.95) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .devbar-tooltip:hover::after {
+    transform: translateX(0) scale(1) !important;
+  }
+  .devbar-tooltip-left::after {
+    left: 0 !important;
+    right: auto !important;
+  }
 }
 `;

@@ -37,9 +37,6 @@ export const MAX_PORT_RETRIES = 10;
 /** Delay between port scan attempts (ms) */
 export const PORT_RETRY_DELAY_MS = 100;
 
-/** Timeout for server-info verification (ms) */
-export const VERIFICATION_TIMEOUT_MS = 1000;
-
 /** Delay before restarting port scan from base after all ports fail (ms) */
 export const PORT_SCAN_RESTART_DELAY_MS = 3000;
 

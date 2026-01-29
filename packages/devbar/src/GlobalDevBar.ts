@@ -33,7 +33,6 @@ import {
   SCREENSHOT_SCALE,
   TAILWIND_BREAKPOINTS,
   TOOLTIP_STYLES,
-  VERIFICATION_TIMEOUT_MS,
   WS_PORT,
   WS_PORT_OFFSET,
 } from './constants.js';
@@ -242,7 +241,6 @@ export class GlobalDevBar {
   private readonly baseWsPort: number;
   private wsVerified = false;
   private serverProjectDir: string | null = null;
-  private verificationTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Track the position of the connection indicator dot for smooth collapse
   private lastDotPosition: { left: number; top: number; bottom: number } | null = null;
@@ -476,7 +474,6 @@ export class GlobalDevBar {
     // Close WebSocket
     this.reconnectAttempts = MAX_RECONNECT_ATTEMPTS; // Prevent reconnection
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    if (this.verificationTimeout) clearTimeout(this.verificationTimeout);
     if (this.ws) this.ws.close();
 
     // Clear timeouts
@@ -541,21 +538,6 @@ export class GlobalDevBar {
     this.ws = ws;
     this.wsVerified = false;
 
-    // Timeout for server-info verification
-    this.verificationTimeout = setTimeout(() => {
-      if (!this.wsVerified && ws.readyState === WebSocket.OPEN) {
-        // Server didn't send server-info (old version) - accept for backwards compatibility
-        this.debug.ws('Server is old version (no server-info), accepting for backwards compat');
-        this.wsVerified = true;
-        this.sweetlinkConnected = true;
-        this.reconnectAttempts = 0;
-        this.settingsManager.setWebSocket(ws);
-        this.settingsManager.setConnected(true);
-        ws.send(JSON.stringify({ type: 'load-settings' }));
-        this.render();
-      }
-    }, VERIFICATION_TIMEOUT_MS);
-
     ws.onopen = () => {
       this.debug.ws('WebSocket socket opened, awaiting server-info');
       ws.send(JSON.stringify({ type: 'browser-client-ready' }));
@@ -567,11 +549,6 @@ export class GlobalDevBar {
 
         // Handle server-info for port matching
         if (message.type === 'server-info') {
-          if (this.verificationTimeout) {
-            clearTimeout(this.verificationTimeout);
-            this.verificationTimeout = null;
-          }
-
           const serverAppPort = message.appPort as number | null;
           const serverMatchesApp = serverAppPort === null || serverAppPort === this.currentAppPort;
 
@@ -626,11 +603,6 @@ export class GlobalDevBar {
     };
 
     ws.onclose = () => {
-      if (this.verificationTimeout) {
-        clearTimeout(this.verificationTimeout);
-        this.verificationTimeout = null;
-      }
-
       // Only reset connection state if we were actually verified/connected
       if (this.wsVerified) {
         this.sweetlinkConnected = false;
@@ -1092,6 +1064,8 @@ export class GlobalDevBar {
     // Load stored theme preference from settings manager
     const settings = this.settingsManager.getSettings();
     this.themeMode = settings.themeMode;
+    // Inject the appropriate theme CSS variables on initial load
+    injectThemeCSS(getTheme(this.themeMode));
     this.debug.state('Theme loaded', { mode: this.themeMode });
 
     // Listen for system theme changes
@@ -3203,52 +3177,56 @@ export class GlobalDevBar {
       if (showMetrics.fcp) {
         addSeparator();
         const fcpSpan = document.createElement('span');
-        fcpSpan.className = this.tooltipClass('left', 'devbar-item');
+        fcpSpan.className = 'devbar-item';
         Object.assign(fcpSpan.style, { opacity: '0.85', cursor: 'default' });
-        fcpSpan.setAttribute(
-          'data-tooltip',
-          'First Contentful Paint (FCP): Time until first text/image renders.\n\nGood: <1.8s\nNeeds work: 1.8-3s\nPoor: >3s'
-        );
         fcpSpan.textContent = `FCP ${this.perfStats.fcp}`;
+        this.attachMetricTooltip(
+          fcpSpan,
+          'First Contentful Paint (FCP): Time until first text/image renders.',
+          { good: '<1.8s', needsWork: '1.8-3s', poor: '>3s' }
+        );
         infoSection.appendChild(fcpSpan);
       }
 
       if (showMetrics.lcp) {
         addSeparator();
         const lcpSpan = document.createElement('span');
-        lcpSpan.className = this.tooltipClass('left', 'devbar-item');
+        lcpSpan.className = 'devbar-item';
         Object.assign(lcpSpan.style, { opacity: '0.85', cursor: 'default' });
-        lcpSpan.setAttribute(
-          'data-tooltip',
-          'Largest Contentful Paint (LCP): Time until largest visible element renders.\n\nGood: <2.5s\nNeeds work: 2.5-4s\nPoor: >4s'
-        );
         lcpSpan.textContent = `LCP ${this.perfStats.lcp}`;
+        this.attachMetricTooltip(
+          lcpSpan,
+          'Largest Contentful Paint (LCP): Time until largest visible element renders.',
+          { good: '<2.5s', needsWork: '2.5-4s', poor: '>4s' }
+        );
         infoSection.appendChild(lcpSpan);
       }
 
       if (showMetrics.cls) {
         addSeparator();
         const clsSpan = document.createElement('span');
-        clsSpan.className = this.tooltipClass('left', 'devbar-item');
+        clsSpan.className = 'devbar-item';
         Object.assign(clsSpan.style, { opacity: '0.85', cursor: 'default' });
-        clsSpan.setAttribute(
-          'data-tooltip',
-          'Cumulative Layout Shift (CLS): Visual stability score.\nHigher values mean more unexpected layout shifts.\n\nGood: <0.1\nNeeds work: 0.1-0.25\nPoor: >0.25'
-        );
         clsSpan.textContent = `CLS ${this.perfStats.cls}`;
+        this.attachMetricTooltip(
+          clsSpan,
+          'Cumulative Layout Shift (CLS): Visual stability score. Higher values mean more unexpected layout shifts.',
+          { good: '<0.1', needsWork: '0.1-0.25', poor: '>0.25' }
+        );
         infoSection.appendChild(clsSpan);
       }
 
       if (showMetrics.inp) {
         addSeparator();
         const inpSpan = document.createElement('span');
-        inpSpan.className = this.tooltipClass('left', 'devbar-item');
+        inpSpan.className = 'devbar-item';
         Object.assign(inpSpan.style, { opacity: '0.85', cursor: 'default' });
-        inpSpan.setAttribute(
-          'data-tooltip',
-          'Interaction to Next Paint (INP): Responsiveness to user input.\nMeasures the longest interaction delay.\n\nGood: <200ms\nNeeds work: 200-500ms\nPoor: >500ms'
-        );
         inpSpan.textContent = `INP ${this.perfStats.inp}`;
+        this.attachMetricTooltip(
+          inpSpan,
+          'Interaction to Next Paint (INP): Responsiveness to user input. Measures the longest interaction delay.',
+          { good: '<200ms', needsWork: '200-500ms', poor: '>500ms' }
+        );
         infoSection.appendChild(inpSpan);
       }
 
@@ -3353,6 +3331,126 @@ export class GlobalDevBar {
 
       wrapper.appendChild(customRow);
     }
+  }
+
+  /**
+   * Attach an HTML tooltip with colored threshold labels to a metric element
+   */
+  private attachMetricTooltip(
+    element: HTMLElement,
+    description: string,
+    thresholds: { good: string; needsWork: string; poor: string }
+  ): void {
+    let tooltipEl: HTMLDivElement | null = null;
+
+    element.onmouseenter = () => {
+      tooltipEl = document.createElement('div');
+      tooltipEl.setAttribute('data-devbar', 'true');
+
+      Object.assign(tooltipEl.style, {
+        position: 'fixed',
+        zIndex: '10004',
+        backgroundColor: 'rgba(17, 24, 39, 0.98)',
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: '6px',
+        padding: '10px 12px',
+        fontSize: '0.6875rem',
+        fontFamily: FONT_MONO,
+        maxWidth: '280px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+        pointerEvents: 'none',
+      });
+
+      // Description
+      const descEl = document.createElement('div');
+      Object.assign(descEl.style, {
+        color: COLORS.text,
+        marginBottom: '10px',
+        lineHeight: '1.4',
+      });
+      descEl.textContent = description;
+      tooltipEl.appendChild(descEl);
+
+      // Thresholds header
+      const thresholdsHeader = document.createElement('div');
+      Object.assign(thresholdsHeader.style, {
+        color: COLORS.textMuted,
+        fontSize: '0.625rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        marginBottom: '6px',
+      });
+      thresholdsHeader.textContent = 'Thresholds';
+      tooltipEl.appendChild(thresholdsHeader);
+
+      // Thresholds with colors
+      const thresholdsEl = document.createElement('div');
+      Object.assign(thresholdsEl.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+      });
+
+      const addThreshold = (label: string, value: string, color: string) => {
+        const row = document.createElement('div');
+        Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px' });
+
+        const dot = document.createElement('span');
+        Object.assign(dot.style, {
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: color,
+          flexShrink: '0',
+        });
+        row.appendChild(dot);
+
+        const labelSpan = document.createElement('span');
+        Object.assign(labelSpan.style, {
+          color,
+          fontWeight: '500',
+          minWidth: '70px',
+        });
+        labelSpan.textContent = label;
+        row.appendChild(labelSpan);
+
+        const valueSpan = document.createElement('span');
+        Object.assign(valueSpan.style, { color: COLORS.textMuted });
+        valueSpan.textContent = value;
+        row.appendChild(valueSpan);
+
+        thresholdsEl.appendChild(row);
+      };
+
+      addThreshold('Good', thresholds.good, COLORS.primary);
+      addThreshold('Needs work', thresholds.needsWork, COLORS.warning);
+      addThreshold('Poor', thresholds.poor, COLORS.error);
+
+      tooltipEl.appendChild(thresholdsEl);
+
+      // Position tooltip above element
+      const rect = element.getBoundingClientRect();
+      tooltipEl.style.left = `${rect.left}px`;
+      tooltipEl.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+
+      document.body.appendChild(tooltipEl);
+
+      // Adjust if off-screen
+      const tooltipRect = tooltipEl.getBoundingClientRect();
+      if (tooltipRect.right > window.innerWidth - 10) {
+        tooltipEl.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
+      }
+      if (tooltipRect.left < 10) {
+        tooltipEl.style.left = '10px';
+      }
+    };
+
+    element.onmouseleave = () => {
+      if (tooltipEl) {
+        tooltipEl.remove();
+        tooltipEl = null;
+      }
+    };
   }
 
   /**

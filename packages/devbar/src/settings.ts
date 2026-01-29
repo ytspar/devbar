@@ -144,7 +144,9 @@ export class SettingsManager {
   private static readonly SAVE_DEBOUNCE_MS = 300;
 
   constructor() {
-    this.settings = { ...DEFAULT_SETTINGS };
+    // Load settings from localStorage immediately (synchronous)
+    // This ensures settings are available before first render
+    this.settings = this.loadFromLocalStorage();
   }
 
   /**

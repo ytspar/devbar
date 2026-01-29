@@ -16,7 +16,7 @@
  */
 
 import type { Plugin } from 'vite';
-import { initSweetlink, closeSweetlink } from './server/index.js';
+import { closeSweetlink, initSweetlink } from './server/index.js';
 
 /** Port offset from Vite port to calculate WebSocket port */
 const WS_PORT_OFFSET = 6223;
@@ -41,8 +41,7 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
       // Start Sweetlink when Vite server is ready
       viteServer.httpServer?.once('listening', () => {
         const address = viteServer.httpServer?.address();
-        const vitePort =
-          typeof address === 'object' && address ? address.port : 5173;
+        const vitePort = typeof address === 'object' && address ? address.port : 5173;
 
         // Calculate WebSocket port (matches GlobalDevBar's calculation)
         const wsPort = options.port ?? vitePort + WS_PORT_OFFSET;
@@ -52,16 +51,12 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
           appPort: vitePort,
           onReady: (actualPort) => {
             if (actualPort !== wsPort) {
-              console.log(
-                `[Sweetlink] Using port ${actualPort} (${wsPort} was in use)`
-              );
+              console.log(`[Sweetlink] Using port ${actualPort} (${wsPort} was in use)`);
             }
           },
         });
 
-        console.log(
-          `[Sweetlink] Ready for DevBar connections (app port: ${vitePort})`
-        );
+        console.log(`[Sweetlink] Ready for DevBar connections (app port: ${vitePort})`);
       });
     },
 

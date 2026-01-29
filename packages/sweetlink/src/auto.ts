@@ -22,7 +22,7 @@
  * - Example: app on 3000 → Sweetlink on 9223
  */
 
-import { initSweetlink, closeSweetlink } from './server/index.js';
+import { closeSweetlink, initSweetlink } from './server/index.js';
 
 /** Port offset from app port to calculate WebSocket port */
 const WS_PORT_OFFSET = 6223;
@@ -76,8 +76,7 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
 
   // Determine app port
   const appPort =
-    options.appPort ??
-    (process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_APP_PORT);
+    options.appPort ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_APP_PORT);
 
   // Calculate WebSocket port (matches DevBar's calculation)
   const wsPort = options.wsPort ?? appPort + WS_PORT_OFFSET;
@@ -88,9 +87,7 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
     onReady: (actualPort) => {
       started = true;
       if (actualPort !== wsPort) {
-        console.log(
-          `[Sweetlink] Started on port ${actualPort} (${wsPort} was in use)`
-        );
+        console.log(`[Sweetlink] Started on port ${actualPort} (${wsPort} was in use)`);
       } else {
         console.log(`[Sweetlink] Started on port ${actualPort}`);
       }

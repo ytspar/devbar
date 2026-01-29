@@ -5,8 +5,8 @@
  * and counts errors/warnings that would be displayed in DevBar badges.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDemoContent } from './demo-content';
 
 describe('Console Capture Integration', () => {

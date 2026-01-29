@@ -107,10 +107,7 @@ describe('Demo Content Log Buttons', () => {
       btn.click();
 
       expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        '[Test] This is an error message',
-        expect.any(Error)
-      );
+      expect(errorSpy).toHaveBeenCalledWith('[Test] This is an error message', expect.any(Error));
     });
   });
 

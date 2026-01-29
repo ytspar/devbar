@@ -31,6 +31,7 @@ import {
   SCREENSHOT_BLUR_DELAY_MS,
   SCREENSHOT_NOTIFICATION_MS,
   SCREENSHOT_SCALE,
+  setStoredThemeMode,
   TAILWIND_BREAKPOINTS,
   TOOLTIP_STYLES,
   WS_PORT,
@@ -1161,6 +1162,8 @@ export class GlobalDevBar {
   setThemeMode(mode: ThemeMode): void {
     this.themeMode = mode;
     this.settingsManager.saveSettings({ themeMode: mode });
+    // Also update legacy storage key for backwards compatibility with getStoredThemeMode()
+    setStoredThemeMode(mode);
     // Inject the appropriate theme CSS variables
     injectThemeCSS(getTheme(mode));
     this.debug.state('Theme mode changed', { mode, effectiveTheme: getEffectiveTheme(mode) });
@@ -1182,6 +1185,19 @@ export class GlobalDevBar {
    * Toggle compact mode
    */
   toggleCompactMode(): void {
+    // Capture the current connection dot position before switching modes
+    if (this.container) {
+      const dotEl = this.container.querySelector('.devbar-clickable span') as HTMLElement;
+      if (dotEl) {
+        const rect = dotEl.getBoundingClientRect();
+        this.lastDotPosition = {
+          left: rect.left + rect.width / 2,
+          top: rect.top + rect.height / 2,
+          bottom: window.innerHeight - (rect.top + rect.height / 2),
+        };
+      }
+    }
+
     this.compactMode = !this.compactMode;
     this.settingsManager.saveSettings({ compactMode: this.compactMode });
     this.debug.state('Compact mode toggled', { compactMode: this.compactMode });
@@ -1510,6 +1526,12 @@ export class GlobalDevBar {
 
     // Clear any orphaned tooltips from previous render
     this.clearAllTooltips();
+
+    // Remove existing overlay if any (modals append to body, need explicit cleanup)
+    if (this.overlayElement) {
+      this.overlayElement.remove();
+      this.overlayElement = null;
+    }
 
     // Remove existing container if any
     if (this.container) {
@@ -2236,18 +2258,56 @@ export class GlobalDevBar {
     const { position, accentColor } = this.options;
     const { errorCount, warningCount } = this.getLogCounts();
 
-    const positionStyles: Record<
-      string,
-      { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
-    > = {
-      'bottom-left': { bottom: '20px', left: '80px' },
-      'bottom-right': { bottom: '20px', right: '16px' },
-      'top-left': { top: '20px', left: '80px' },
-      'top-right': { top: '20px', right: '16px' },
-      'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+    // Dot offset from container edge in compact mode:
+    // padding-left (10px) + half indicator (6px) + border (1px) = 17px from left
+    // padding-top (6px) + half indicator (6px) + border (1px) = 13px from top
+    const DOT_OFFSET_LEFT = 17;
+    const DOT_OFFSET_TOP = 13;
+
+    let posStyle: {
+      bottom?: string;
+      left?: string;
+      top?: string;
+      right?: string;
+      transform?: string;
     };
 
-    const posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+    // Use captured dot position to align the compact bar's dot with where it was
+    if (this.lastDotPosition && position !== 'bottom-center') {
+      const isTop = position.startsWith('top');
+      const isRight = position.endsWith('right');
+
+      if (isRight) {
+        // For right-aligned, we need to calculate from the right edge
+        // This is more complex - fall back to default for now
+        posStyle = isTop ? { top: '20px', right: '16px' } : { bottom: '20px', right: '16px' };
+      } else {
+        posStyle = isTop
+          ? {
+              top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
+              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+            }
+          : {
+              bottom: `${this.lastDotPosition.bottom - DOT_OFFSET_TOP}px`,
+              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+            };
+      }
+      // Clear the position after using it
+      this.lastDotPosition = null;
+    } else {
+      const positionStyles: Record<
+        string,
+        { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
+      > = {
+        'bottom-left': { bottom: '20px', left: '80px' },
+        'bottom-right': { bottom: '20px', right: '16px' },
+        'top-left': { top: '20px', left: '80px' },
+        'top-right': { top: '20px', right: '16px' },
+        'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+      };
+      posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+    }
+
     const wrapper = this.container;
 
     this.resetPositionStyles(wrapper);
@@ -2532,7 +2592,6 @@ export class GlobalDevBar {
     accentColor: string,
     onChange: () => void
   ): HTMLDivElement {
-    const color = CSS_COLORS.textSecondary;
     const row = document.createElement('div');
     Object.assign(row.style, {
       display: 'flex',
@@ -2551,24 +2610,26 @@ export class GlobalDevBar {
       width: '32px',
       height: '18px',
       borderRadius: '9px',
-      border: 'none',
-      backgroundColor: checked ? accentColor : `${color}40`,
+      border: `1px solid ${checked ? accentColor : CSS_COLORS.border}`,
+      backgroundColor: checked ? accentColor : CSS_COLORS.bgInput,
       position: 'relative',
       cursor: 'pointer',
       transition: 'all 150ms',
       flexShrink: '0',
+      boxSizing: 'border-box',
     });
 
     const knob = document.createElement('span');
     Object.assign(knob.style, {
       position: 'absolute',
       top: '2px',
-      left: checked ? '16px' : '2px',
-      width: '14px',
-      height: '14px',
+      left: checked ? '14px' : '2px',
+      width: '12px',
+      height: '12px',
       borderRadius: '50%',
-      backgroundColor: '#fff',
-      transition: 'left 150ms',
+      backgroundColor: checked ? '#fff' : CSS_COLORS.textMuted,
+      boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+      transition: 'left 150ms, background-color 150ms',
     });
     toggle.appendChild(knob);
 
@@ -2731,13 +2792,14 @@ export class GlobalDevBar {
         position: 'absolute',
         width: '20px',
         height: '6px',
-        backgroundColor: isActive ? accentColor : `${color}60`,
-        border: `1px solid ${isActive ? accentColor : `${color}40`}`,
+        backgroundColor: isActive ? accentColor : CSS_COLORS.textMuted,
+        border: `1px solid ${isActive ? accentColor : CSS_COLORS.textMuted}`,
         borderRadius: '2px',
         cursor: 'pointer',
         padding: '0',
         transition: 'all 150ms',
         boxShadow: isActive ? `0 0 8px ${accentColor}60` : 'none',
+        opacity: isActive ? '1' : '0.5',
         ...style,
       });
 
@@ -2754,13 +2816,15 @@ export class GlobalDevBar {
           indicator.style.backgroundColor = accentColor;
           indicator.style.borderColor = accentColor;
           indicator.style.boxShadow = `0 0 6px ${accentColor}40`;
+          indicator.style.opacity = '1';
         }
       };
       indicator.onmouseleave = () => {
         if (!isActive) {
-          indicator.style.backgroundColor = `${color}60`;
-          indicator.style.borderColor = `${color}40`;
+          indicator.style.backgroundColor = CSS_COLORS.textMuted;
+          indicator.style.borderColor = CSS_COLORS.textMuted;
           indicator.style.boxShadow = 'none';
+          indicator.style.opacity = '0.5';
         }
       };
 
@@ -3930,16 +3994,19 @@ export class GlobalDevBar {
   private attachButtonTooltip(
     element: HTMLElement,
     titleColor: string,
-    buildContent: (tooltip: HTMLDivElement, helpers: {
-      addTitle: (title: string) => void;
-      addDescription: (desc: string) => void;
-      addSectionHeader: (header: string) => void;
-      addShortcut: (key: string, desc: string) => void;
-      addWarning: (text: string) => void;
-      addSuccess: (text: string, subtext?: string) => void;
-      addError: (title: string, message: string) => void;
-      addProgress: (text: string) => void;
-    }) => void
+    buildContent: (
+      tooltip: HTMLDivElement,
+      helpers: {
+        addTitle: (title: string) => void;
+        addDescription: (desc: string) => void;
+        addSectionHeader: (header: string) => void;
+        addShortcut: (key: string, desc: string) => void;
+        addWarning: (text: string) => void;
+        addSuccess: (text: string, subtext?: string) => void;
+        addError: (title: string, message: string) => void;
+        addProgress: (text: string) => void;
+      }
+    ) => void
   ): void {
     this.attachHtmlTooltip(element, (tooltip) => {
       const helpers = {
@@ -3957,7 +4024,8 @@ export class GlobalDevBar {
         addSectionHeader: (header: string) => this.addTooltipSectionHeader(tooltip, header),
         addShortcut: (key: string, desc: string) => this.addTooltipShortcut(tooltip, key, desc),
         addWarning: (text: string) => this.addTooltipWarning(tooltip, text),
-        addSuccess: (text: string, subtext?: string) => this.addTooltipSuccess(tooltip, text, subtext),
+        addSuccess: (text: string, subtext?: string) =>
+          this.addTooltipSuccess(tooltip, text, subtext),
         addError: (title: string, message: string) => this.addTooltipError(tooltip, title, message),
         addProgress: (text: string) => this.addTooltipProgress(tooltip, text),
       };

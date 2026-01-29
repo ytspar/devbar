@@ -3125,23 +3125,20 @@ export class GlobalDevBar {
     };
 
     // Use captured dot position to align the expanded bar's dot with where it was
+    // Always use top/left positioning for precise alignment
     if (this.lastDotPosition && !isCentered) {
-      const isTop = position.startsWith('top');
       const isRight = position.endsWith('right');
 
       if (isRight) {
         // For right-aligned, fall back to default
+        const isTop = position.startsWith('top');
         posStyle = isTop ? { top: '20px', right: '16px' } : { bottom: '20px', right: '16px' };
       } else {
-        posStyle = isTop
-          ? {
-              top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
-              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
-            }
-          : {
-              bottom: `${this.lastDotPosition.bottom - DOT_OFFSET_TOP}px`,
-              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
-            };
+        // Use top positioning for precise dot alignment
+        posStyle = {
+          top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
+          left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+        };
       }
       // Clear the position after using it
       this.lastDotPosition = null;

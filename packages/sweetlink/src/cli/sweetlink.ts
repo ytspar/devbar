@@ -17,6 +17,12 @@ import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '
 /** Default screenshot output directory (relative to project root) */
 const DEFAULT_SCREENSHOT_DIR = '.tmp/sweetlink-screenshots';
 
+/** Port scanning constants for cleanup */
+const DEFAULT_WS_PORT = 9223;
+const WS_PORT_OFFSET = 6223;
+const MAX_PORT_RETRIES = 10;
+const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
+
 /**
  * Find the project root that has @ytspar/sweetlink installed
  * This ensures screenshots go to the correct project regardless of cwd
@@ -844,6 +850,213 @@ async function getNetwork(options: { filter?: string }) {
   }
 }
 
+interface SweetlinkServerInfo {
+  port: number;
+  name?: string;
+  version?: string;
+  appPort?: number;
+  connectedClients?: number;
+  status?: string;
+}
+
+/**
+ * Check if a port has a Sweetlink server running
+ */
+async function checkPort(port: number): Promise<SweetlinkServerInfo | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1000);
+
+    const response = await fetch(`http://localhost:${port}`, {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json();
+      // Check if it's a Sweetlink server by looking for our package name
+      if (data.name === '@ytspar/sweetlink') {
+        return { port, ...data };
+      }
+    }
+  } catch {
+    // Port not responding or not a Sweetlink server
+  }
+  return null;
+}
+
+/**
+ * Get list of ports to scan for Sweetlink servers
+ */
+function getPortsToScan(): number[] {
+  const ports = new Set<number>();
+
+  // Default port range (9223-9233)
+  for (let i = 0; i <= MAX_PORT_RETRIES; i++) {
+    ports.add(DEFAULT_WS_PORT + i);
+  }
+
+  // Common app ports + offset (e.g., 3000 -> 9223, 5173 -> 11396)
+  for (const appPort of COMMON_APP_PORTS) {
+    const wsPort = appPort + WS_PORT_OFFSET;
+    for (let i = 0; i <= MAX_PORT_RETRIES; i++) {
+      ports.add(wsPort + i);
+    }
+  }
+
+  return Array.from(ports).sort((a, b) => a - b);
+}
+
+/**
+ * Attempt to gracefully close a Sweetlink server via WebSocket
+ */
+async function closeServerGracefully(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://localhost:${port}`);
+    const timeout = setTimeout(() => {
+      ws.close();
+      resolve(false);
+    }, 2000);
+
+    ws.on('open', () => {
+      // Send a shutdown command (server should handle this)
+      ws.send(JSON.stringify({ type: 'shutdown' }));
+      // Give it time to process
+      setTimeout(() => {
+        clearTimeout(timeout);
+        ws.close();
+        resolve(true);
+      }, 500);
+    });
+
+    ws.on('error', () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Find and kill process using a specific port (fallback method)
+ */
+async function killProcessOnPort(port: number): Promise<boolean> {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  try {
+    // Find PID using lsof
+    const { stdout } = await execAsync(`lsof -ti :${port}`);
+    const pids = stdout.trim().split('\n').filter(Boolean);
+
+    if (pids.length === 0) {
+      return false;
+    }
+
+    // Kill each process
+    for (const pid of pids) {
+      try {
+        await execAsync(`kill -9 ${pid}`);
+        console.log(`  Killed process ${pid} on port ${port}`);
+      } catch {
+        // Process may have already exited
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cleanup stale Sweetlink servers
+ */
+async function cleanup(options: { force?: boolean; verbose?: boolean }) {
+  console.log('[Sweetlink] Scanning for stale servers...\n');
+
+  const portsToScan = getPortsToScan();
+  const foundServers: SweetlinkServerInfo[] = [];
+
+  // Scan all ports in parallel
+  const scanPromises = portsToScan.map(async (port) => {
+    const info = await checkPort(port);
+    if (info) {
+      foundServers.push(info);
+    }
+  });
+
+  await Promise.all(scanPromises);
+
+  if (foundServers.length === 0) {
+    console.log('[Sweetlink] No stale servers found.');
+    return;
+  }
+
+  console.log(`[Sweetlink] Found ${foundServers.length} server(s):\n`);
+
+  for (const server of foundServers) {
+    const appInfo = server.appPort ? ` (app port: ${server.appPort})` : '';
+    const clientInfo =
+      server.connectedClients !== undefined ? `, ${server.connectedClients} clients` : '';
+    console.log(`  Port ${server.port}${appInfo}${clientInfo}`);
+  }
+
+  console.log('');
+
+  // Attempt to close each server
+  let closedCount = 0;
+  let failedCount = 0;
+
+  for (const server of foundServers) {
+    process.stdout.write(`  Closing server on port ${server.port}... `);
+
+    // Try graceful shutdown first
+    const graceful = await closeServerGracefully(server.port);
+
+    if (graceful) {
+      // Wait a moment for the port to be released
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Verify it's actually closed
+      const stillRunning = await checkPort(server.port);
+      if (!stillRunning) {
+        console.log('\x1b[32m✓ closed\x1b[0m');
+        closedCount++;
+        continue;
+      }
+    }
+
+    // Graceful shutdown failed or server still running, try force kill
+    if (options.force) {
+      const killed = await killProcessOnPort(server.port);
+      if (killed) {
+        console.log('\x1b[33m✓ force killed\x1b[0m');
+        closedCount++;
+      } else {
+        console.log('\x1b[31m✗ failed\x1b[0m');
+        failedCount++;
+      }
+    } else {
+      console.log('\x1b[33m⚠ still running (use --force to kill)\x1b[0m');
+      failedCount++;
+    }
+  }
+
+  console.log('');
+  if (closedCount > 0) {
+    console.log(`[Sweetlink] ✓ Closed ${closedCount} server(s)`);
+  }
+  if (failedCount > 0) {
+    console.log(`[Sweetlink] ⚠ ${failedCount} server(s) could not be closed`);
+    if (!options.force) {
+      console.log('[Sweetlink] Hint: Use --force to forcefully kill stale processes');
+    }
+    process.exit(1);
+  }
+}
+
 function showHelp() {
   console.log(`
 Sweetlink CLI - Autonomous Development Bridge
@@ -1011,6 +1224,23 @@ Commands:
     Examples:
       pnpm sweetlink status
       pnpm sweetlink status --url "http://localhost:8080"
+
+  cleanup [options]
+    Find and close stale Sweetlink servers that weren't properly shut down.
+    Useful when ports are stuck after crashes or forced process kills.
+
+    Options:
+      --force                     Force kill processes if graceful shutdown fails
+
+    What it does:
+      1. Scans common Sweetlink port ranges (9223-9233, 11396-11406, etc.)
+      2. Identifies running Sweetlink servers
+      3. Attempts graceful WebSocket shutdown
+      4. With --force: kills the process if graceful shutdown fails
+
+    Examples:
+      pnpm sweetlink cleanup                 # Graceful shutdown
+      pnpm sweetlink cleanup --force         # Force kill if needed
 
 Screenshot Strategy:
   Tier 1 (Default): html2canvas WebSocket - 131KB, always use first
@@ -1198,6 +1428,13 @@ function hasFlag(flag: string): boolean {
         }
         break;
       }
+
+      case 'cleanup':
+        await cleanup({
+          force: hasFlag('--force'),
+          verbose: hasFlag('--verbose'),
+        });
+        break;
 
       default:
         console.error(`[Sweetlink] Unknown command: ${commandType}`);

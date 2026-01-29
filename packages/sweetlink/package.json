@@ -66,6 +66,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "dev": "node dist/cli/sweetlink-dev.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist claude-context"
   },

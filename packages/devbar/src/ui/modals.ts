@@ -17,6 +17,10 @@ export interface ModalConfig {
   onCopyMd: () => Promise<void>;
   onSave?: () => void;
   sweetlinkConnected: boolean;
+  /** Whether a save operation is in progress */
+  isSaving?: boolean;
+  /** Path where data was saved (shows confirmation) */
+  savedPath?: string | null;
 }
 
 /**
@@ -49,7 +53,8 @@ export function createModalBox(color: string): HTMLDivElement {
  * Create modal header with title, copy/save/close buttons
  */
 export function createModalHeader(config: ModalConfig): HTMLDivElement {
-  const { color, title, onClose, onCopyMd, onSave, sweetlinkConnected } = config;
+  const { color, title, onClose, onCopyMd, onSave, sweetlinkConnected, isSaving, savedPath } =
+    config;
 
   const header = document.createElement('div');
   Object.assign(header.style, {
@@ -58,6 +63,8 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     justifyContent: 'space-between',
     padding: '16px 20px',
     borderBottom: `1px solid ${color}40`,
+    flexWrap: 'wrap',
+    gap: '8px',
   });
 
   const titleEl = document.createElement('h2');
@@ -71,7 +78,7 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
   header.appendChild(titleEl);
 
   const headerButtons = document.createElement('div');
-  Object.assign(headerButtons.style, { display: 'flex', gap: '10px' });
+  Object.assign(headerButtons.style, { display: 'flex', gap: '10px', alignItems: 'center' });
 
   // Copy MD button
   const copyBtn = createStyledButton({ color, text: 'Copy MD' });
@@ -90,8 +97,18 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
 
   // Save button (if Sweetlink connected)
   if (sweetlinkConnected && onSave) {
-    const saveBtn = createStyledButton({ color, text: 'Save' });
-    saveBtn.onclick = onSave;
+    const saveBtn = createStyledButton({
+      color,
+      text: isSaving ? 'Saving...' : 'Save',
+    });
+
+    if (isSaving) {
+      saveBtn.style.opacity = '0.6';
+      saveBtn.style.cursor = 'not-allowed';
+    } else {
+      saveBtn.onclick = onSave;
+    }
+
     headerButtons.appendChild(saveBtn);
   }
 
@@ -106,6 +123,44 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
   headerButtons.appendChild(closeBtn);
 
   header.appendChild(headerButtons);
+
+  // Show saved path confirmation below buttons
+  if (savedPath) {
+    const savedConfirm = document.createElement('div');
+    Object.assign(savedConfirm.style, {
+      width: '100%',
+      marginTop: '4px',
+      padding: '8px 12px',
+      backgroundColor: `${color}15`,
+      border: `1px solid ${color}30`,
+      borderRadius: '6px',
+      fontSize: '0.75rem',
+      color: color,
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+    });
+
+    // Checkmark icon
+    const checkmark = document.createElement('span');
+    checkmark.textContent = '✓';
+    Object.assign(checkmark.style, { fontWeight: '600' });
+    savedConfirm.appendChild(checkmark);
+
+    // Path text
+    const pathText = document.createElement('span');
+    Object.assign(pathText.style, {
+      color: '#9ca3af',
+      fontFamily: 'monospace',
+      fontSize: '0.6875rem',
+      wordBreak: 'break-all',
+    });
+    pathText.textContent = `Saved to ${savedPath}`;
+    savedConfirm.appendChild(pathText);
+
+    header.appendChild(savedConfirm);
+  }
+
   return header;
 }
 

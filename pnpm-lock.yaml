@@ -55,6 +55,9 @@ importers:
         specifier: workspace:*
         version: link:../sweetlink
     devDependencies:
+      concurrently:
+        specifier: ^9.0.0
+        version: 9.2.1
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

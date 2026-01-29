@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Development playground for testing DevBar and Sweetlink",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n vite,sweetlink -c green,blue \"vite\" \"SWEETLINK_WS_PORT=11396 PORT=5173 pnpm --filter @ytspar/sweetlink sweetlink-dev\"",
+    "dev:vite": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -14,6 +15,7 @@
     "@ytspar/sweetlink": "workspace:*"
   },
   "devDependencies": {
+    "concurrently": "^9.0.0",
     "typescript": "^5.0.0",
     "vite": "^6.0.0"
   }

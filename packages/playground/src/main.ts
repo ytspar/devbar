@@ -6,10 +6,10 @@
  */
 
 import {
-  injectThemeCSS,
-  getStoredThemeMode,
   getEffectiveTheme,
+  getStoredThemeMode,
   getTheme,
+  injectThemeCSS,
   STORAGE_KEYS,
 } from '@ytspar/devbar';
 import { createDemoContent } from './demo-content';

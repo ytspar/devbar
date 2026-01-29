@@ -19,16 +19,23 @@ import {
   DEVBAR_SCREENSHOT_QUALITY,
   FONT_MONO,
   getEffectiveTheme,
+  getTheme,
   getThemeColors,
+  injectThemeCSS,
   MAX_CONSOLE_LOGS,
+  MAX_PORT_RETRIES,
   MAX_RECONNECT_ATTEMPTS,
   MAX_RECONNECT_DELAY_MS,
+  PORT_RETRY_DELAY_MS,
+  PORT_SCAN_RESTART_DELAY_MS,
   SCREENSHOT_BLUR_DELAY_MS,
   SCREENSHOT_NOTIFICATION_MS,
   SCREENSHOT_SCALE,
   TAILWIND_BREAKPOINTS,
   TOOLTIP_STYLES,
+  VERIFICATION_TIMEOUT_MS,
   WS_PORT,
+  WS_PORT_OFFSET,
 } from './constants.js';
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
 import { extractDocumentOutline, outlineToMarkdown } from './outline.js';
@@ -208,6 +215,8 @@ export class GlobalDevBar {
   } | null = null;
   private lastOutline: string | null = null;
   private lastSchema: string | null = null;
+  private savingOutline = false;
+  private savingSchema = false;
   private consoleFilter: 'error' | 'warn' | null = null;
 
   // Modal states
@@ -227,6 +236,13 @@ export class GlobalDevBar {
   private inpValue = 0;
 
   private reconnectAttempts = 0;
+
+  // Port scanning state for multi-instance support
+  private readonly currentAppPort: number;
+  private readonly baseWsPort: number;
+  private wsVerified = false;
+  private serverProjectDir: string | null = null;
+  private verificationTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Track the position of the connection indicator dot for smooth collapse
   private lastDotPosition: { left: number; top: number; bottom: number } | null = null;
@@ -271,6 +287,17 @@ export class GlobalDevBar {
 
     // Initialize settings manager
     this.settingsManager = getSettingsManager();
+
+    // Calculate app port from URL for multi-instance support
+    if (typeof window !== 'undefined') {
+      this.currentAppPort =
+        parseInt(window.location.port, 10) || (window.location.protocol === 'https:' ? 443 : 80);
+      // Calculate expected WS port (appPort + port offset) like SweetlinkBridge does
+      this.baseWsPort = this.currentAppPort > 0 ? this.currentAppPort + WS_PORT_OFFSET : WS_PORT;
+    } else {
+      this.currentAppPort = 0;
+      this.baseWsPort = WS_PORT;
+    }
 
     this.options = {
       position: options.position ?? 'bottom-left',
@@ -449,6 +476,7 @@ export class GlobalDevBar {
     // Close WebSocket
     this.reconnectAttempts = MAX_RECONNECT_ATTEMPTS; // Prevent reconnection
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+    if (this.verificationTimeout) clearTimeout(this.verificationTimeout);
     if (this.ws) this.ws.close();
 
     // Clear timeouts
@@ -504,33 +532,92 @@ export class GlobalDevBar {
     }
   }
 
-  private connectWebSocket(): void {
+  private connectWebSocket(port?: number): void {
     if (this.destroyed) return;
 
-    this.debug.ws('Connecting to WebSocket', { port: WS_PORT });
-    const ws = new WebSocket(`ws://localhost:${WS_PORT}`);
+    const targetPort = port ?? this.baseWsPort;
+    this.debug.ws('Connecting to WebSocket', { port: targetPort, appPort: this.currentAppPort });
+    const ws = new WebSocket(`ws://localhost:${targetPort}`);
     this.ws = ws;
+    this.wsVerified = false;
+
+    // Timeout for server-info verification
+    this.verificationTimeout = setTimeout(() => {
+      if (!this.wsVerified && ws.readyState === WebSocket.OPEN) {
+        // Server didn't send server-info (old version) - accept for backwards compatibility
+        this.debug.ws('Server is old version (no server-info), accepting for backwards compat');
+        this.wsVerified = true;
+        this.sweetlinkConnected = true;
+        this.reconnectAttempts = 0;
+        this.settingsManager.setWebSocket(ws);
+        this.settingsManager.setConnected(true);
+        ws.send(JSON.stringify({ type: 'load-settings' }));
+        this.render();
+      }
+    }, VERIFICATION_TIMEOUT_MS);
 
     ws.onopen = () => {
-      this.sweetlinkConnected = true;
-      this.reconnectAttempts = 0;
-      this.debug.ws('WebSocket connected');
-
-      // Update settings manager with WebSocket connection
-      this.settingsManager.setWebSocket(ws);
-      this.settingsManager.setConnected(true);
-
+      this.debug.ws('WebSocket socket opened, awaiting server-info');
       ws.send(JSON.stringify({ type: 'browser-client-ready' }));
-
-      // Request settings from server
-      ws.send(JSON.stringify({ type: 'load-settings' }));
-
-      this.render();
     };
 
     ws.onmessage = async (event) => {
       try {
-        const command = JSON.parse(event.data) as SweetlinkCommand;
+        const message = JSON.parse(event.data);
+
+        // Handle server-info for port matching
+        if (message.type === 'server-info') {
+          if (this.verificationTimeout) {
+            clearTimeout(this.verificationTimeout);
+            this.verificationTimeout = null;
+          }
+
+          const serverAppPort = message.appPort as number | null;
+          const serverMatchesApp = serverAppPort === null || serverAppPort === this.currentAppPort;
+
+          if (!serverMatchesApp) {
+            this.debug.ws('Server mismatch', {
+              serverAppPort,
+              currentAppPort: this.currentAppPort,
+              tryingNextPort: targetPort + 1,
+            });
+            ws.close();
+
+            // Try next port
+            const nextPort = targetPort + 1;
+            if (nextPort < this.baseWsPort + MAX_PORT_RETRIES) {
+              setTimeout(() => this.connectWebSocket(nextPort), PORT_RETRY_DELAY_MS);
+            } else {
+              this.debug.ws('No matching server found, will retry from base port');
+              setTimeout(() => this.connectWebSocket(this.baseWsPort), PORT_SCAN_RESTART_DELAY_MS);
+            }
+            return;
+          }
+
+          // Server matches - mark as verified and connected
+          this.wsVerified = true;
+          this.sweetlinkConnected = true;
+          this.reconnectAttempts = 0;
+          this.serverProjectDir = message.projectDir ?? null;
+          this.debug.ws('Server verified', {
+            appPort: serverAppPort ?? 'any',
+            projectDir: this.serverProjectDir,
+          });
+
+          this.settingsManager.setWebSocket(ws);
+          this.settingsManager.setConnected(true);
+          ws.send(JSON.stringify({ type: 'load-settings' }));
+          this.render();
+          return;
+        }
+
+        // Ignore other commands until verified
+        if (!this.wsVerified) {
+          this.debug.ws('Ignoring command before verification', { type: message.type });
+          return;
+        }
+
+        const command = message as SweetlinkCommand;
         this.debug.ws('Received command', { type: command.type });
         await this.handleSweetlinkCommand(command);
       } catch (e) {
@@ -539,20 +626,30 @@ export class GlobalDevBar {
     };
 
     ws.onclose = () => {
-      this.sweetlinkConnected = false;
-      this.settingsManager.setConnected(false);
-      this.debug.ws('WebSocket disconnected');
-      this.render();
+      if (this.verificationTimeout) {
+        clearTimeout(this.verificationTimeout);
+        this.verificationTimeout = null;
+      }
 
-      // Auto-reconnect with exponential backoff
-      if (!this.destroyed && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        const delayMs = BASE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts;
-        this.reconnectAttempts++;
-        this.debug.ws('Scheduling reconnect', { attempt: this.reconnectAttempts, delayMs });
-        this.reconnectTimeout = setTimeout(
-          () => this.connectWebSocket(),
-          Math.min(delayMs, MAX_RECONNECT_DELAY_MS)
-        );
+      // Only reset connection state if we were actually verified/connected
+      if (this.wsVerified) {
+        this.sweetlinkConnected = false;
+        this.wsVerified = false;
+        this.serverProjectDir = null;
+        this.settingsManager.setConnected(false);
+        this.debug.ws('WebSocket disconnected');
+        this.render();
+
+        // Auto-reconnect with exponential backoff (start from base port)
+        if (!this.destroyed && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delayMs = BASE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts;
+          this.reconnectAttempts++;
+          this.debug.ws('Scheduling reconnect', { attempt: this.reconnectAttempts, delayMs });
+          this.reconnectTimeout = setTimeout(
+            () => this.connectWebSocket(this.baseWsPort),
+            Math.min(delayMs, MAX_RECONNECT_DELAY_MS)
+          );
+        }
       }
     };
 
@@ -771,6 +868,7 @@ export class GlobalDevBar {
         }, durationMs);
         break;
       case 'outline':
+        this.savingOutline = false;
         this.lastOutline = path;
         if (this.outlineTimeout) clearTimeout(this.outlineTimeout);
         this.outlineTimeout = setTimeout(() => {
@@ -779,6 +877,7 @@ export class GlobalDevBar {
         }, durationMs);
         break;
       case 'schema':
+        this.savingSchema = false;
         this.lastSchema = path;
         if (this.schemaTimeout) clearTimeout(this.schemaTimeout);
         this.schemaTimeout = setTimeout(() => {
@@ -1000,6 +1099,8 @@ export class GlobalDevBar {
       this.themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       this.themeMediaHandler = () => {
         if (this.themeMode === 'system') {
+          // Re-inject theme CSS when system preference changes
+          injectThemeCSS(getTheme(this.themeMode));
           this.debug.state('System theme changed', {
             effectiveTheme: getEffectiveTheme(this.themeMode),
           });
@@ -1029,6 +1130,8 @@ export class GlobalDevBar {
   setThemeMode(mode: ThemeMode): void {
     this.themeMode = mode;
     this.settingsManager.saveSettings({ themeMode: mode });
+    // Inject the appropriate theme CSS variables
+    injectThemeCSS(getTheme(mode));
     this.debug.state('Theme mode changed', { mode, effectiveTheme: getEffectiveTheme(mode) });
     this.render();
   }
@@ -1303,10 +1406,15 @@ export class GlobalDevBar {
   }
 
   private handleSaveOutline(): void {
+    if (this.savingOutline) return; // Prevent repeated clicks
+
     const outline = extractDocumentOutline();
     const markdown = outlineToMarkdown(outline);
 
     if (this.ws?.readyState === WebSocket.OPEN) {
+      this.savingOutline = true;
+      this.render();
+
       this.ws.send(
         JSON.stringify({
           type: 'save-outline',
@@ -1323,10 +1431,15 @@ export class GlobalDevBar {
   }
 
   private handleSaveSchema(): void {
+    if (this.savingSchema) return; // Prevent repeated clicks
+
     const schema = extractPageSchema();
     const markdown = schemaToMarkdown(schema);
 
     if (this.ws?.readyState === WebSocket.OPEN) {
+      this.savingSchema = true;
+      this.render();
+
       this.ws.send(
         JSON.stringify({
           type: 'save-schema',
@@ -1767,6 +1880,8 @@ export class GlobalDevBar {
       },
       onSave: () => this.handleSaveOutline(),
       sweetlinkConnected: this.sweetlinkConnected,
+      isSaving: this.savingOutline,
+      savedPath: this.lastOutline,
     });
     modal.appendChild(header);
 
@@ -1867,6 +1982,8 @@ export class GlobalDevBar {
       },
       onSave: () => this.handleSaveSchema(),
       sweetlinkConnected: this.sweetlinkConnected,
+      isSaving: this.savingSchema,
+      savedPath: this.lastSchema,
     });
     modal.appendChild(header);
 
@@ -2287,7 +2404,8 @@ export class GlobalDevBar {
     const tooltip = isCompact ? 'Expand (Cmd+Shift+M)' : 'Compact (Cmd+Shift+M)';
     btn.setAttribute('data-tooltip', tooltip);
 
-    const color = COLORS.textSecondary;
+    const { accentColor } = this.options;
+    const iconColor = COLORS.textSecondary;
 
     Object.assign(btn.style, {
       display: 'flex',
@@ -2299,23 +2417,23 @@ export class GlobalDevBar {
       minHeight: '22px',
       flexShrink: '0',
       borderRadius: '50%',
-      border: `1px solid ${color}60`,
+      border: `1px solid ${accentColor}60`,
       backgroundColor: 'transparent',
-      color: `${color}99`,
+      color: `${iconColor}99`,
       cursor: 'pointer',
       transition: 'all 150ms',
     });
 
     btn.onmouseenter = () => {
-      btn.style.borderColor = color;
-      btn.style.backgroundColor = `${color}20`;
-      btn.style.color = color;
+      btn.style.borderColor = accentColor;
+      btn.style.backgroundColor = `${accentColor}20`;
+      btn.style.color = iconColor;
     };
 
     btn.onmouseleave = () => {
-      btn.style.borderColor = `${color}60`;
+      btn.style.borderColor = `${accentColor}60`;
       btn.style.backgroundColor = 'transparent';
-      btn.style.color = `${color}99`;
+      btn.style.color = `${iconColor}99`;
     };
 
     btn.onclick = () => {
@@ -2334,8 +2452,8 @@ export class GlobalDevBar {
     svg.setAttribute('stroke-linejoin', 'round');
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    // Right chevron (>) when not compact, left chevron (<) when compact
-    path.setAttribute('points', isCompact ? '15 18 9 12 15 6' : '9 18 15 12 9 6');
+    // Left chevron (<) when expanded to shrink, right chevron (>) when compact to expand
+    path.setAttribute('points', isCompact ? '9 18 15 12 9 6' : '15 18 9 12 15 6');
     svg.appendChild(path);
 
     btn.appendChild(svg);

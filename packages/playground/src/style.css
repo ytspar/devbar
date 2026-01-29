@@ -773,7 +773,7 @@ body {
 .position-minimap {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 4 / 3;
   background-color: var(--devbar-color-bg-input);
   border: 1px solid var(--devbar-color-border);
   border-radius: var(--devbar-radius-sm);
@@ -782,11 +782,11 @@ body {
 
 .position-indicator {
   position: absolute;
-  width: 24px;
-  height: 8px;
+  width: 16px;
+  height: 10px;
   background-color: var(--devbar-color-border);
   border: 1px solid var(--devbar-color-border);
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
   transition: all var(--devbar-transition-fast);
   padding: 0;

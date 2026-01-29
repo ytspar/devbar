@@ -285,11 +285,48 @@ export type DevBarThemeLight = typeof DEVBAR_THEME_LIGHT;
 // Shorthand Exports (for cleaner imports)
 // ============================================================================
 
-/** Shorthand for common colors */
+/** Shorthand for common colors (static dark theme - use CSS_COLORS for theming) */
 export const COLORS = DEVBAR_THEME.colors;
 
 /** Shorthand for font stack */
 export const FONT_MONO = DEVBAR_THEME.fonts.mono;
+
+/**
+ * CSS variable references for dynamic theming.
+ * Use these instead of COLORS for inline styles that should respond to theme changes.
+ */
+export const CSS_COLORS = {
+  // Primary accent
+  primary: 'var(--devbar-color-primary)',
+  primaryHover: 'var(--devbar-color-primary-hover)',
+  primaryGlow: 'var(--devbar-color-primary-glow)',
+
+  // Semantic colors
+  error: 'var(--devbar-color-error)',
+  warning: 'var(--devbar-color-warning)',
+  info: 'var(--devbar-color-info)',
+
+  // Extended palette
+  purple: 'var(--devbar-color-purple)',
+  cyan: 'var(--devbar-color-cyan)',
+  pink: 'var(--devbar-color-pink)',
+  lime: 'var(--devbar-color-lime)',
+
+  // Backgrounds
+  bg: 'var(--devbar-color-bg)',
+  bgCard: 'var(--devbar-color-bg-card)',
+  bgElevated: 'var(--devbar-color-bg-elevated)',
+  bgInput: 'var(--devbar-color-bg-input)',
+
+  // Text
+  text: 'var(--devbar-color-text)',
+  textSecondary: 'var(--devbar-color-text-secondary)',
+  textMuted: 'var(--devbar-color-text-muted)',
+
+  // Borders
+  border: 'var(--devbar-color-border)',
+  borderSubtle: 'var(--devbar-color-border-subtle)',
+} as const;
 
 /** Flexible input type for theme customization */
 export type DevBarThemeInput = {
@@ -533,9 +570,9 @@ export const MODAL_OVERLAY_STYLES: Record<string, string> = {
   justifyContent: 'center',
 };
 
-/** Common modal box styles */
+/** Common modal box styles (uses CSS variables for theming) */
 export const MODAL_BOX_BASE_STYLES: Record<string, string> = {
-  backgroundColor: COLORS.bgElevated,
+  backgroundColor: 'var(--devbar-color-bg-elevated)',
   borderRadius: '12px',
   width: '90%',
   maxWidth: '700px',
@@ -549,7 +586,7 @@ export const MODAL_BOX_BASE_STYLES: Record<string, string> = {
 // CSS Styles
 // ============================================================================
 
-/** Tooltip and animation CSS styles */
+/** Tooltip and animation CSS styles (uses CSS variables for theming) */
 export const TOOLTIP_STYLES = `
 .devbar-tooltip {
   position: relative;
@@ -584,14 +621,14 @@ export const TOOLTIP_STYLES = `
   left: 50%;
   transform: translateX(-50%) scale(0.95);
   padding: 0.625rem 1rem;
-  background: ${COLORS.bgElevated};
-  color: ${COLORS.primary};
+  background: var(--devbar-color-bg-elevated);
+  color: var(--devbar-color-primary);
   font-family: ${FONT_MONO};
   font-size: 0.75rem;
   line-height: 1.5;
   border-radius: 6px;
-  border: 1px solid ${COLORS.border};
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.1);
+  border: 1px solid var(--devbar-color-border);
+  box-shadow: var(--devbar-shadow-md);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   min-width: min(200px, calc(100vw - 32px));
@@ -639,15 +676,15 @@ export const TOOLTIP_STYLES = `
 }
 .devbar-item:hover {
   opacity: 1 !important;
-  color: ${COLORS.primary};
+  color: var(--devbar-color-primary);
 }
 .devbar-clickable {
   transition: transform 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out;
 }
 .devbar-clickable:hover {
   transform: scale(1.1);
-  background-color: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 8px ${COLORS.primaryGlow};
+  background-color: var(--devbar-color-primary-glow);
+  box-shadow: 0 0 8px var(--devbar-color-primary-glow);
 }
 .devbar-badge {
   transition: transform 150ms ease-out, box-shadow 150ms ease-out;
@@ -661,9 +698,9 @@ export const TOOLTIP_STYLES = `
 }
 .devbar-collapse:hover {
   transform: scale(1.08);
-  background-color: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 12px ${COLORS.primaryGlow};
-  border-color: ${COLORS.primary};
+  background-color: var(--devbar-color-primary-glow);
+  box-shadow: 0 0 12px var(--devbar-color-primary-glow);
+  border-color: var(--devbar-color-primary);
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }

@@ -14,7 +14,7 @@ import {
   BUTTON_COLORS,
   CATEGORY_COLORS,
   CLIPBOARD_NOTIFICATION_MS,
-  COLORS,
+  CSS_COLORS,
   DESIGN_REVIEW_NOTIFICATION_MS,
   DEVBAR_SCREENSHOT_QUALITY,
   FONT_MONO,
@@ -222,6 +222,9 @@ export class GlobalDevBar {
   private showOutlineModal = false;
   private showSchemaModal = false;
 
+  // Track active HTML tooltips for cleanup on re-render
+  private activeTooltips = new Set<HTMLDivElement>();
+
   private breakpointInfo: { tailwindBreakpoint: string; dimensions: string } | null = null;
   private perfStats: {
     fcp: string;
@@ -299,7 +302,7 @@ export class GlobalDevBar {
 
     this.options = {
       position: options.position ?? 'bottom-left',
-      accentColor: options.accentColor ?? COLORS.primary,
+      accentColor: options.accentColor ?? CSS_COLORS.primary,
       showMetrics: {
         breakpoint: options.showMetrics?.breakpoint ?? true,
         fcp: options.showMetrics?.fcp ?? true,
@@ -899,8 +902,8 @@ export class GlobalDevBar {
       // LCP (from cached value, updated by observer)
       const lcp = this.lcpValue !== null ? `${Math.round(this.lcpValue)}ms` : '-';
 
-      // CLS (cumulative layout shift)
-      const cls = this.clsValue > 0 ? this.clsValue.toFixed(3) : '-';
+      // CLS (cumulative layout shift) - 0 is a valid value meaning no layout shifts
+      const cls = this.clsValue.toFixed(3);
 
       // INP (Interaction to Next Paint)
       const inp = this.inpValue > 0 ? `${Math.round(this.inpValue)}ms` : '-';
@@ -1078,6 +1081,10 @@ export class GlobalDevBar {
           this.debug.state('System theme changed', {
             effectiveTheme: getEffectiveTheme(this.themeMode),
           });
+          // Dispatch event so host apps can respond
+          window.dispatchEvent(
+            new CustomEvent('devbar-theme-change', { detail: { mode: this.themeMode } })
+          );
           this.render();
         }
       };
@@ -1107,6 +1114,10 @@ export class GlobalDevBar {
     // Inject the appropriate theme CSS variables
     injectThemeCSS(getTheme(mode));
     this.debug.state('Theme mode changed', { mode, effectiveTheme: getEffectiveTheme(mode) });
+    // Dispatch custom event so host apps can respond to theme changes
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('devbar-theme-change', { detail: { mode } }));
+    }
     this.render();
   }
 
@@ -1447,6 +1458,9 @@ export class GlobalDevBar {
     if (this.destroyed) return;
     if (typeof document === 'undefined') return;
 
+    // Clear any orphaned tooltips from previous render
+    this.clearAllTooltips();
+
     // Remove existing container if any
     if (this.container) {
       this.container.remove();
@@ -1531,7 +1545,7 @@ export class GlobalDevBar {
     header.appendChild(title);
 
     const closeBtn = createStyledButton({
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       text: '×',
       padding: '0',
       fontSize: '1.25rem',
@@ -1545,7 +1559,7 @@ export class GlobalDevBar {
     const content = document.createElement('div');
     Object.assign(content.style, {
       padding: '18px',
-      color: COLORS.text,
+      color: CSS_COLORS.text,
       fontSize: '0.8125rem',
       lineHeight: '1.6',
     });
@@ -1567,11 +1581,11 @@ export class GlobalDevBar {
       justifyContent: 'flex-end',
       gap: '10px',
       padding: '14px 18px',
-      borderTop: `1px solid ${COLORS.border}`,
+      borderTop: `1px solid ${CSS_COLORS.border}`,
     });
 
     const cancelBtn = createStyledButton({
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       text: 'Cancel',
       padding: '8px 16px',
     });
@@ -1598,7 +1612,7 @@ export class GlobalDevBar {
 
     wrapper.appendChild(
       createInfoBox(
-        COLORS.error,
+        CSS_COLORS.error,
         'API Key Not Configured',
         'The ANTHROPIC_API_KEY environment variable is not set.'
       )
@@ -1610,7 +1624,7 @@ export class GlobalDevBar {
 
     const instructTitle = document.createElement('div');
     Object.assign(instructTitle.style, {
-      color: COLORS.textSecondary,
+      color: CSS_COLORS.textSecondary,
       fontWeight: '600',
       marginBottom: '8px',
     });
@@ -1627,7 +1641,7 @@ export class GlobalDevBar {
     steps.forEach(({ text, highlight }) => {
       const stepDiv = document.createElement('div');
       Object.assign(stepDiv.style, {
-        color: highlight ? COLORS.primary : COLORS.textMuted,
+        color: highlight ? CSS_COLORS.primary : CSS_COLORS.textMuted,
         fontSize: '0.75rem',
         marginBottom: '4px',
         fontFamily: FONT_MONO,
@@ -1648,14 +1662,14 @@ export class GlobalDevBar {
     Object.assign(wrapper.style, { marginBottom: '16px' });
 
     const desc = document.createElement('p');
-    Object.assign(desc.style, { color: COLORS.textSecondary, marginBottom: '12px' });
+    Object.assign(desc.style, { color: CSS_COLORS.textSecondary, marginBottom: '12px' });
     desc.textContent = 'This will capture a screenshot and send it to Claude for design analysis.';
     wrapper.appendChild(desc);
 
     // Cost estimate
     const estimate = this.calculateCostEstimate();
     if (estimate) {
-      const costBox = createInfoBox(COLORS.primary, 'Estimated Cost', []);
+      const costBox = createInfoBox(CSS_COLORS.primary, 'Estimated Cost', []);
       // Remove default margin and adjust padding
       costBox.style.marginBottom = '0';
       costBox.style.padding = '12px';
@@ -1664,7 +1678,7 @@ export class GlobalDevBar {
       Object.assign(costDetails.style, {
         display: 'flex',
         justifyContent: 'space-between',
-        color: COLORS.textSecondary,
+        color: CSS_COLORS.textSecondary,
         fontSize: '0.75rem',
       });
 
@@ -1673,7 +1687,7 @@ export class GlobalDevBar {
       costDetails.appendChild(tokensSpan);
 
       const priceSpan = document.createElement('span');
-      Object.assign(priceSpan.style, { color: COLORS.warning, fontWeight: '600' });
+      Object.assign(priceSpan.style, { color: CSS_COLORS.warning, fontWeight: '600' });
       priceSpan.textContent = estimate.cost;
       costDetails.appendChild(priceSpan);
 
@@ -1685,7 +1699,7 @@ export class GlobalDevBar {
     if (this.apiKeyStatus?.model) {
       const modelDiv = document.createElement('div');
       Object.assign(modelDiv.style, {
-        color: COLORS.textMuted,
+        color: CSS_COLORS.textMuted,
         fontSize: '0.6875rem',
         marginTop: '12px',
       });
@@ -1714,7 +1728,7 @@ export class GlobalDevBar {
       bottom: '60px',
       left: '80px',
       zIndex: '10002',
-      backgroundColor: 'rgba(17, 24, 39, 0.98)',
+      backgroundColor: 'var(--devbar-color-bg-elevated)',
       border: `1px solid ${color}`,
       borderRadius: '8px',
       boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${color}33`,
@@ -1783,7 +1797,7 @@ export class GlobalDevBar {
       Object.assign(emptyMsg.style, {
         padding: '20px',
         textAlign: 'center',
-        color: COLORS.textMuted,
+        color: CSS_COLORS.textMuted,
         fontSize: '0.75rem',
       });
       emptyMsg.textContent = `No ${filterType}s recorded`;
@@ -1810,7 +1824,7 @@ export class GlobalDevBar {
 
       const timestamp = document.createElement('span');
       Object.assign(timestamp.style, {
-        color: COLORS.textMuted,
+        color: CSS_COLORS.textMuted,
         fontSize: '0.625rem',
         marginRight: '8px',
       });
@@ -1897,7 +1911,7 @@ export class GlobalDevBar {
       if (node.category) {
         const categorySpan = document.createElement('span');
         Object.assign(categorySpan.style, {
-          color: COLORS.textMuted,
+          color: CSS_COLORS.textMuted,
           fontSize: '0.625rem',
           marginLeft: '6px',
         });
@@ -1973,9 +1987,9 @@ export class GlobalDevBar {
       content.appendChild(createEmptyMessage('No structured data found on this page'));
     } else {
       this.renderSchemaSection(content, 'JSON-LD', schema.jsonLd, color);
-      this.renderSchemaSection(content, 'Open Graph', schema.openGraph, COLORS.info);
-      this.renderSchemaSection(content, 'Twitter Cards', schema.twitter, COLORS.cyan);
-      this.renderSchemaSection(content, 'Meta Tags', schema.metaTags, COLORS.textMuted);
+      this.renderSchemaSection(content, 'Open Graph', schema.openGraph, CSS_COLORS.info);
+      this.renderSchemaSection(content, 'Twitter Cards', schema.twitter, CSS_COLORS.cyan);
+      this.renderSchemaSection(content, 'Meta Tags', schema.metaTags, CSS_COLORS.textMuted);
     }
 
     modal.appendChild(content);
@@ -2063,12 +2077,12 @@ export class GlobalDevBar {
   private appendHighlightedJson(container: HTMLElement, json: string): void {
     // Color map for different token types
     const colors: Record<string, string> = {
-      key: COLORS.primary, // green
-      string: COLORS.warning, // amber/yellow
-      number: COLORS.purple, // purple
-      boolean: COLORS.info, // blue
-      nullVal: COLORS.error, // red
-      punct: COLORS.textMuted, // gray
+      key: CSS_COLORS.primary, // green
+      string: CSS_COLORS.warning, // amber/yellow
+      number: CSS_COLORS.purple, // purple
+      boolean: CSS_COLORS.info, // blue
+      nullVal: CSS_COLORS.error, // red
+      punct: CSS_COLORS.textMuted, // gray
     };
 
     // Simple tokenizer for JSON using matchAll for safety
@@ -2197,7 +2211,7 @@ export class GlobalDevBar {
       position: 'fixed',
       ...posStyle,
       zIndex: '9999',
-      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      backgroundColor: 'var(--devbar-color-bg-card)',
       border: `1px solid ${accentColor}`,
       borderRadius: '20px',
       color: accentColor,
@@ -2240,8 +2254,8 @@ export class GlobalDevBar {
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
-      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none',
+      backgroundColor: this.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
     });
     connIndicator.appendChild(connDot);
     wrapper.appendChild(connIndicator);
@@ -2308,14 +2322,14 @@ export class GlobalDevBar {
     btn.type = 'button';
 
     // Attach HTML tooltip
-    this.attachButtonTooltip(btn, COLORS.textSecondary, (_tooltip, h) => {
+    this.attachButtonTooltip(btn, CSS_COLORS.textSecondary, (_tooltip, h) => {
       h.addTitle('Settings');
       h.addSectionHeader('Keyboard');
       h.addShortcut('Cmd/Ctrl+Shift+M', 'Toggle compact mode');
     });
 
     const isActive = this.showSettingsPopover;
-    const color = COLORS.textSecondary;
+    const color = CSS_COLORS.textSecondary;
 
     Object.assign(btn.style, {
       display: 'flex',
@@ -2384,7 +2398,7 @@ export class GlobalDevBar {
     btn.setAttribute('data-tooltip', tooltip);
 
     const { accentColor } = this.options;
-    const iconColor = COLORS.textSecondary;
+    const iconColor = CSS_COLORS.textSecondary;
 
     Object.assign(btn.style, {
       display: 'flex',
@@ -2443,7 +2457,7 @@ export class GlobalDevBar {
    * Create a settings section with title
    */
   private createSettingsSection(title: string, hasBorder = true): HTMLDivElement {
-    const color = COLORS.textSecondary;
+    const color = CSS_COLORS.textSecondary;
     const section = document.createElement('div');
     Object.assign(section.style, {
       padding: '10px 14px',
@@ -2473,7 +2487,7 @@ export class GlobalDevBar {
     accentColor: string,
     onChange: () => void
   ): HTMLDivElement {
-    const color = COLORS.textSecondary;
+    const color = CSS_COLORS.textSecondary;
     const row = document.createElement('div');
     Object.assign(row.style, {
       display: 'flex',
@@ -2483,7 +2497,7 @@ export class GlobalDevBar {
     });
 
     const labelEl = document.createElement('span');
-    Object.assign(labelEl.style, { color: COLORS.text, fontSize: '0.6875rem' });
+    Object.assign(labelEl.style, { color: CSS_COLORS.text, fontSize: '0.6875rem' });
     labelEl.textContent = label;
     row.appendChild(labelEl);
 
@@ -2524,7 +2538,7 @@ export class GlobalDevBar {
    */
   private renderSettingsPopover(): void {
     const { position, accentColor } = this.options;
-    const color = COLORS.textSecondary;
+    const color = CSS_COLORS.textSecondary;
 
     const popover = document.createElement('div');
     popover.setAttribute('data-devbar', 'true');
@@ -2538,7 +2552,7 @@ export class GlobalDevBar {
       [isTop ? 'top' : 'bottom']: isTop ? '70px' : '70px',
       [isRight ? 'right' : 'left']: isRight ? '16px' : '80px',
       zIndex: '10003',
-      backgroundColor: 'rgba(17, 24, 39, 0.98)',
+      backgroundColor: 'var(--devbar-color-bg-elevated)',
       border: `1px solid ${accentColor}`,
       borderRadius: '8px',
       boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${accentColor}33`,
@@ -2561,7 +2575,7 @@ export class GlobalDevBar {
       borderBottom: `1px solid ${accentColor}30`,
       position: 'sticky',
       top: '0',
-      backgroundColor: 'rgba(17, 24, 39, 0.98)',
+      backgroundColor: 'var(--devbar-color-bg-elevated)',
       zIndex: '1',
     });
 
@@ -2571,7 +2585,7 @@ export class GlobalDevBar {
     header.appendChild(title);
 
     const closeBtn = createStyledButton({
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       text: '×',
       padding: '2px 6px',
       fontSize: '0.875rem',
@@ -2623,7 +2637,7 @@ export class GlobalDevBar {
 
     const posLabel = document.createElement('div');
     Object.assign(posLabel.style, {
-      color: COLORS.text,
+      color: CSS_COLORS.text,
       fontSize: '0.6875rem',
       marginBottom: '6px',
     });
@@ -2636,7 +2650,7 @@ export class GlobalDevBar {
       position: 'relative',
       width: '100%',
       height: '50px',
-      backgroundColor: 'rgba(10, 15, 26, 0.6)',
+      backgroundColor: 'var(--devbar-color-bg-input)',
       border: `1px solid ${color}30`,
       borderRadius: '4px',
     });
@@ -2721,7 +2735,7 @@ export class GlobalDevBar {
     // Keyboard shortcut hint
     const shortcutHint = document.createElement('div');
     Object.assign(shortcutHint.style, {
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       fontSize: '0.5625rem',
       marginTop: '2px',
       marginBottom: '8px',
@@ -2735,7 +2749,7 @@ export class GlobalDevBar {
 
     const accentLabel = document.createElement('div');
     Object.assign(accentLabel.style, {
-      color: COLORS.text,
+      color: CSS_COLORS.text,
       fontSize: '0.6875rem',
       marginBottom: '6px',
     });
@@ -2848,7 +2862,7 @@ export class GlobalDevBar {
     });
 
     const resetBtn = createStyledButton({
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       text: 'Reset to Defaults',
       padding: '6px 12px',
       fontSize: '0.625rem',
@@ -2934,7 +2948,7 @@ export class GlobalDevBar {
       position: 'fixed',
       ...posStyle,
       zIndex: '9999',
-      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      backgroundColor: 'var(--devbar-color-bg-card)',
       border: `1px solid ${accentColor}`,
       borderRadius: '50%',
       color: accentColor,
@@ -2963,8 +2977,8 @@ export class GlobalDevBar {
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
-      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none',
+      backgroundColor: this.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
     });
     wrapper.appendChild(dot);
 
@@ -3028,7 +3042,7 @@ export class GlobalDevBar {
       position: 'fixed',
       ...posStyle,
       zIndex: '9999',
-      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      backgroundColor: 'var(--devbar-color-bg-card)',
       border: `1px solid ${accentColor}`,
       borderRadius: '12px',
       color: accentColor,
@@ -3114,8 +3128,8 @@ export class GlobalDevBar {
       width: '6px',
       height: '6px',
       borderRadius: '50%',
-      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
-      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none',
+      backgroundColor: this.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
       transition: 'all 300ms',
     });
     connIndicator.appendChild(connDot);
@@ -3355,8 +3369,8 @@ export class GlobalDevBar {
   private readonly TOOLTIP_BASE_STYLES = {
     position: 'fixed',
     zIndex: '10004',
-    backgroundColor: 'rgba(17, 24, 39, 0.98)',
-    border: `1px solid ${COLORS.border}`,
+    backgroundColor: 'var(--devbar-color-bg-elevated)',
+    border: `1px solid ${CSS_COLORS.border}`,
     borderRadius: '6px',
     padding: '10px 12px',
     fontSize: '0.6875rem',
@@ -3366,18 +3380,34 @@ export class GlobalDevBar {
     pointerEvents: 'none',
   } as const;
 
-  /** Create a tooltip container element */
+  /** Create a tooltip container element and track it for cleanup */
   private createTooltipContainer(): HTMLDivElement {
     const tooltip = document.createElement('div');
     tooltip.setAttribute('data-devbar', 'true');
+    tooltip.setAttribute('data-devbar-tooltip', 'true');
     Object.assign(tooltip.style, this.TOOLTIP_BASE_STYLES);
+    this.activeTooltips.add(tooltip);
     return tooltip;
+  }
+
+  /** Remove a tooltip and untrack it */
+  private removeTooltip(tooltip: HTMLDivElement): void {
+    tooltip.remove();
+    this.activeTooltips.delete(tooltip);
+  }
+
+  /** Clear all active tooltips (called on re-render) */
+  private clearAllTooltips(): void {
+    for (const tooltip of this.activeTooltips) {
+      tooltip.remove();
+    }
+    this.activeTooltips.clear();
   }
 
   /** Add a bold title to tooltip (metric name, feature name, etc.) */
   private addTooltipTitle(container: HTMLElement, title: string): void {
     const titleEl = document.createElement('div');
-    const accentColor = this.settingsManager.get('accentColor') || COLORS.primary;
+    const accentColor = this.settingsManager.get('accentColor') || CSS_COLORS.primary;
     Object.assign(titleEl.style, {
       color: accentColor,
       fontWeight: '600',
@@ -3391,7 +3421,7 @@ export class GlobalDevBar {
   private addTooltipDescription(container: HTMLElement, description: string): void {
     const descEl = document.createElement('div');
     Object.assign(descEl.style, {
-      color: COLORS.text,
+      color: CSS_COLORS.text,
       marginBottom: '10px',
       lineHeight: '1.4',
     });
@@ -3403,7 +3433,7 @@ export class GlobalDevBar {
   private addTooltipSectionHeader(container: HTMLElement, header: string): void {
     const headerEl = document.createElement('div');
     Object.assign(headerEl.style, {
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       fontSize: '0.625rem',
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
@@ -3444,7 +3474,7 @@ export class GlobalDevBar {
     row.appendChild(labelSpan);
 
     const valueSpan = document.createElement('span');
-    Object.assign(valueSpan.style, { color: COLORS.textMuted });
+    Object.assign(valueSpan.style, { color: CSS_COLORS.textMuted });
     valueSpan.textContent = value;
     row.appendChild(valueSpan);
 
@@ -3461,12 +3491,12 @@ export class GlobalDevBar {
     });
 
     const labelSpan = document.createElement('span');
-    Object.assign(labelSpan.style, { color: COLORS.textMuted });
+    Object.assign(labelSpan.style, { color: CSS_COLORS.textMuted });
     labelSpan.textContent = label;
     row.appendChild(labelSpan);
 
     const valueSpan = document.createElement('span');
-    Object.assign(valueSpan.style, { color: COLORS.text });
+    Object.assign(valueSpan.style, { color: CSS_COLORS.text });
     valueSpan.textContent = value;
     row.appendChild(valueSpan);
 
@@ -3499,6 +3529,11 @@ export class GlobalDevBar {
     let tooltipEl: HTMLDivElement | null = null;
 
     element.onmouseenter = () => {
+      // Clear any existing tooltip for this element first
+      if (tooltipEl) {
+        this.removeTooltip(tooltipEl);
+        tooltipEl = null;
+      }
       tooltipEl = this.createTooltipContainer();
       buildContent(tooltipEl);
       this.positionTooltip(tooltipEl, element);
@@ -3506,8 +3541,20 @@ export class GlobalDevBar {
 
     element.onmouseleave = () => {
       if (tooltipEl) {
-        tooltipEl.remove();
+        this.removeTooltip(tooltipEl);
         tooltipEl = null;
+      }
+    };
+
+    // Also clean up tooltip on click (in case element triggers re-render)
+    const originalOnclick = element.onclick;
+    element.onclick = (e) => {
+      if (tooltipEl) {
+        this.removeTooltip(tooltipEl);
+        tooltipEl = null;
+      }
+      if (originalOnclick) {
+        originalOnclick.call(element, e);
       }
     };
   }
@@ -3535,14 +3582,14 @@ export class GlobalDevBar {
         gap: '4px',
       });
 
-      this.addTooltipColoredRow(thresholdsContainer, 'Good', thresholds.good, COLORS.primary);
+      this.addTooltipColoredRow(thresholdsContainer, 'Good', thresholds.good, CSS_COLORS.primary);
       this.addTooltipColoredRow(
         thresholdsContainer,
         'Needs work',
         thresholds.needsWork,
-        COLORS.warning
+        CSS_COLORS.warning
       );
-      this.addTooltipColoredRow(thresholdsContainer, 'Poor', thresholds.poor, COLORS.error);
+      this.addTooltipColoredRow(thresholdsContainer, 'Poor', thresholds.poor, CSS_COLORS.error);
 
       tooltip.appendChild(thresholdsContainer);
     });
@@ -3591,7 +3638,7 @@ export class GlobalDevBar {
 
         const nameSpan = document.createElement('span');
         Object.assign(nameSpan.style, {
-          color: bp.name === breakpoint ? COLORS.primary : COLORS.textMuted,
+          color: bp.name === breakpoint ? CSS_COLORS.primary : CSS_COLORS.textMuted,
           fontWeight: bp.name === breakpoint ? '600' : '400',
           minWidth: '32px',
         });
@@ -3600,7 +3647,7 @@ export class GlobalDevBar {
 
         const rangeSpan = document.createElement('span');
         Object.assign(rangeSpan.style, {
-          color: bp.name === breakpoint ? COLORS.text : COLORS.textMuted,
+          color: bp.name === breakpoint ? CSS_COLORS.text : CSS_COLORS.textMuted,
         });
         rangeSpan.textContent = bp.range;
         row.appendChild(rangeSpan);
@@ -3619,7 +3666,7 @@ export class GlobalDevBar {
 
       const descEl = document.createElement('div');
       Object.assign(descEl.style, {
-        color: COLORS.text,
+        color: CSS_COLORS.text,
         lineHeight: '1.4',
       });
       descEl.textContent = description;
@@ -3638,7 +3685,7 @@ export class GlobalDevBar {
 
     const keySpan = document.createElement('span');
     Object.assign(keySpan.style, {
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       fontSize: '0.625rem',
       minWidth: '90px',
     });
@@ -3646,7 +3693,7 @@ export class GlobalDevBar {
     row.appendChild(keySpan);
 
     const descSpan = document.createElement('span');
-    Object.assign(descSpan.style, { color: COLORS.text });
+    Object.assign(descSpan.style, { color: CSS_COLORS.text });
     descSpan.textContent = description;
     row.appendChild(descSpan);
 
@@ -3662,19 +3709,19 @@ export class GlobalDevBar {
       gap: '6px',
       marginTop: '8px',
       padding: '6px 8px',
-      backgroundColor: `${COLORS.warning}15`,
-      border: `1px solid ${COLORS.warning}30`,
+      backgroundColor: `${CSS_COLORS.warning}15`,
+      border: `1px solid ${CSS_COLORS.warning}30`,
       borderRadius: '4px',
       fontSize: '0.625rem',
     });
 
     const icon = document.createElement('span');
     icon.textContent = '⚠';
-    Object.assign(icon.style, { color: COLORS.warning, flexShrink: '0' });
+    Object.assign(icon.style, { color: CSS_COLORS.warning, flexShrink: '0' });
     warning.appendChild(icon);
 
     const textSpan = document.createElement('span');
-    Object.assign(textSpan.style, { color: COLORS.warning });
+    Object.assign(textSpan.style, { color: CSS_COLORS.warning });
     textSpan.textContent = text;
     warning.appendChild(textSpan);
 
@@ -3689,26 +3736,26 @@ export class GlobalDevBar {
       alignItems: 'flex-start',
       gap: '6px',
       padding: '6px 8px',
-      backgroundColor: `${COLORS.primary}15`,
-      border: `1px solid ${COLORS.primary}30`,
+      backgroundColor: `${CSS_COLORS.primary}15`,
+      border: `1px solid ${CSS_COLORS.primary}30`,
       borderRadius: '4px',
     });
 
     const icon = document.createElement('span');
     icon.textContent = '✓';
-    Object.assign(icon.style, { color: COLORS.primary, fontWeight: '600', flexShrink: '0' });
+    Object.assign(icon.style, { color: CSS_COLORS.primary, fontWeight: '600', flexShrink: '0' });
     status.appendChild(icon);
 
     const textContainer = document.createElement('div');
     const mainText = document.createElement('div');
-    Object.assign(mainText.style, { color: COLORS.primary, fontWeight: '500' });
+    Object.assign(mainText.style, { color: CSS_COLORS.primary, fontWeight: '500' });
     mainText.textContent = text;
     textContainer.appendChild(mainText);
 
     if (subtext) {
       const sub = document.createElement('div');
       Object.assign(sub.style, {
-        color: COLORS.textMuted,
+        color: CSS_COLORS.textMuted,
         fontSize: '0.625rem',
         marginTop: '2px',
         wordBreak: 'break-all',
@@ -3729,15 +3776,15 @@ export class GlobalDevBar {
       alignItems: 'flex-start',
       gap: '6px',
       padding: '6px 8px',
-      backgroundColor: `${COLORS.error}15`,
-      border: `1px solid ${COLORS.error}30`,
+      backgroundColor: `${CSS_COLORS.error}15`,
+      border: `1px solid ${CSS_COLORS.error}30`,
       borderRadius: '4px',
     });
 
     const icon = document.createElement('span');
     icon.textContent = '×';
     Object.assign(icon.style, {
-      color: COLORS.error,
+      color: CSS_COLORS.error,
       fontWeight: '600',
       flexShrink: '0',
       fontSize: '0.875rem',
@@ -3746,13 +3793,13 @@ export class GlobalDevBar {
 
     const textContainer = document.createElement('div');
     const titleEl = document.createElement('div');
-    Object.assign(titleEl.style, { color: COLORS.error, fontWeight: '500' });
+    Object.assign(titleEl.style, { color: CSS_COLORS.error, fontWeight: '500' });
     titleEl.textContent = title;
     textContainer.appendChild(titleEl);
 
     const msgEl = document.createElement('div');
     Object.assign(msgEl.style, {
-      color: COLORS.textMuted,
+      color: CSS_COLORS.textMuted,
       fontSize: '0.625rem',
       marginTop: '2px',
     });
@@ -3771,22 +3818,22 @@ export class GlobalDevBar {
       alignItems: 'center',
       gap: '6px',
       padding: '6px 8px',
-      backgroundColor: `${COLORS.info}15`,
-      border: `1px solid ${COLORS.info}30`,
+      backgroundColor: `${CSS_COLORS.info}15`,
+      border: `1px solid ${CSS_COLORS.info}30`,
       borderRadius: '4px',
     });
 
     const spinner = document.createElement('span');
     spinner.textContent = '~';
     Object.assign(spinner.style, {
-      color: COLORS.info,
+      color: CSS_COLORS.info,
       fontWeight: '600',
       animation: 'pulse 1s infinite',
     });
     status.appendChild(spinner);
 
     const textSpan = document.createElement('span');
-    Object.assign(textSpan.style, { color: COLORS.info });
+    Object.assign(textSpan.style, { color: CSS_COLORS.info });
     textSpan.textContent = text;
     status.appendChild(textSpan);
 
@@ -3995,7 +4042,7 @@ export class GlobalDevBar {
     const isDisabled = this.designReviewInProgress || !this.sweetlinkConnected;
 
     // Use error color (red) when there's an error, otherwise normal review color
-    const buttonColor = hasError ? COLORS.error : BUTTON_COLORS.review;
+    const buttonColor = hasError ? CSS_COLORS.error : BUTTON_COLORS.review;
 
     // Attach HTML tooltip
     this.attachButtonTooltip(btn, buttonColor, (_tooltip, h) => {

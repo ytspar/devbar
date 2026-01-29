@@ -5,20 +5,22 @@
  */
 
 import {
-  initGlobalDevBar,
-  destroyGlobalDevBar,
   COLORS,
+  destroyGlobalDevBar,
   type GlobalDevBarOptions,
+  initGlobalDevBar,
 } from '@ytspar/devbar';
 
 // Default options
-const DEFAULT_OPTIONS: Required<Omit<GlobalDevBarOptions, 'sizeOverrides'>> = {
+const DEFAULT_OPTIONS: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug'>> = {
   position: 'bottom-left',
   accentColor: COLORS.primary,
   showMetrics: {
     breakpoint: true,
     fcp: true,
     lcp: true,
+    cls: true,
+    inp: true,
     pageSize: true,
   },
   showScreenshot: true,
@@ -49,19 +51,25 @@ function getToggleConfigs(): ToggleConfig[] {
       label: 'Show Tooltips',
       id: 'showTooltips',
       getValue: () => currentOptions.showTooltips ?? true,
-      setValue: (v) => { currentOptions.showTooltips = v; },
+      setValue: (v) => {
+        currentOptions.showTooltips = v;
+      },
     },
     {
       label: 'Show Screenshot',
       id: 'showScreenshot',
       getValue: () => currentOptions.showScreenshot ?? true,
-      setValue: (v) => { currentOptions.showScreenshot = v; },
+      setValue: (v) => {
+        currentOptions.showScreenshot = v;
+      },
     },
     {
       label: 'Console Badges',
       id: 'showConsoleBadges',
       getValue: () => currentOptions.showConsoleBadges ?? true,
-      setValue: (v) => { currentOptions.showConsoleBadges = v; },
+      setValue: (v) => {
+        currentOptions.showConsoleBadges = v;
+      },
     },
   ];
 }
@@ -79,25 +87,37 @@ function getMetricsToggleConfigs(): ToggleConfig[] {
       label: 'Breakpoint',
       id: 'metrics-breakpoint',
       getValue: () => currentOptions.showMetrics?.breakpoint ?? true,
-      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.breakpoint = v; },
+      setValue: (v) => {
+        ensureMetrics();
+        currentOptions.showMetrics!.breakpoint = v;
+      },
     },
     {
       label: 'FCP',
       id: 'metrics-fcp',
       getValue: () => currentOptions.showMetrics?.fcp ?? true,
-      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.fcp = v; },
+      setValue: (v) => {
+        ensureMetrics();
+        currentOptions.showMetrics!.fcp = v;
+      },
     },
     {
       label: 'LCP',
       id: 'metrics-lcp',
       getValue: () => currentOptions.showMetrics?.lcp ?? true,
-      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.lcp = v; },
+      setValue: (v) => {
+        ensureMetrics();
+        currentOptions.showMetrics!.lcp = v;
+      },
     },
     {
       label: 'Page Size',
       id: 'metrics-pageSize',
       getValue: () => currentOptions.showMetrics?.pageSize ?? true,
-      setValue: (v) => { ensureMetrics(); currentOptions.showMetrics!.pageSize = v; },
+      setValue: (v) => {
+        ensureMetrics();
+        currentOptions.showMetrics!.pageSize = v;
+      },
     },
   ];
 }
@@ -156,17 +176,16 @@ function createControlsPanel(): HTMLElement {
   content.className = 'controls-content';
 
   // Position selector (visual mini-map)
-  content.appendChild(createPositionSelector(
-    currentOptions.position ?? 'bottom-left',
-    (value) => {
+  content.appendChild(
+    createPositionSelector(currentOptions.position ?? 'bottom-left', (value) => {
       currentOptions.position = value as typeof currentOptions.position;
       reinitDevBar();
       updatePositionSelector();
-    }
-  ));
+    })
+  );
 
   // Add main toggle controls
-  getToggleConfigs().forEach(config => {
+  getToggleConfigs().forEach((config) => {
     content.appendChild(createToggleFromConfig(config));
   });
 
@@ -177,7 +196,7 @@ function createControlsPanel(): HTMLElement {
   content.appendChild(metricsHeader);
 
   // Add metrics toggle controls
-  getMetricsToggleConfigs().forEach(config => {
+  getMetricsToggleConfigs().forEach((config) => {
     content.appendChild(createToggleFromConfig(config));
   });
 
@@ -201,7 +220,10 @@ function createControlsPanel(): HTMLElement {
 /**
  * Position values matching GlobalDevBar positioning
  */
-const POSITION_CONFIG: Record<string, { top?: string; bottom?: string; left?: string; right?: string; transform?: string }> = {
+const POSITION_CONFIG: Record<
+  string,
+  { top?: string; bottom?: string; left?: string; right?: string; transform?: string }
+> = {
   'top-left': { top: '10%', left: '12%' },
   'top-right': { top: '10%', right: '8%' },
   'bottom-left': { bottom: '10%', left: '12%' },
@@ -229,12 +251,15 @@ function createPositionSelector(
 
   // Create position indicators
   const positions = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'bottom-center'];
-  positions.forEach(pos => {
+  positions.forEach((pos) => {
     const indicator = document.createElement('button');
     indicator.type = 'button';
     indicator.className = `position-indicator ${pos === currentValue ? 'active' : ''}`;
     indicator.dataset.position = pos;
-    indicator.title = pos.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    indicator.title = pos
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
 
     // Apply position styles
     const posConfig = POSITION_CONFIG[pos];
@@ -262,7 +287,7 @@ function updatePositionSelector(): void {
   const miniMap = document.getElementById('position-minimap');
   if (!miniMap) return;
 
-  miniMap.querySelectorAll('.position-indicator').forEach(btn => {
+  miniMap.querySelectorAll('.position-indicator').forEach((btn) => {
     const indicator = btn as HTMLButtonElement;
     indicator.classList.toggle('active', indicator.dataset.position === currentOptions.position);
   });
@@ -300,7 +325,7 @@ function updateControlsUI(): void {
   updatePositionSelector();
 
   // Update all toggles from their configs
-  [...getToggleConfigs(), ...getMetricsToggleConfigs()].forEach(config => {
+  [...getToggleConfigs(), ...getMetricsToggleConfigs()].forEach((config) => {
     const checkbox = document.getElementById(config.id) as HTMLInputElement;
     if (checkbox) checkbox.checked = config.getValue();
   });

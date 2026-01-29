@@ -113,6 +113,18 @@ export const CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ============================================================================
+// Storage Keys
+// ============================================================================
+
+/** LocalStorage keys for DevBar persistence */
+export const STORAGE_KEYS = {
+  /** Theme mode preference: 'dark' | 'light' | 'system' */
+  themeMode: 'devbar-theme-mode',
+  /** Compact mode preference: 'true' | 'false' */
+  compactMode: 'devbar-compact-mode',
+} as const;
+
+// ============================================================================
 // Design System Theme
 // ============================================================================
 
@@ -205,6 +217,58 @@ export const DEVBAR_THEME = {
 
 export type DevBarTheme = typeof DEVBAR_THEME;
 
+/** Light theme variant - same structure, different colors */
+export const DEVBAR_THEME_LIGHT = {
+  colors: {
+    // Primary accent (darker for light mode)
+    primary: '#059669', // darker emerald
+    primaryHover: '#047857',
+    primaryGlow: 'rgba(5, 150, 105, 0.2)',
+
+    // Semantic colors (same)
+    error: PALETTE.red,
+    warning: '#d97706', // darker amber
+    info: '#2563eb', // darker blue
+
+    // Extended palette (darker variants)
+    purple: '#9333ea',
+    cyan: '#0891b2',
+    pink: '#db2777',
+    lime: '#65a30d',
+
+    // Backgrounds (light)
+    bg: '#f8fafc',
+    bgCard: 'rgba(255, 255, 255, 0.98)',
+    bgElevated: 'rgba(255, 255, 255, 0.99)',
+    bgInput: 'rgba(241, 245, 249, 0.9)',
+
+    // Text (dark on light)
+    text: '#1e293b',
+    textSecondary: '#475569',
+    textMuted: '#64748b',
+
+    // Borders (green-tinted)
+    border: 'rgba(5, 150, 105, 0.25)',
+    borderSubtle: 'rgba(0, 0, 0, 0.06)',
+  },
+
+  // Other properties same as dark theme
+  fonts: DEVBAR_THEME.fonts,
+  typography: DEVBAR_THEME.typography,
+  radius: DEVBAR_THEME.radius,
+
+  shadows: {
+    sm: '0 1px 2px rgba(0, 0, 0, 0.08)',
+    md: '0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(5, 150, 105, 0.1)',
+    lg: '0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(5, 150, 105, 0.12)',
+    glow: '0 0 20px rgba(5, 150, 105, 0.1)',
+  },
+
+  transitions: DEVBAR_THEME.transitions,
+} as const;
+
+export type DevBarThemeLight = typeof DEVBAR_THEME_LIGHT;
+
 // ============================================================================
 // Shorthand Exports (for cleaner imports)
 // ============================================================================
@@ -224,6 +288,62 @@ export type DevBarThemeInput = {
   shadows: { [K in keyof DevBarTheme['shadows']]: string };
   transitions: { [K in keyof DevBarTheme['transitions']]: string };
 };
+
+// ============================================================================
+// Theme Mode Utilities
+// ============================================================================
+
+import type { ThemeMode } from './types.js';
+
+/**
+ * Get the stored theme mode preference
+ */
+export function getStoredThemeMode(): ThemeMode {
+  if (typeof localStorage === 'undefined') return 'system';
+  const stored = localStorage.getItem(STORAGE_KEYS.themeMode);
+  if (stored === 'dark' || stored === 'light' || stored === 'system') {
+    return stored;
+  }
+  return 'system';
+}
+
+/**
+ * Store the theme mode preference
+ */
+export function setStoredThemeMode(mode: ThemeMode): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(STORAGE_KEYS.themeMode, mode);
+}
+
+/**
+ * Get the effective theme (resolves 'system' to 'dark' or 'light')
+ */
+export function getEffectiveTheme(mode: ThemeMode): 'dark' | 'light' {
+  if (mode === 'system') {
+    if (typeof window === 'undefined') return 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return mode;
+}
+
+/** Union type for both theme color variants */
+export type ThemeColors = DevBarTheme['colors'] | DevBarThemeLight['colors'];
+
+/**
+ * Get theme colors based on the current effective theme
+ */
+export function getThemeColors(mode: ThemeMode): ThemeColors {
+  const effectiveTheme = getEffectiveTheme(mode);
+  return effectiveTheme === 'light' ? DEVBAR_THEME_LIGHT.colors : DEVBAR_THEME.colors;
+}
+
+/**
+ * Get full theme based on the current effective theme
+ */
+export function getTheme(mode: ThemeMode): typeof DEVBAR_THEME | typeof DEVBAR_THEME_LIGHT {
+  const effectiveTheme = getEffectiveTheme(mode);
+  return effectiveTheme === 'light' ? DEVBAR_THEME_LIGHT : DEVBAR_THEME;
+}
 
 /**
  * Generate CSS custom properties from the theme

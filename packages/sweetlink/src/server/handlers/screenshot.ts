@@ -6,12 +6,38 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import {
-  generateBaseFilename,
-  SCREENSHOT_DIR,
-} from '../../urlUtils.js';
 import { extractBase64FromDataUrl } from '../../browser/screenshotUtils.js';
+import { generateBaseFilename, SCREENSHOT_DIR } from '../../urlUtils.js';
 import { getProjectRoot } from '../index.js';
+
+/**
+ * Web Vitals metrics included with screenshot
+ */
+export interface WebVitalsMetrics {
+  fcp?: number;
+  lcp?: number;
+  cls?: number;
+  inp?: number;
+}
+
+/**
+ * Screenshot metadata saved alongside the image
+ */
+export interface ScreenshotMetadata {
+  capturedAt: string;
+  url: string;
+  viewport: {
+    width: number;
+    height: number;
+  };
+  webVitals?: WebVitalsMetrics;
+  pageSize?: number;
+  consoleSummary?: {
+    errors: number;
+    warnings: number;
+    total: number;
+  };
+}
 
 /**
  * Handle save-screenshot command from browser
@@ -24,8 +50,10 @@ export async function handleSaveScreenshot(data: {
   width: number;
   height: number;
   a11y?: unknown[];
+  webVitals?: WebVitalsMetrics;
+  pageSize?: number;
 }): Promise<string> {
-  const { screenshot, logs, url, timestamp, width, height } = data;
+  const { screenshot, logs, url, timestamp, width, height, webVitals, pageSize } = data;
 
   // Create directory if it doesn't exist (relative to project root captured at server start)
   const dir = join(getProjectRoot(), SCREENSHOT_DIR);
@@ -38,6 +66,35 @@ export async function handleSaveScreenshot(data: {
   const screenshotPath = join(dir, `${baseFilename}.jpg`);
   const base64Data = extractBase64FromDataUrl(screenshot);
   await fs.writeFile(screenshotPath, Buffer.from(base64Data, 'base64'));
+
+  // Calculate console summary
+  let consoleSummary: ScreenshotMetadata['consoleSummary'] | undefined;
+  if (logs && Array.isArray(logs) && logs.length > 0) {
+    let errors = 0;
+    let warnings = 0;
+    for (const log of logs) {
+      if (log.level === 'error') errors++;
+      else if (log.level === 'warn') warnings++;
+    }
+    consoleSummary = {
+      errors,
+      warnings,
+      total: logs.length,
+    };
+  }
+
+  // Save screenshot metadata JSON
+  const metricsPath = join(dir, `${baseFilename}-metrics.json`);
+  const metadata: ScreenshotMetadata = {
+    capturedAt: new Date(timestamp).toISOString(),
+    url,
+    viewport: { width, height },
+    ...(webVitals && Object.keys(webVitals).length > 0 && { webVitals }),
+    ...(pageSize && { pageSize }),
+    ...(consoleSummary && { consoleSummary }),
+  };
+  await fs.writeFile(metricsPath, JSON.stringify(metadata, null, 2), 'utf-8');
+  console.log(`[Sweetlink] Screenshot metadata saved: ${metricsPath}`);
 
   // Save console logs only if provided
   if (logs && Array.isArray(logs) && logs.length > 0) {
@@ -55,7 +112,7 @@ export async function handleSaveScreenshot(data: {
       ``,
       `=== CONSOLE LOGS ===`,
       ``,
-      ...logLines
+      ...logLines,
     ].join('\n');
 
     await fs.writeFile(logsPath, logsContent, 'utf-8');
@@ -67,13 +124,13 @@ export async function handleSaveScreenshot(data: {
       meta: {
         capturedAt: new Date(timestamp).toISOString(),
         url,
-        dimensions: { width, height }
+        dimensions: { width, height },
       },
       logs: logs.map((log) => ({
         timestamp: new Date(log.timestamp).toISOString(),
         level: log.level,
-        message: log.message
-      }))
+        message: log.message,
+      })),
     };
     await fs.writeFile(logsJsonPath, JSON.stringify(logsJson, null, 2), 'utf-8');
     console.log(`[Sweetlink] Console logs JSON saved: ${logsJsonPath}`);

@@ -18,26 +18,34 @@ import {
   DESIGN_REVIEW_NOTIFICATION_MS,
   DEVBAR_SCREENSHOT_QUALITY,
   FONT_MONO,
+  getEffectiveTheme,
+  getStoredThemeMode,
+  getThemeColors,
   MAX_CONSOLE_LOGS,
   MAX_RECONNECT_ATTEMPTS,
   MAX_RECONNECT_DELAY_MS,
   SCREENSHOT_BLUR_DELAY_MS,
   SCREENSHOT_NOTIFICATION_MS,
   SCREENSHOT_SCALE,
+  setStoredThemeMode,
+  STORAGE_KEYS,
   TAILWIND_BREAKPOINTS,
   TOOLTIP_STYLES,
   WS_PORT,
 } from './constants.js';
+import { DebugLogger, normalizeDebugConfig } from './debug.js';
 import { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 import { extractPageSchema, schemaToMarkdown } from './schema.js';
 // Import from split modules
 import type {
   ConsoleLog,
+  DebugConfig,
   DevBarControl,
   GlobalDevBarOptions,
   OutlineNode,
   PageSchema,
   SweetlinkCommand,
+  ThemeMode,
 } from './types.js';
 import {
   createEmptyMessage,
@@ -61,11 +69,13 @@ import {
 // Re-export types for backwards compatibility
 export type {
   ConsoleLog,
+  DebugConfig,
   SweetlinkCommand,
   OutlineNode,
   PageSchema,
   GlobalDevBarOptions,
   DevBarControl,
+  ThemeMode,
 };
 
 // Handle ESM/CJS interop for html2canvas-pro
@@ -165,8 +175,10 @@ export class GlobalDevBar {
   // Static storage for custom controls
   private static customControls: DevBarControl[] = [];
 
-  private options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides'>> &
+  private options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug'>> &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
+  private debugConfig!: DebugConfig;
+  private debug!: DebugLogger;
   private container: HTMLDivElement | null = null;
   private ws: WebSocket | null = null;
   private consoleLogs: ConsoleLog[] = [];
@@ -195,8 +207,11 @@ export class GlobalDevBar {
   private showSchemaModal = false;
 
   private breakpointInfo: { tailwindBreakpoint: string; dimensions: string } | null = null;
-  private perfStats: { fcp: string; lcp: string; totalSize: string } | null = null;
+  private perfStats: { fcp: string; lcp: string; cls: string; inp: string; totalSize: string } | null =
+    null;
   private lcpValue: number | null = null;
+  private clsValue = 0;
+  private inpValue = 0;
 
   private reconnectAttempts = 0;
 
@@ -215,12 +230,29 @@ export class GlobalDevBar {
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null;
   private fcpObserver: PerformanceObserver | null = null;
   private lcpObserver: PerformanceObserver | null = null;
+  private clsObserver: PerformanceObserver | null = null;
+  private inpObserver: PerformanceObserver | null = null;
   private destroyed = false;
+
+  // Theme state
+  private themeMode: ThemeMode = 'system';
+  private themeMediaQuery: MediaQueryList | null = null;
+  private themeMediaHandler: ((e: MediaQueryListEvent) => void) | null = null;
+
+  // Compact mode state
+  private compactMode = false;
+
+  // Settings popover state
+  private showSettingsPopover = false;
 
   // Overlay element for modals
   private overlayElement: HTMLDivElement | null = null;
 
   constructor(options: GlobalDevBarOptions = {}) {
+    // Initialize debug config first so we can log during construction
+    this.debugConfig = normalizeDebugConfig(options.debug);
+    this.debug = new DebugLogger(this.debugConfig);
+
     this.options = {
       position: options.position ?? 'bottom-left',
       accentColor: options.accentColor ?? COLORS.primary,
@@ -228,6 +260,8 @@ export class GlobalDevBar {
         breakpoint: options.showMetrics?.breakpoint ?? true,
         fcp: options.showMetrics?.fcp ?? true,
         lcp: options.showMetrics?.lcp ?? true,
+        cls: options.showMetrics?.cls ?? true,
+        inp: options.showMetrics?.inp ?? true,
         pageSize: options.showMetrics?.pageSize ?? true,
       },
       showScreenshot: options.showScreenshot ?? true,
@@ -235,6 +269,8 @@ export class GlobalDevBar {
       showTooltips: options.showTooltips ?? true,
       sizeOverrides: options.sizeOverrides,
     };
+
+    this.debug.lifecycle('GlobalDevBar constructed', { options: this.options });
   }
 
   /**
@@ -344,11 +380,20 @@ export class GlobalDevBar {
     if (typeof window === 'undefined') return;
     if (this.destroyed) return;
 
+    this.debug.lifecycle('Initializing DevBar');
+
     // Inject tooltip styles
     this.injectStyles();
 
     // Copy early captured logs
     this.consoleLogs = [...earlyConsoleCapture.logs];
+    this.debug.lifecycle('Copied early console logs', { count: this.consoleLogs.length });
+
+    // Setup theme
+    this.setupTheme();
+
+    // Load compact mode from storage
+    this.loadCompactMode();
 
     // Setup WebSocket connection
     this.connectWebSocket();
@@ -364,6 +409,8 @@ export class GlobalDevBar {
 
     // Initial render
     this.render();
+
+    this.debug.lifecycle('DevBar initialized successfully');
   }
 
   /**
@@ -377,6 +424,7 @@ export class GlobalDevBar {
    * Destroy the devbar and cleanup
    */
   destroy(): void {
+    this.debug.lifecycle('Destroying DevBar');
     this.destroyed = true;
 
     // Close WebSocket
@@ -398,6 +446,13 @@ export class GlobalDevBar {
     // Disconnect observers
     if (this.fcpObserver) this.fcpObserver.disconnect();
     if (this.lcpObserver) this.lcpObserver.disconnect();
+    if (this.clsObserver) this.clsObserver.disconnect();
+    if (this.inpObserver) this.inpObserver.disconnect();
+
+    // Remove theme media listener
+    if (this.themeMediaQuery && this.themeMediaHandler) {
+      this.themeMediaQuery.removeEventListener('change', this.themeMediaHandler);
+    }
 
     // Restore console
     if (earlyConsoleCapture.originalConsole) {
@@ -416,6 +471,8 @@ export class GlobalDevBar {
       this.overlayElement.remove();
       this.overlayElement = null;
     }
+
+    this.debug.lifecycle('DevBar destroyed');
   }
 
   private injectStyles(): void {
@@ -431,12 +488,14 @@ export class GlobalDevBar {
   private connectWebSocket(): void {
     if (this.destroyed) return;
 
+    this.debug.ws('Connecting to WebSocket', { port: WS_PORT });
     const ws = new WebSocket(`ws://localhost:${WS_PORT}`);
     this.ws = ws;
 
     ws.onopen = () => {
       this.sweetlinkConnected = true;
       this.reconnectAttempts = 0;
+      this.debug.ws('WebSocket connected');
       ws.send(JSON.stringify({ type: 'browser-client-ready' }));
       this.render();
     };
@@ -444,6 +503,7 @@ export class GlobalDevBar {
     ws.onmessage = async (event) => {
       try {
         const command = JSON.parse(event.data) as SweetlinkCommand;
+        this.debug.ws('Received command', { type: command.type });
         await this.handleSweetlinkCommand(command);
       } catch (e) {
         console.error('[GlobalDevBar] Error handling command:', e);
@@ -452,12 +512,14 @@ export class GlobalDevBar {
 
     ws.onclose = () => {
       this.sweetlinkConnected = false;
+      this.debug.ws('WebSocket disconnected');
       this.render();
 
       // Auto-reconnect with exponential backoff
       if (!this.destroyed && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         const delayMs = BASE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts;
         this.reconnectAttempts++;
+        this.debug.ws('Scheduling reconnect', { attempt: this.reconnectAttempts, delayMs });
         this.reconnectTimeout = setTimeout(
           () => this.connectWebSocket(),
           Math.min(delayMs, MAX_RECONNECT_DELAY_MS)
@@ -467,6 +529,7 @@ export class GlobalDevBar {
 
     ws.onerror = () => {
       // Error will trigger onclose, which handles reconnection
+      this.debug.ws('WebSocket error');
     };
   }
 
@@ -689,6 +752,12 @@ export class GlobalDevBar {
       // LCP (from cached value, updated by observer)
       const lcp = this.lcpValue !== null ? `${Math.round(this.lcpValue)}ms` : '-';
 
+      // CLS (cumulative layout shift)
+      const cls = this.clsValue > 0 ? this.clsValue.toFixed(3) : '-';
+
+      // INP (Interaction to Next Paint)
+      const inp = this.inpValue > 0 ? `${Math.round(this.inpValue)}ms` : '-';
+
       // Total Resource Size
       const resources = performance.getEntriesByType('resource');
       let totalBytes = 0;
@@ -708,7 +777,8 @@ export class GlobalDevBar {
           ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
           : `${Math.round(totalBytes / 1024)} KB`;
 
-      this.perfStats = { fcp, lcp, totalSize };
+      this.perfStats = { fcp, lcp, cls, inp, totalSize };
+      this.debug.perf('Performance stats updated', this.perfStats);
       this.render();
     };
 
@@ -740,6 +810,7 @@ export class GlobalDevBar {
         const lastEntry = entries[entries.length - 1];
         if (lastEntry) {
           this.lcpValue = lastEntry.startTime;
+          this.debug.perf('LCP updated', { lcp: this.lcpValue });
           updatePerfStats();
         }
       });
@@ -747,12 +818,56 @@ export class GlobalDevBar {
     } catch (e) {
       console.warn('[GlobalDevBar] LCP PerformanceObserver not supported', e);
     }
+
+    // CLS Observer (Cumulative Layout Shift)
+    try {
+      this.clsObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          // Only count layout shifts without recent user input
+          const layoutShift = entry as PerformanceEntry & {
+            hadRecentInput?: boolean;
+            value?: number;
+          };
+          if (!layoutShift.hadRecentInput && layoutShift.value) {
+            this.clsValue += layoutShift.value;
+            this.debug.perf('CLS updated', { cls: this.clsValue });
+            updatePerfStats();
+          }
+        }
+      });
+      this.clsObserver.observe({ type: 'layout-shift', buffered: true });
+    } catch (e) {
+      console.warn('[GlobalDevBar] CLS PerformanceObserver not supported', e);
+    }
+
+    // INP Observer (Interaction to Next Paint)
+    try {
+      this.inpObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const eventEntry = entry as PerformanceEntry & { duration?: number };
+          if (eventEntry.duration && eventEntry.duration > this.inpValue) {
+            this.inpValue = eventEntry.duration;
+            this.debug.perf('INP updated', { inp: this.inpValue });
+            updatePerfStats();
+          }
+        }
+      });
+      // durationThreshold filters out very short interactions
+      this.inpObserver.observe({ type: 'event', buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
+    } catch (e) {
+      console.warn('[GlobalDevBar] INP PerformanceObserver not supported', e);
+    }
   }
 
   private setupKeyboardShortcuts(): void {
     this.keydownHandler = (e: KeyboardEvent) => {
-      // Close modals on Escape
+      // Close modals/popovers on Escape
       if (e.key === 'Escape') {
+        if (this.showSettingsPopover) {
+          this.showSettingsPopover = false;
+          this.render();
+          return;
+        }
         if (
           this.consoleFilter ||
           this.showOutlineModal ||
@@ -769,6 +884,12 @@ export class GlobalDevBar {
       }
 
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+        // Cmd/Ctrl+Shift+M: Toggle compact mode
+        if (e.key === 'M' || e.key === 'm') {
+          e.preventDefault();
+          this.toggleCompactMode();
+          return;
+        }
         if (e.key === 'S' || e.key === 's') {
           e.preventDefault();
           if (this.sweetlinkConnected && !this.capturing) {
@@ -786,6 +907,76 @@ export class GlobalDevBar {
       }
     };
     window.addEventListener('keydown', this.keydownHandler);
+  }
+
+  private setupTheme(): void {
+    // Load stored theme preference
+    this.themeMode = getStoredThemeMode();
+    this.debug.state('Theme loaded', { mode: this.themeMode });
+
+    // Listen for system theme changes
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      this.themeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      this.themeMediaHandler = () => {
+        if (this.themeMode === 'system') {
+          this.debug.state('System theme changed', {
+            effectiveTheme: getEffectiveTheme(this.themeMode),
+          });
+          this.render();
+        }
+      };
+      this.themeMediaQuery.addEventListener('change', this.themeMediaHandler);
+    }
+  }
+
+  private loadCompactMode(): void {
+    if (typeof localStorage === 'undefined') return;
+    const stored = localStorage.getItem(STORAGE_KEYS.compactMode);
+    this.compactMode = stored === 'true';
+    this.debug.state('Compact mode loaded', { compactMode: this.compactMode });
+  }
+
+  /**
+   * Get the current theme mode
+   */
+  getThemeMode(): ThemeMode {
+    return this.themeMode;
+  }
+
+  /**
+   * Set the theme mode
+   */
+  setThemeMode(mode: ThemeMode): void {
+    this.themeMode = mode;
+    setStoredThemeMode(mode);
+    this.debug.state('Theme mode changed', { mode, effectiveTheme: getEffectiveTheme(mode) });
+    this.render();
+  }
+
+  /**
+   * Get the current effective theme colors
+   */
+  getColors(): ReturnType<typeof getThemeColors> {
+    return getThemeColors(this.themeMode);
+  }
+
+  /**
+   * Toggle compact mode
+   */
+  toggleCompactMode(): void {
+    this.compactMode = !this.compactMode;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEYS.compactMode, String(this.compactMode));
+    }
+    this.debug.state('Compact mode toggled', { compactMode: this.compactMode });
+    this.render();
+  }
+
+  /**
+   * Check if compact mode is enabled
+   */
+  isCompactMode(): boolean {
+    return this.compactMode;
   }
 
   private async copyPathToClipboard(path: string): Promise<void> {
@@ -848,6 +1039,28 @@ export class GlobalDevBar {
           quality: DEVBAR_SCREENSHOT_QUALITY,
         });
         if (this.ws?.readyState === WebSocket.OPEN) {
+          // Include web vitals metrics
+          const webVitals: Record<string, number> = {};
+          if (this.lcpValue !== null) webVitals.lcp = Math.round(this.lcpValue);
+          if (this.clsValue > 0) webVitals.cls = this.clsValue;
+          if (this.inpValue > 0) webVitals.inp = Math.round(this.inpValue);
+
+          // Get FCP from performance entries
+          const fcpEntry = performance
+            .getEntriesByType('paint')
+            .find((e) => e.name === 'first-contentful-paint');
+          if (fcpEntry) webVitals.fcp = Math.round(fcpEntry.startTime);
+
+          // Calculate page size
+          let pageSize = 0;
+          const navEntry = performance.getEntriesByType(
+            'navigation'
+          )[0] as PerformanceNavigationTiming;
+          if (navEntry) pageSize += navEntry.transferSize || 0;
+          performance.getEntriesByType('resource').forEach((entry) => {
+            pageSize += (entry as PerformanceResourceTiming).transferSize || 0;
+          });
+
           this.ws.send(
             JSON.stringify({
               type: 'save-screenshot',
@@ -858,6 +1071,8 @@ export class GlobalDevBar {
                 logs: this.consoleLogs,
                 url: window.location.href,
                 timestamp: Date.now(),
+                webVitals: Object.keys(webVitals).length > 0 ? webVitals : undefined,
+                pageSize: pageSize > 0 ? pageSize : undefined,
               },
             })
           );
@@ -1078,6 +1293,8 @@ export class GlobalDevBar {
 
     if (this.collapsed) {
       this.renderCollapsed();
+    } else if (this.compactMode) {
+      this.renderCompact();
     } else {
       this.renderExpanded();
     }
@@ -1113,6 +1330,11 @@ export class GlobalDevBar {
     // Render design review confirmation modal
     if (this.showDesignReviewConfirm) {
       this.renderDesignReviewConfirmModal();
+    }
+
+    // Render settings popover
+    if (this.showSettingsPopover) {
+      this.renderSettingsPopover();
     }
   }
 
@@ -1771,6 +1993,387 @@ export class GlobalDevBar {
     }
   }
 
+  /**
+   * Render compact mode - single row with essential controls only
+   * Shows: connection dot, error/warn badges, screenshot button, settings gear
+   */
+  private renderCompact(): void {
+    if (!this.container) return;
+
+    const { position, accentColor } = this.options;
+    const { errorCount, warningCount } = this.getLogCounts();
+
+    const positionStyles: Record<
+      string,
+      { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
+    > = {
+      'bottom-left': { bottom: '20px', left: '80px' },
+      'bottom-right': { bottom: '20px', right: '16px' },
+      'top-left': { top: '20px', left: '80px' },
+      'top-right': { top: '20px', right: '16px' },
+      'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+    };
+
+    const posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+    const wrapper = this.container;
+
+    // Reset position properties first
+    wrapper.style.top = '';
+    wrapper.style.bottom = '';
+    wrapper.style.left = '';
+    wrapper.style.right = '';
+    wrapper.style.transform = '';
+
+    Object.assign(wrapper.style, {
+      position: 'fixed',
+      ...posStyle,
+      zIndex: '9999',
+      backgroundColor: 'rgba(17, 24, 39, 0.95)',
+      border: `1px solid ${accentColor}`,
+      borderRadius: '20px',
+      color: accentColor,
+      boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px ${accentColor}1A`,
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
+      padding: '6px 10px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontFamily: FONT_MONO,
+      fontSize: '0.6875rem',
+    });
+
+    // Connection indicator
+    const connIndicator = document.createElement('span');
+    connIndicator.className = this.tooltipClass('left', 'devbar-clickable');
+    connIndicator.setAttribute(
+      'data-tooltip',
+      this.sweetlinkConnected ? 'Sweetlink connected' : 'Sweetlink disconnected'
+    );
+    Object.assign(connIndicator.style, {
+      width: '12px',
+      height: '12px',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+    });
+    connIndicator.onclick = (e) => {
+      e.stopPropagation();
+      this.collapsed = true;
+      this.debug.state('Collapsed DevBar from compact mode');
+      this.render();
+    };
+
+    const connDot = document.createElement('span');
+    Object.assign(connDot.style, {
+      width: '6px',
+      height: '6px',
+      borderRadius: '50%',
+      backgroundColor: this.sweetlinkConnected ? COLORS.primary : COLORS.textMuted,
+      boxShadow: this.sweetlinkConnected ? `0 0 6px ${COLORS.primary}` : 'none',
+    });
+    connIndicator.appendChild(connDot);
+    wrapper.appendChild(connIndicator);
+
+    // Error badge
+    if (errorCount > 0) {
+      wrapper.appendChild(this.createConsoleBadge('error', errorCount, BUTTON_COLORS.error));
+    }
+
+    // Warning badge
+    if (warningCount > 0) {
+      wrapper.appendChild(this.createConsoleBadge('warn', warningCount, BUTTON_COLORS.warning));
+    }
+
+    // Screenshot button (if enabled)
+    if (this.options.showScreenshot) {
+      wrapper.appendChild(this.createScreenshotButton(accentColor));
+    }
+
+    // Settings gear button
+    wrapper.appendChild(this.createSettingsButton());
+
+    // Expand button (double-arrow)
+    const expandBtn = document.createElement('button');
+    expandBtn.type = 'button';
+    expandBtn.className = this.tooltipClass('right');
+    expandBtn.setAttribute('data-tooltip', 'Expand DevBar');
+    Object.assign(expandBtn.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '18px',
+      height: '18px',
+      borderRadius: '50%',
+      border: `1px solid ${accentColor}60`,
+      backgroundColor: 'transparent',
+      color: `${accentColor}99`,
+      cursor: 'pointer',
+      fontSize: '0.5rem',
+      transition: 'all 150ms',
+    });
+    expandBtn.textContent = '⟫';
+    expandBtn.onmouseenter = () => {
+      expandBtn.style.backgroundColor = `${accentColor}20`;
+      expandBtn.style.borderColor = accentColor;
+      expandBtn.style.color = accentColor;
+    };
+    expandBtn.onmouseleave = () => {
+      expandBtn.style.backgroundColor = 'transparent';
+      expandBtn.style.borderColor = `${accentColor}60`;
+      expandBtn.style.color = `${accentColor}99`;
+    };
+    expandBtn.onclick = () => {
+      this.toggleCompactMode();
+    };
+    wrapper.appendChild(expandBtn);
+  }
+
+  /**
+   * Create the settings gear button
+   */
+  private createSettingsButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = this.tooltipClass('right');
+    btn.setAttribute('data-tooltip', 'Settings (Cmd+Shift+M: toggle compact)');
+
+    const isActive = this.showSettingsPopover;
+    const color = COLORS.textSecondary;
+
+    Object.assign(btn.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '22px',
+      height: '22px',
+      minWidth: '22px',
+      minHeight: '22px',
+      flexShrink: '0',
+      borderRadius: '50%',
+      border: `1px solid ${isActive ? color : `${color}60`}`,
+      backgroundColor: isActive ? `${color}20` : 'transparent',
+      color: isActive ? color : `${color}99`,
+      cursor: 'pointer',
+      transition: 'all 150ms',
+    });
+
+    btn.onclick = () => {
+      this.showSettingsPopover = !this.showSettingsPopover;
+      this.consoleFilter = null;
+      this.showOutlineModal = false;
+      this.showSchemaModal = false;
+      this.showDesignReviewConfirm = false;
+      this.render();
+    };
+
+    // Gear icon SVG
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '12');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute(
+      'd',
+      'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'
+    );
+    svg.appendChild(path);
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '3');
+    svg.appendChild(circle);
+
+    btn.appendChild(svg);
+    return btn;
+  }
+
+  /**
+   * Render the settings popover
+   */
+  private renderSettingsPopover(): void {
+    const { position, accentColor } = this.options;
+    const color = COLORS.textSecondary;
+
+    const popover = document.createElement('div');
+    popover.setAttribute('data-devbar', 'true');
+
+    // Position based on devbar position
+    const isTop = position.startsWith('top');
+    const isRight = position.includes('right');
+
+    Object.assign(popover.style, {
+      position: 'fixed',
+      [isTop ? 'top' : 'bottom']: isTop ? '70px' : '70px',
+      [isRight ? 'right' : 'left']: isRight ? '16px' : '80px',
+      zIndex: '10003',
+      backgroundColor: 'rgba(17, 24, 39, 0.98)',
+      border: `1px solid ${accentColor}`,
+      borderRadius: '8px',
+      boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${accentColor}33`,
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
+      minWidth: '200px',
+      fontFamily: FONT_MONO,
+    });
+
+    // Header
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '10px 14px',
+      borderBottom: `1px solid ${accentColor}30`,
+    });
+
+    const title = document.createElement('span');
+    Object.assign(title.style, { color: accentColor, fontSize: '0.75rem', fontWeight: '600' });
+    title.textContent = 'Settings';
+    header.appendChild(title);
+
+    const closeBtn = createStyledButton({
+      color: COLORS.textMuted,
+      text: '×',
+      padding: '2px 6px',
+      fontSize: '0.875rem',
+    });
+    closeBtn.style.border = 'none';
+    closeBtn.onclick = () => {
+      this.showSettingsPopover = false;
+      this.render();
+    };
+    header.appendChild(closeBtn);
+    popover.appendChild(header);
+
+    // Theme section
+    const themeSection = document.createElement('div');
+    Object.assign(themeSection.style, { padding: '10px 14px', borderBottom: `1px solid ${color}20` });
+
+    const themeSectionTitle = document.createElement('div');
+    Object.assign(themeSectionTitle.style, {
+      color,
+      fontSize: '0.625rem',
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+      marginBottom: '8px',
+    });
+    themeSectionTitle.textContent = 'Theme';
+    themeSection.appendChild(themeSectionTitle);
+
+    const themeOptions = document.createElement('div');
+    Object.assign(themeOptions.style, { display: 'flex', gap: '6px' });
+
+    const themeModes: ThemeMode[] = ['system', 'dark', 'light'];
+    themeModes.forEach((mode) => {
+      const btn = document.createElement('button');
+      const isActive = this.themeMode === mode;
+      Object.assign(btn.style, {
+        padding: '4px 10px',
+        backgroundColor: isActive ? `${accentColor}20` : 'transparent',
+        border: `1px solid ${isActive ? accentColor : `${color}40`}`,
+        borderRadius: '4px',
+        color: isActive ? accentColor : color,
+        fontSize: '0.625rem',
+        cursor: 'pointer',
+        textTransform: 'capitalize',
+        transition: 'all 150ms',
+      });
+      btn.textContent = mode;
+      btn.onclick = () => {
+        this.setThemeMode(mode);
+      };
+      themeOptions.appendChild(btn);
+    });
+    themeSection.appendChild(themeOptions);
+    popover.appendChild(themeSection);
+
+    // Display section
+    const displaySection = document.createElement('div');
+    Object.assign(displaySection.style, { padding: '10px 14px' });
+
+    const displaySectionTitle = document.createElement('div');
+    Object.assign(displaySectionTitle.style, {
+      color,
+      fontSize: '0.625rem',
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+      marginBottom: '8px',
+    });
+    displaySectionTitle.textContent = 'Display';
+    displaySection.appendChild(displaySectionTitle);
+
+    // Compact mode toggle
+    const compactRow = document.createElement('div');
+    Object.assign(compactRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    });
+
+    const compactLabel = document.createElement('span');
+    Object.assign(compactLabel.style, { color: COLORS.text, fontSize: '0.6875rem' });
+    compactLabel.textContent = 'Compact Mode';
+    compactRow.appendChild(compactLabel);
+
+    // Toggle switch
+    const toggle = document.createElement('button');
+    const isCompact = this.compactMode;
+    Object.assign(toggle.style, {
+      width: '32px',
+      height: '18px',
+      borderRadius: '9px',
+      border: 'none',
+      backgroundColor: isCompact ? accentColor : `${color}40`,
+      position: 'relative',
+      cursor: 'pointer',
+      transition: 'all 150ms',
+    });
+
+    const toggleKnob = document.createElement('span');
+    Object.assign(toggleKnob.style, {
+      position: 'absolute',
+      top: '2px',
+      left: isCompact ? '16px' : '2px',
+      width: '14px',
+      height: '14px',
+      borderRadius: '50%',
+      backgroundColor: '#fff',
+      transition: 'left 150ms',
+    });
+    toggle.appendChild(toggleKnob);
+
+    toggle.onclick = () => {
+      this.toggleCompactMode();
+    };
+    compactRow.appendChild(toggle);
+    displaySection.appendChild(compactRow);
+
+    // Keyboard shortcut hint
+    const shortcutHint = document.createElement('div');
+    Object.assign(shortcutHint.style, {
+      color: COLORS.textMuted,
+      fontSize: '0.5625rem',
+      marginTop: '6px',
+    });
+    shortcutHint.textContent = 'Keyboard: Cmd+Shift+M';
+    displaySection.appendChild(shortcutHint);
+
+    popover.appendChild(displaySection);
+
+    this.overlayElement = popover;
+    document.body.appendChild(popover);
+  }
+
   private renderCollapsed(): void {
     if (!this.container) return;
 
@@ -1779,14 +2382,23 @@ export class GlobalDevBar {
 
     // Use captured dot position if available, otherwise fall back to preset positions
     // The 13px offset accounts for half the collapsed circle diameter (26px / 2)
-    let posStyle: { bottom?: string; left?: string; top?: string; right?: string; transform?: string };
+    let posStyle: {
+      bottom?: string;
+      left?: string;
+      top?: string;
+      right?: string;
+      transform?: string;
+    };
 
     if (this.lastDotPosition) {
       // Position based on where the dot actually was
       const isTop = position.startsWith('top');
       posStyle = isTop
         ? { top: `${this.lastDotPosition.top - 13}px`, left: `${this.lastDotPosition.left - 13}px` }
-        : { bottom: `${this.lastDotPosition.bottom - 13}px`, left: `${this.lastDotPosition.left - 13}px` };
+        : {
+            bottom: `${this.lastDotPosition.bottom - 13}px`,
+            left: `${this.lastDotPosition.left - 13}px`,
+          };
     } else {
       // Fallback preset positions for when no dot position was captured
       const collapsedPositions: Record<
@@ -1839,6 +2451,7 @@ export class GlobalDevBar {
 
     wrapper.onclick = () => {
       this.collapsed = false;
+      this.debug.state('Expanded DevBar');
       this.render();
     };
 
@@ -1939,6 +2552,7 @@ export class GlobalDevBar {
         };
       }
       this.collapsed = true;
+      this.debug.state('Collapsed DevBar (double-click)');
       this.render();
     };
 
@@ -1989,6 +2603,7 @@ export class GlobalDevBar {
         bottom: window.innerHeight - (rect.top + rect.height / 2),
       };
       this.collapsed = true;
+      this.debug.state('Collapsed DevBar (connection dot click)');
       this.render();
     };
 
@@ -2088,6 +2703,32 @@ export class GlobalDevBar {
         infoSection.appendChild(lcpSpan);
       }
 
+      if (showMetrics.cls) {
+        addSeparator();
+        const clsSpan = document.createElement('span');
+        clsSpan.className = this.tooltipClass('left', 'devbar-item');
+        Object.assign(clsSpan.style, { opacity: '0.85', cursor: 'default' });
+        clsSpan.setAttribute(
+          'data-tooltip',
+          'Cumulative Layout Shift (CLS): Visual stability score.\nHigher values mean more unexpected layout shifts.\n\nGood: <0.1\nNeeds work: 0.1-0.25\nPoor: >0.25'
+        );
+        clsSpan.textContent = `CLS ${this.perfStats.cls}`;
+        infoSection.appendChild(clsSpan);
+      }
+
+      if (showMetrics.inp) {
+        addSeparator();
+        const inpSpan = document.createElement('span');
+        inpSpan.className = this.tooltipClass('left', 'devbar-item');
+        Object.assign(inpSpan.style, { opacity: '0.85', cursor: 'default' });
+        inpSpan.setAttribute(
+          'data-tooltip',
+          'Interaction to Next Paint (INP): Responsiveness to user input.\nMeasures the longest interaction delay.\n\nGood: <200ms\nNeeds work: 200-500ms\nPoor: >500ms'
+        );
+        inpSpan.textContent = `INP ${this.perfStats.inp}`;
+        infoSection.appendChild(inpSpan);
+      }
+
       if (showMetrics.pageSize) {
         addSeparator();
         const sizeSpan = document.createElement('span');
@@ -2125,6 +2766,7 @@ export class GlobalDevBar {
     actionsContainer.appendChild(this.createAIReviewButton());
     actionsContainer.appendChild(this.createOutlineButton());
     actionsContainer.appendChild(this.createSchemaButton());
+    actionsContainer.appendChild(this.createSettingsButton());
     mainRow.appendChild(actionsContainer);
 
     wrapper.appendChild(mainRow);

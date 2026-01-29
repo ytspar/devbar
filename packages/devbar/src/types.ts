@@ -9,14 +9,37 @@
 // Re-export shared types from sweetlink's types module
 export type {
   ConsoleLog,
-  SweetlinkCommand,
   OutlineNode,
   PageSchema,
+  SweetlinkCommand,
 } from '@ytspar/sweetlink/types';
 
 // ============================================================================
 // DevBar Configuration Types
 // ============================================================================
+
+/**
+ * Theme mode for DevBar display
+ */
+export type ThemeMode = 'dark' | 'light' | 'system';
+
+/**
+ * Debug configuration for DevBar
+ * When true, all debug options are enabled.
+ * When an object, specific options can be toggled.
+ */
+export interface DebugConfig {
+  /** Enable debug logging. Default: false */
+  enabled: boolean;
+  /** Log lifecycle events (init, destroy). Default: true when enabled */
+  logLifecycle?: boolean;
+  /** Log state changes (collapse, modals). Default: true when enabled */
+  logStateChanges?: boolean;
+  /** Log WebSocket events (connect, disconnect, messages). Default: true when enabled */
+  logWebSocket?: boolean;
+  /** Log performance measurements (FCP, LCP, CLS, INP). Default: true when enabled */
+  logPerformance?: boolean;
+}
 
 /**
  * Options for configuring the GlobalDevBar
@@ -31,6 +54,8 @@ export interface GlobalDevBarOptions {
     breakpoint?: boolean;
     fcp?: boolean;
     lcp?: boolean;
+    cls?: boolean;
+    inp?: boolean;
     pageSize?: boolean;
   };
   /** Whether to show the screenshot button. Default: true */
@@ -48,6 +73,8 @@ export interface GlobalDevBarOptions {
     /** Custom min-width (CSS value). Optional */
     minWidth?: string;
   };
+  /** Enable debug logging. Pass true for all options, or an object for specific options. */
+  debug?: boolean | DebugConfig;
 }
 
 /**

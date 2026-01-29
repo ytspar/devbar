@@ -106,9 +106,9 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
 /**
  * Stop the Sweetlink server
  */
-export function stopSweetlink(): void {
+export async function stopSweetlink(): Promise<void> {
   if (started) {
-    closeSweetlink();
+    await closeSweetlink();
     started = false;
   }
 }

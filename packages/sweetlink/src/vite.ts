@@ -39,7 +39,10 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
 
     configureServer(viteServer) {
       // Start Sweetlink when Vite server is ready
-      viteServer.httpServer?.once('listening', () => {
+      viteServer.httpServer?.once('listening', async () => {
+        // Close any existing server first (handles Vite restarts)
+        await closeSweetlink();
+
         const address = viteServer.httpServer?.address();
         const vitePort = typeof address === 'object' && address ? address.port : 5173;
 

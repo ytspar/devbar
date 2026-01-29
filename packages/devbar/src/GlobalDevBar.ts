@@ -2273,24 +2273,21 @@ export class GlobalDevBar {
     };
 
     // Use captured dot position to align the compact bar's dot with where it was
+    // Always use top/left positioning for precise alignment (bottom doesn't work
+    // because container heights differ between compact/expanded modes)
     if (this.lastDotPosition && position !== 'bottom-center') {
-      const isTop = position.startsWith('top');
       const isRight = position.endsWith('right');
 
       if (isRight) {
-        // For right-aligned, we need to calculate from the right edge
-        // This is more complex - fall back to default for now
+        // For right-aligned, fall back to default
+        const isTop = position.startsWith('top');
         posStyle = isTop ? { top: '20px', right: '16px' } : { bottom: '20px', right: '16px' };
       } else {
-        posStyle = isTop
-          ? {
-              top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
-              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
-            }
-          : {
-              bottom: `${this.lastDotPosition.bottom - DOT_OFFSET_TOP}px`,
-              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
-            };
+        // Use top positioning for precise dot alignment
+        posStyle = {
+          top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
+          left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+        };
       }
       // Clear the position after using it
       this.lastDotPosition = null;
@@ -3111,19 +3108,57 @@ export class GlobalDevBar {
     const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = this.options;
     const { errorCount, warningCount } = this.getLogCounts();
 
-    const positionStyles: Record<
-      string,
-      { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
-    > = {
-      'bottom-left': { bottom: '20px', left: '80px' },
-      'bottom-right': { bottom: '20px', right: '16px' },
-      'top-left': { top: '20px', left: '80px' },
-      'top-right': { top: '20px', right: '16px' },
-      'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+    // Dot offset from container edge in expanded mode:
+    // border (1px) + padding (12px) + half indicator (6px) = 19px from left
+    // border (1px) + padding (8px) + half indicator (6px) = 15px from top
+    const DOT_OFFSET_LEFT = 19;
+    const DOT_OFFSET_TOP = 15;
+
+    const isCentered = position === 'bottom-center';
+
+    let posStyle: {
+      bottom?: string;
+      left?: string;
+      top?: string;
+      right?: string;
+      transform?: string;
     };
 
-    const posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
-    const isCentered = position === 'bottom-center';
+    // Use captured dot position to align the expanded bar's dot with where it was
+    if (this.lastDotPosition && !isCentered) {
+      const isTop = position.startsWith('top');
+      const isRight = position.endsWith('right');
+
+      if (isRight) {
+        // For right-aligned, fall back to default
+        posStyle = isTop ? { top: '20px', right: '16px' } : { bottom: '20px', right: '16px' };
+      } else {
+        posStyle = isTop
+          ? {
+              top: `${this.lastDotPosition.top - DOT_OFFSET_TOP}px`,
+              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+            }
+          : {
+              bottom: `${this.lastDotPosition.bottom - DOT_OFFSET_TOP}px`,
+              left: `${this.lastDotPosition.left - DOT_OFFSET_LEFT}px`,
+            };
+      }
+      // Clear the position after using it
+      this.lastDotPosition = null;
+    } else {
+      const positionStyles: Record<
+        string,
+        { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
+      > = {
+        'bottom-left': { bottom: '20px', left: '80px' },
+        'bottom-right': { bottom: '20px', right: '16px' },
+        'top-left': { top: '20px', left: '80px' },
+        'top-right': { top: '20px', right: '16px' },
+        'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+      };
+      posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+    }
+
     const sizeOverrides = this.options.sizeOverrides;
 
     const wrapper = this.container;

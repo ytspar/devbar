@@ -74,6 +74,7 @@ export type { SweetlinkCommand, SweetlinkResponse, ConsoleLog, HmrScreenshotData
 
 // Module-level state
 let wss: WebSocketServer | null = null;
+let httpServer: ReturnType<typeof createServer> | null = null;
 let activePort: number | null = null;
 let associatedAppPort: number | null = null;
 let projectRoot: string | null = null;
@@ -159,7 +160,7 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
       attempts++;
 
       // Create HTTP server to handle direct HTTP requests with package info
-      const httpServer = createServer((_req: IncomingMessage, res: ServerResponse) => {
+      const localHttpServer = createServer((_req: IncomingMessage, res: ServerResponse) => {
         // Return package info for direct HTTP requests (not WebSocket upgrades)
         res.writeHead(200, {
           'Content-Type': 'application/json',
@@ -181,9 +182,9 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         );
       });
 
-      httpServer.on('error', (error: NodeJS.ErrnoException) => {
+      localHttpServer.on('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'EADDRINUSE') {
-          httpServer.close();
+          localHttpServer.close();
           if (attempts < maxRetries) {
             const nextPort = port + 1;
             console.log(`[Sweetlink] Port ${port} in use, trying ${nextPort}...`);
@@ -199,11 +200,12 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         }
       });
 
-      httpServer.listen(port, () => {
+      localHttpServer.listen(port, () => {
         // Create WebSocket server on top of HTTP server
-        const server = new WebSocketServer({ server: httpServer });
+        const server = new WebSocketServer({ server: localHttpServer });
 
-        // Server started successfully
+        // Server started successfully - store in module state
+        httpServer = localHttpServer;
         wss = server;
         activePort = port;
         console.log(`[Sweetlink] WebSocket server started on ws://localhost:${port}`);
@@ -681,13 +683,35 @@ function setupServerHandlers(server: WebSocketServer) {
   });
 }
 
-export function closeSweetlink() {
-  if (wss) {
+export function closeSweetlink(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!wss && !httpServer) {
+      resolve();
+      return;
+    }
+
     console.log('[Sweetlink] Closing WebSocket server on port', activePort);
+
+    // Close all client connections first
     clients.forEach((_, client) => client.close());
     clients.clear();
-    wss.close();
-    wss = null;
-    activePort = null;
-  }
+
+    // Close WebSocket server
+    if (wss) {
+      wss.close();
+      wss = null;
+    }
+
+    // Close HTTP server (this releases the port)
+    if (httpServer) {
+      httpServer.close(() => {
+        httpServer = null;
+        activePort = null;
+        resolve();
+      });
+    } else {
+      activePort = null;
+      resolve();
+    }
+  });
 }

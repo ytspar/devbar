@@ -12,8 +12,8 @@ import {
   getThemeColors,
   injectThemeCSS,
   MAX_CONSOLE_LOGS,
-  setStoredThemeMode,
   STORAGE_KEYS,
+  setStoredThemeMode,
   TAILWIND_BREAKPOINTS,
   WS_PORT,
 } from './constants.js';

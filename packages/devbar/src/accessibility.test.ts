@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type AxeViolation,
   clearA11yCache,
   formatViolation,
   getBadgeColor,
@@ -8,7 +9,6 @@ import {
   getViolationCounts,
   groupViolationsByImpact,
   isAxeLoaded,
-  type AxeViolation,
 } from './accessibility.js';
 
 describe('isAxeLoaded', () => {

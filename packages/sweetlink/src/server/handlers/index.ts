@@ -15,7 +15,7 @@ export { handleSaveSchema, type SchemaSaveResult } from './schema.js';
 export { handleSaveScreenshot } from './screenshot.js';
 export {
   type DevBarSettings,
-  type SettingsSaveResult,
-  handleSaveSettings,
   handleLoadSettings,
+  handleSaveSettings,
+  type SettingsSaveResult,
 } from './settings.js';

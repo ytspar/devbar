@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  formatBytes,
-  formatDuration,
-  getInitiatorColor,
-  NetworkMonitor,
-} from './network.js';
+import { formatBytes, formatDuration, getInitiatorColor, NetworkMonitor } from './network.js';
 
 describe('formatBytes', () => {
   it('formats 0 bytes', () => {

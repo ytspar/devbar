@@ -6,9 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ACCENT_COLOR_PRESETS,
   DEFAULT_SETTINGS,
+  type DevBarSettings,
   SETTINGS_STORAGE_KEY,
   SettingsManager,
-  type DevBarSettings,
 } from './settings.js';
 
 // Mock localStorage
@@ -132,7 +132,9 @@ describe('settings', () => {
 
       it('preserves all settings in localStorage', () => {
         manager.saveSettingsNow({ compactMode: true });
-        const stored = JSON.parse(localStorageMock.getItem(SETTINGS_STORAGE_KEY)!) as DevBarSettings;
+        const stored = JSON.parse(
+          localStorageMock.getItem(SETTINGS_STORAGE_KEY)!
+        ) as DevBarSettings;
         expect(stored.version).toBe(1);
         expect(stored.position).toBe('bottom-left');
         expect(stored.compactMode).toBe(true);

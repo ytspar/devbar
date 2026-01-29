@@ -835,3 +835,143 @@ body {
     width: 180px;
   }
 }
+
+/* ============================================================================
+   Light Theme Overrides
+   Terminal aesthetic with mint green background and dark emerald text
+   ============================================================================ */
+
+body.theme-light {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(4, 120, 87, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(124, 58, 237, 0.06) 0%, transparent 40%);
+}
+
+/* Header adjustments */
+.theme-light .demo-header h1 {
+  text-shadow: 0 0 20px rgba(4, 120, 87, 0.3);
+}
+
+/* Navigation hover */
+.theme-light .demo-header nav a:hover {
+  background-color: rgba(4, 120, 87, 0.12);
+  border-color: rgba(4, 120, 87, 0.4);
+}
+
+/* Button adjustments */
+.theme-light .btn.primary {
+  background-color: rgba(4, 120, 87, 0.12);
+}
+
+.theme-light .btn.primary:hover {
+  background-color: rgba(4, 120, 87, 0.2);
+}
+
+.theme-light .btn.secondary:hover {
+  background-color: rgba(100, 116, 139, 0.12);
+}
+
+/* Card adjustments */
+.theme-light .card.primary {
+  background-color: rgba(4, 120, 87, 0.08);
+  border-color: rgba(4, 120, 87, 0.35);
+}
+
+.theme-light .card.primary:hover {
+  background-color: rgba(4, 120, 87, 0.12);
+}
+
+.theme-light .card.secondary {
+  background-color: rgba(124, 58, 237, 0.08);
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+.theme-light .card.accent {
+  background-color: rgba(8, 145, 178, 0.08);
+  border-color: rgba(8, 145, 178, 0.35);
+}
+
+/* List hover */
+.theme-light .test-list .list-item:hover {
+  background-color: rgba(4, 120, 87, 0.08);
+  border-color: rgba(4, 120, 87, 0.25);
+}
+
+/* Form inputs */
+.theme-light .form-group input[type="text"],
+.theme-light .form-group input[type="email"],
+.theme-light .form-group input[type="password"],
+.theme-light .form-group input[type="number"] {
+  border-color: rgba(4, 120, 87, 0.35);
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.theme-light .form-group input[type="text"]:hover,
+.theme-light .form-group input[type="email"]:hover,
+.theme-light .form-group input[type="password"]:hover,
+.theme-light .form-group input[type="number"]:hover {
+  border-color: rgba(4, 120, 87, 0.5);
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+.theme-light .form-group input[type="text"]:focus,
+.theme-light .form-group input[type="email"]:focus,
+.theme-light .form-group input[type="password"]:focus,
+.theme-light .form-group input[type="number"]:focus {
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 2px rgba(4, 120, 87, 0.15),
+    0 0 12px rgba(4, 120, 87, 0.2);
+}
+
+/* Select dropdown */
+.theme-light .form-group select {
+  border-color: rgba(4, 120, 87, 0.35);
+  background-color: rgba(255, 255, 255, 0.7);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23047857' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.theme-light .form-group select:hover,
+.theme-light .form-group select:focus {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+.theme-light .form-group select option {
+  background-color: #fff;
+}
+
+/* Checkbox */
+.theme-light .checkbox-wrapper input[type="checkbox"] {
+  border-color: rgba(4, 120, 87, 0.4);
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.theme-light .checkbox-wrapper input[type="checkbox"]:checked::after {
+  border-color: #ecfdf5;
+}
+
+/* Table */
+.theme-light .demo-table tbody tr:hover {
+  background-color: rgba(4, 120, 87, 0.06);
+}
+
+/* Controls panel */
+.theme-light .controls-header {
+  background: rgba(4, 120, 87, 0.1);
+}
+
+.theme-light .controls-toggle:hover {
+  background: rgba(4, 120, 87, 0.15);
+}
+
+.theme-light .control-group select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23047857' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.theme-light .control-group input[type="checkbox"] {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.theme-light .control-group input[type="checkbox"]:checked::after {
+  border-color: #ecfdf5;
+}

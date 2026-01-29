@@ -29,8 +29,7 @@ export async function getHtml2Canvas(): Promise<Html2CanvasFunc> {
   if (!html2canvasPromise) {
     html2canvasPromise = import('html2canvas-pro').then((module) => {
       // Handle ESM/CJS interop
-      const html2canvas =
-        (module as unknown as { default: Html2CanvasFunc }).default ?? module;
+      const html2canvas = (module as unknown as { default: Html2CanvasFunc }).default ?? module;
       return html2canvas as Html2CanvasFunc;
     });
   }

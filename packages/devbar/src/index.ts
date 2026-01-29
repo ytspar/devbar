@@ -1,6 +1,22 @@
 // DevBar - Development toolbar and utilities
 // Pure vanilla JavaScript - no framework dependencies
 
+// Accessibility audit utilities
+export {
+  type A11yState,
+  type AxeResult,
+  type AxeViolation,
+  clearA11yCache,
+  formatViolation,
+  getBadgeColor,
+  getCachedResult,
+  getImpactColor,
+  getViolationCounts,
+  groupViolationsByImpact,
+  isAxeLoaded,
+  preloadAxe,
+  runA11yAudit,
+} from './accessibility.js';
 // Re-export constants and theme utilities
 export {
   BUTTON_COLORS,
@@ -18,19 +34,16 @@ export {
   getTheme,
   getThemeColors,
   injectThemeCSS,
-  setStoredThemeMode,
   STORAGE_KEYS,
+  setStoredThemeMode,
   TAILWIND_BREAKPOINTS,
   type TailwindBreakpoint,
   type ThemeColors,
 } from './constants.js';
-
 // Debug utilities
 export { DebugLogger, normalizeDebugConfig } from './debug.js';
-
 // Early console capture script for injection
 export { EARLY_CONSOLE_CAPTURE_SCRIPT } from './earlyConsoleCapture.js';
-
 // Main vanilla JS devbar
 export {
   destroyGlobalDevBar,
@@ -40,6 +53,19 @@ export {
   initGlobalDevBar,
 } from './GlobalDevBar.js';
 
+// Lazy loading utilities
+export { getHtml2Canvas, isHtml2CanvasLoaded, preloadHtml2Canvas } from './lazy/index.js';
+// Network monitoring utilities
+export {
+  formatBytes as formatNetworkBytes,
+  formatDuration,
+  getInitiatorColor,
+  type NetworkEntry,
+  NetworkMonitor,
+  type NetworkState,
+} from './network.js';
+// Re-export outline/schema functions
+export { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 // Configuration presets
 export {
   initDebug,
@@ -53,27 +79,11 @@ export {
   PRESET_PERFORMANCE,
   PRESET_RESPONSIVE,
 } from './presets.js';
-
-// Lazy loading utilities
-export { getHtml2Canvas, isHtml2CanvasLoaded, preloadHtml2Canvas } from './lazy/index.js';
-
-// Re-export outline/schema functions
-export { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 export { extractPageSchema, schemaToMarkdown } from './schema.js';
-
-// Network monitoring utilities
-export {
-  formatBytes as formatNetworkBytes,
-  formatDuration,
-  getInitiatorColor,
-  NetworkMonitor,
-  type NetworkEntry,
-  type NetworkState,
-} from './network.js';
-
 // Storage inspection utilities
 export {
   beautifyJson,
+  type CookieItem,
   clearLocalStorage,
   clearSessionStorage,
   deleteCookie,
@@ -84,29 +94,11 @@ export {
   getLocalStorage,
   getSessionStorage,
   getStorageData,
-  setLocalStorageItem,
-  setSessionStorageItem,
-  type CookieItem,
   type StorageData,
   type StorageItem,
+  setLocalStorageItem,
+  setSessionStorageItem,
 } from './storage.js';
-
-// Accessibility audit utilities
-export {
-  clearA11yCache,
-  formatViolation,
-  getBadgeColor,
-  getCachedResult,
-  getImpactColor,
-  getViolationCounts,
-  groupViolationsByImpact,
-  isAxeLoaded,
-  preloadAxe,
-  runA11yAudit,
-  type A11yState,
-  type AxeResult,
-  type AxeViolation,
-} from './accessibility.js';
 
 // Re-export types
 export type {

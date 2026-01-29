@@ -4,7 +4,7 @@
  * Pre-configured options for common DevBar use cases.
  */
 
-import { GlobalDevBar, initGlobalDevBar } from './GlobalDevBar.js';
+import { type GlobalDevBar, initGlobalDevBar } from './GlobalDevBar.js';
 import type { GlobalDevBarOptions } from './types.js';
 
 // ============================================================================

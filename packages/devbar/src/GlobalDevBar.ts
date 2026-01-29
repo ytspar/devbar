@@ -36,8 +36,8 @@ import { extractPageSchema, schemaToMarkdown } from './schema.js';
 import {
   ACCENT_COLOR_PRESETS,
   DEFAULT_SETTINGS,
-  getSettingsManager,
   type DevBarSettings,
+  getSettingsManager,
   type SettingsManager,
 } from './settings.js';
 // Import from split modules
@@ -83,8 +83,8 @@ export type {
 };
 
 // Re-export settings types
-export type { DevBarSettings, DevBarPosition, MetricsVisibility } from './settings.js';
-export { DEFAULT_SETTINGS, ACCENT_COLOR_PRESETS, getSettingsManager } from './settings.js';
+export type { DevBarPosition, DevBarSettings, MetricsVisibility } from './settings.js';
+export { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, getSettingsManager } from './settings.js';
 
 // Handle ESM/CJS interop for html2canvas-pro
 type Html2CanvasFunc = (
@@ -215,8 +215,13 @@ export class GlobalDevBar {
   private showSchemaModal = false;
 
   private breakpointInfo: { tailwindBreakpoint: string; dimensions: string } | null = null;
-  private perfStats: { fcp: string; lcp: string; cls: string; inp: string; totalSize: string } | null =
-    null;
+  private perfStats: {
+    fcp: string;
+    lcp: string;
+    cls: string;
+    inp: string;
+    totalSize: string;
+  } | null = null;
   private lcpValue: number | null = null;
   private clsValue = 0;
   private inpValue = 0;
@@ -924,7 +929,11 @@ export class GlobalDevBar {
         }
       });
       // durationThreshold filters out very short interactions
-      this.inpObserver.observe({ type: 'event', buffered: true, durationThreshold: 16 } as PerformanceObserverInit);
+      this.inpObserver.observe({
+        type: 'event',
+        buffered: true,
+        durationThreshold: 16,
+      } as PerformanceObserverInit);
     } catch (e) {
       console.warn('[GlobalDevBar] INP PerformanceObserver not supported', e);
     }
@@ -2267,6 +2276,73 @@ export class GlobalDevBar {
   }
 
   /**
+   * Create the compact mode toggle button with chevron icon
+   */
+  private createCompactToggleButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = this.tooltipClass('right');
+
+    const isCompact = this.compactMode;
+    const tooltip = isCompact ? 'Expand (Cmd+Shift+M)' : 'Compact (Cmd+Shift+M)';
+    btn.setAttribute('data-tooltip', tooltip);
+
+    const color = COLORS.textSecondary;
+
+    Object.assign(btn.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '22px',
+      height: '22px',
+      minWidth: '22px',
+      minHeight: '22px',
+      flexShrink: '0',
+      borderRadius: '50%',
+      border: `1px solid ${color}60`,
+      backgroundColor: 'transparent',
+      color: `${color}99`,
+      cursor: 'pointer',
+      transition: 'all 150ms',
+    });
+
+    btn.onmouseenter = () => {
+      btn.style.borderColor = color;
+      btn.style.backgroundColor = `${color}20`;
+      btn.style.color = color;
+    };
+
+    btn.onmouseleave = () => {
+      btn.style.borderColor = `${color}60`;
+      btn.style.backgroundColor = 'transparent';
+      btn.style.color = `${color}99`;
+    };
+
+    btn.onclick = () => {
+      this.toggleCompactMode();
+    };
+
+    // Chevron icon SVG - points right when expanded, left when compact
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '12');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    // Right chevron (>) when not compact, left chevron (<) when compact
+    path.setAttribute('points', isCompact ? '15 18 9 12 15 6' : '9 18 15 12 9 6');
+    svg.appendChild(path);
+
+    btn.appendChild(svg);
+    return btn;
+  }
+
+  /**
    * Create a settings section with title
    */
   private createSettingsSection(title: string, hasBorder = true): HTMLDivElement {
@@ -2444,54 +2520,98 @@ export class GlobalDevBar {
     // ========== DISPLAY SECTION ==========
     const displaySection = this.createSettingsSection('Display');
 
-    // Position dropdown
+    // Position mini-map selector
     const positionRow = document.createElement('div');
-    Object.assign(positionRow.style, {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: '8px',
-    });
+    Object.assign(positionRow.style, { marginBottom: '10px' });
 
-    const posLabel = document.createElement('span');
-    Object.assign(posLabel.style, { color: COLORS.text, fontSize: '0.6875rem' });
+    const posLabel = document.createElement('div');
+    Object.assign(posLabel.style, {
+      color: COLORS.text,
+      fontSize: '0.6875rem',
+      marginBottom: '6px',
+    });
     posLabel.textContent = 'Position';
     positionRow.appendChild(posLabel);
 
-    const posSelect = document.createElement('select');
-    Object.assign(posSelect.style, {
-      backgroundColor: 'rgba(10, 15, 26, 0.8)',
-      border: `1px solid ${color}40`,
+    // Mini-map container
+    const miniMap = document.createElement('div');
+    Object.assign(miniMap.style, {
+      position: 'relative',
+      width: '100%',
+      height: '50px',
+      backgroundColor: 'rgba(10, 15, 26, 0.6)',
+      border: `1px solid ${color}30`,
       borderRadius: '4px',
-      color: COLORS.text,
-      fontSize: '0.625rem',
-      padding: '4px 6px',
-      cursor: 'pointer',
-      fontFamily: FONT_MONO,
     });
 
-    const positions = [
-      { value: 'bottom-left', label: 'Bottom Left' },
-      { value: 'bottom-right', label: 'Bottom Right' },
-      { value: 'bottom-center', label: 'Bottom Center' },
-      { value: 'top-left', label: 'Top Left' },
-      { value: 'top-right', label: 'Top Right' },
+    // Position indicator styles
+    type PositionValue =
+      | 'bottom-left'
+      | 'bottom-right'
+      | 'top-left'
+      | 'top-right'
+      | 'bottom-center';
+    const positionConfigs: Array<{
+      value: PositionValue;
+      style: Partial<CSSStyleDeclaration>;
+      title: string;
+    }> = [
+      { value: 'top-left', style: { top: '8px', left: '10%' }, title: 'Top Left' },
+      { value: 'top-right', style: { top: '8px', right: '6%' }, title: 'Top Right' },
+      { value: 'bottom-left', style: { bottom: '8px', left: '10%' }, title: 'Bottom Left' },
+      { value: 'bottom-right', style: { bottom: '8px', right: '6%' }, title: 'Bottom Right' },
+      {
+        value: 'bottom-center',
+        style: { bottom: '6px', left: '50%', transform: 'translateX(-50%)' },
+        title: 'Bottom Center',
+      },
     ];
 
-    positions.forEach(({ value, label }) => {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = label;
-      option.selected = this.options.position === value;
-      posSelect.appendChild(option);
+    positionConfigs.forEach(({ value, style, title }) => {
+      const indicator = document.createElement('button');
+      const isActive = this.options.position === value;
+
+      Object.assign(indicator.style, {
+        position: 'absolute',
+        width: '20px',
+        height: '6px',
+        backgroundColor: isActive ? accentColor : `${color}60`,
+        border: `1px solid ${isActive ? accentColor : `${color}40`}`,
+        borderRadius: '2px',
+        cursor: 'pointer',
+        padding: '0',
+        transition: 'all 150ms',
+        boxShadow: isActive ? `0 0 8px ${accentColor}60` : 'none',
+        ...style,
+      });
+
+      indicator.title = title;
+      indicator.onclick = () => {
+        this.options.position = value;
+        this.settingsManager.saveSettings({ position: value });
+        this.render();
+      };
+
+      // Hover effect
+      indicator.onmouseenter = () => {
+        if (!isActive) {
+          indicator.style.backgroundColor = accentColor;
+          indicator.style.borderColor = accentColor;
+          indicator.style.boxShadow = `0 0 6px ${accentColor}40`;
+        }
+      };
+      indicator.onmouseleave = () => {
+        if (!isActive) {
+          indicator.style.backgroundColor = `${color}60`;
+          indicator.style.borderColor = `${color}40`;
+          indicator.style.boxShadow = 'none';
+        }
+      };
+
+      miniMap.appendChild(indicator);
     });
 
-    posSelect.onchange = () => {
-      this.options.position = posSelect.value as typeof this.options.position;
-      this.settingsManager.saveSettings({ position: this.options.position });
-      this.render();
-    };
-    positionRow.appendChild(posSelect);
+    positionRow.appendChild(miniMap);
     displaySection.appendChild(positionRow);
 
     // Compact mode toggle
@@ -3052,6 +3172,7 @@ export class GlobalDevBar {
     actionsContainer.appendChild(this.createOutlineButton());
     actionsContainer.appendChild(this.createSchemaButton());
     actionsContainer.appendChild(this.createSettingsButton());
+    actionsContainer.appendChild(this.createCompactToggleButton());
     mainRow.appendChild(actionsContainer);
 
     wrapper.appendChild(mainRow);

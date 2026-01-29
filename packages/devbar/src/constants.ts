@@ -217,39 +217,39 @@ export const DEVBAR_THEME = {
 
 export type DevBarTheme = typeof DEVBAR_THEME;
 
-/** Light theme variant - same structure, different colors */
+/** Light theme variant - terminal aesthetic with light green tones */
 export const DEVBAR_THEME_LIGHT = {
   colors: {
-    // Primary accent (darker for light mode)
-    primary: '#059669', // darker emerald
-    primaryHover: '#047857',
-    primaryGlow: 'rgba(5, 150, 105, 0.2)',
+    // Primary accent (darker emerald for contrast)
+    primary: '#047857', // darker emerald for better contrast
+    primaryHover: '#065f46',
+    primaryGlow: 'rgba(4, 120, 87, 0.25)',
 
-    // Semantic colors (same)
-    error: PALETTE.red,
-    warning: '#d97706', // darker amber
-    info: '#2563eb', // darker blue
+    // Semantic colors (adjusted for light bg)
+    error: '#dc2626',
+    warning: '#d97706',
+    info: '#2563eb',
 
-    // Extended palette (darker variants)
-    purple: '#9333ea',
+    // Extended palette (darker for light mode)
+    purple: '#7c3aed',
     cyan: '#0891b2',
     pink: '#db2777',
     lime: '#65a30d',
 
-    // Backgrounds (light)
-    bg: '#f8fafc',
-    bgCard: 'rgba(255, 255, 255, 0.98)',
-    bgElevated: 'rgba(255, 255, 255, 0.99)',
-    bgInput: 'rgba(241, 245, 249, 0.9)',
+    // Backgrounds - terminal light green aesthetic
+    bg: '#ecfdf5', // very light mint/green
+    bgCard: 'rgba(255, 255, 255, 0.85)',
+    bgElevated: 'rgba(255, 255, 255, 0.95)',
+    bgInput: 'rgba(236, 253, 245, 0.9)', // light mint input
 
     // Text (dark on light)
-    text: '#1e293b',
-    textSecondary: '#475569',
-    textMuted: '#64748b',
+    text: '#064e3b', // dark emerald text
+    textSecondary: '#065f46',
+    textMuted: '#047857',
 
-    // Borders (green-tinted)
-    border: 'rgba(5, 150, 105, 0.25)',
-    borderSubtle: 'rgba(0, 0, 0, 0.06)',
+    // Borders (emerald-tinted)
+    border: 'rgba(4, 120, 87, 0.3)',
+    borderSubtle: 'rgba(4, 120, 87, 0.1)',
   },
 
   // Other properties same as dark theme
@@ -258,10 +258,10 @@ export const DEVBAR_THEME_LIGHT = {
   radius: DEVBAR_THEME.radius,
 
   shadows: {
-    sm: '0 1px 2px rgba(0, 0, 0, 0.08)',
-    md: '0 4px 12px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(5, 150, 105, 0.1)',
-    lg: '0 8px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(5, 150, 105, 0.12)',
-    glow: '0 0 20px rgba(5, 150, 105, 0.1)',
+    sm: '0 1px 2px rgba(4, 120, 87, 0.1)',
+    md: '0 4px 12px rgba(4, 120, 87, 0.12), 0 0 0 1px rgba(4, 120, 87, 0.15)',
+    lg: '0 8px 32px rgba(4, 120, 87, 0.15), 0 0 0 1px rgba(4, 120, 87, 0.2)',
+    glow: '0 0 20px rgba(4, 120, 87, 0.15)',
   },
 
   transitions: DEVBAR_THEME.transitions,

@@ -144,9 +144,7 @@ export function getViolationCounts(violations: AxeViolation[]): Record<string, n
 /**
  * Group violations by impact level
  */
-export function groupViolationsByImpact(
-  violations: AxeViolation[]
-): Map<string, AxeViolation[]> {
+export function groupViolationsByImpact(violations: AxeViolation[]): Map<string, AxeViolation[]> {
   const groups = new Map<string, AxeViolation[]>();
   const impactOrder = ['critical', 'serious', 'moderate', 'minor'];
 

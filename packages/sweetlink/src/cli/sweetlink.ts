@@ -945,9 +945,25 @@ async function killProcessOnPort(port: number): Promise<boolean> {
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
 
+  // Use full paths to ensure commands work in all environments
+  // macOS: /usr/sbin/lsof, Linux: /usr/bin/lsof
+  const lsofPaths = ['/usr/sbin/lsof', '/usr/bin/lsof', 'lsof'];
+  const killPath = '/bin/kill';
+
+  let lsofPath = 'lsof';
+  for (const p of lsofPaths) {
+    try {
+      await execAsync(`${p} -v`);
+      lsofPath = p;
+      break;
+    } catch {
+      // Try next path
+    }
+  }
+
   try {
     // Find PID using lsof
-    const { stdout } = await execAsync(`lsof -ti :${port}`);
+    const { stdout } = await execAsync(`${lsofPath} -ti :${port}`);
     const pids = stdout.trim().split('\n').filter(Boolean);
 
     if (pids.length === 0) {
@@ -957,7 +973,7 @@ async function killProcessOnPort(port: number): Promise<boolean> {
     // Kill each process
     for (const pid of pids) {
       try {
-        await execAsync(`kill -9 ${pid}`);
+        await execAsync(`${killPath} -9 ${pid}`);
         console.log(`  Killed process ${pid} on port ${port}`);
       } catch {
         // Process may have already exited

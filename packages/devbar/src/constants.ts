@@ -345,11 +345,45 @@ export type DevBarThemeInput = {
 // ============================================================================
 
 /**
+ * Safely get item from localStorage with error handling
+ */
+function safeGetItem(key: string): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    // Handle SecurityError in private browsing or iframe contexts
+    console.warn('[DevBar] localStorage access failed:', error);
+    return null;
+  }
+}
+
+/**
+ * Safely set item in localStorage with error handling
+ */
+function safeSetItem(key: string, value: string): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    // Handle QuotaExceededError or SecurityError
+    if (error instanceof Error) {
+      if (error.name === 'QuotaExceededError') {
+        console.warn('[DevBar] localStorage quota exceeded');
+      } else {
+        console.warn('[DevBar] localStorage access failed:', error.message);
+      }
+    }
+    return false;
+  }
+}
+
+/**
  * Get the stored theme mode preference
  */
 export function getStoredThemeMode(): ThemeMode {
-  if (typeof localStorage === 'undefined') return 'system';
-  const stored = localStorage.getItem(STORAGE_KEYS.themeMode);
+  const stored = safeGetItem(STORAGE_KEYS.themeMode);
   if (stored === 'dark' || stored === 'light' || stored === 'system') {
     return stored;
   }
@@ -360,8 +394,7 @@ export function getStoredThemeMode(): ThemeMode {
  * Store the theme mode preference
  */
 export function setStoredThemeMode(mode: ThemeMode): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.setItem(STORAGE_KEYS.themeMode, mode);
+  safeSetItem(STORAGE_KEYS.themeMode, mode);
 }
 
 /**

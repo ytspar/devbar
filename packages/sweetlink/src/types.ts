@@ -196,3 +196,149 @@ export interface LogSubscription {
 export interface ChannelSubscription {
   channel: string;
 }
+
+// ============================================================================
+// Type Guards
+// ============================================================================
+
+/**
+ * Check if a value is a valid SweetlinkCommand
+ */
+export function isSweetlinkCommand(value: unknown): value is SweetlinkCommand {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'type' in value &&
+    typeof (value as Record<string, unknown>).type === 'string'
+  );
+}
+
+/**
+ * Check if a value is a valid ConsoleLog
+ */
+export function isConsoleLog(value: unknown): value is ConsoleLog {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'level' in value &&
+    'message' in value &&
+    'timestamp' in value &&
+    typeof (value as Record<string, unknown>).level === 'string' &&
+    typeof (value as Record<string, unknown>).message === 'string' &&
+    typeof (value as Record<string, unknown>).timestamp === 'number'
+  );
+}
+
+/**
+ * Check if a value is a valid HmrScreenshotData
+ */
+export function isHmrScreenshotData(value: unknown): value is HmrScreenshotData {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.trigger === 'string' &&
+    typeof obj.screenshot === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.timestamp === 'number'
+  );
+}
+
+/**
+ * Type guard for save-screenshot command data
+ * Validates minimum required fields for handleSaveScreenshot
+ */
+export function isSaveScreenshotData(
+  value: unknown
+): value is { screenshot: string; url: string; timestamp: number; width: number; height: number } {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.screenshot === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.timestamp === 'number' &&
+    typeof obj.width === 'number' &&
+    typeof obj.height === 'number'
+  );
+}
+
+/**
+ * Type guard for design-review-screenshot command data
+ * Validates minimum required fields for handleDesignReviewScreenshot
+ */
+export function isDesignReviewScreenshotData(
+  value: unknown
+): value is { screenshot: string; url: string; timestamp: number; width: number; height: number } {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.screenshot === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.timestamp === 'number' &&
+    typeof obj.width === 'number' &&
+    typeof obj.height === 'number'
+  );
+}
+
+/**
+ * Type guard for save-outline command data
+ * Validates minimum required fields for handleSaveOutline
+ */
+export function isSaveOutlineData(value: unknown): value is {
+  outline: unknown[];
+  markdown: string;
+  url: string;
+  title: string;
+  timestamp: number;
+} {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    Array.isArray(obj.outline) &&
+    typeof obj.markdown === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.timestamp === 'number'
+  );
+}
+
+/**
+ * Type guard for save-schema command data
+ * Validates minimum required fields for handleSaveSchema
+ */
+export function isSaveSchemaData(
+  value: unknown
+): value is { schema: unknown; markdown: string; url: string; title: string; timestamp: number } {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    obj.schema !== null &&
+    typeof obj.schema === 'object' &&
+    typeof obj.markdown === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.timestamp === 'number'
+  );
+}
+
+/**
+ * Type guard for save-settings command data
+ * Validates minimum required fields for handleSaveSettings
+ */
+export function isSaveSettingsData(value: unknown): value is { settings: Record<string, unknown> } {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return obj.settings !== null && typeof obj.settings === 'object';
+}
+
+// ============================================================================
+// Error Utilities
+// ============================================================================
+
+/**
+ * Safely extract error message from unknown error type
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return 'Unknown error';
+}

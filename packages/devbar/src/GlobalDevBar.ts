@@ -112,6 +112,8 @@ const html2canvas = ((html2canvasModule as unknown as { default: Html2CanvasFunc
 // Early Console Capture (runs immediately on module load)
 // ============================================================================
 
+type LogChangeListener = (errorCount: number, warningCount: number) => void;
+
 interface EarlyConsoleCapture {
   errorCount: number;
   warningCount: number;
@@ -123,6 +125,9 @@ interface EarlyConsoleCapture {
     info: typeof console.info;
   } | null;
   isPatched: boolean;
+  listeners: LogChangeListener[];
+  addListener: (listener: LogChangeListener) => void;
+  removeListener: (listener: LogChangeListener) => void;
 }
 
 const earlyConsoleCapture: EarlyConsoleCapture = (() => {
@@ -132,10 +137,25 @@ const earlyConsoleCapture: EarlyConsoleCapture = (() => {
     logs: [],
     originalConsole: null,
     isPatched: false,
+    listeners: [],
+    addListener: () => {},
+    removeListener: () => {},
   };
 
   // Skip on server-side rendering
   if (typeof window === 'undefined') return ssrFallback;
+
+  const listeners: LogChangeListener[] = [];
+
+  const notifyListeners = (errorCount: number, warningCount: number) => {
+    for (const listener of listeners) {
+      try {
+        listener(errorCount, warningCount);
+      } catch {
+        // Ignore listener errors
+      }
+    }
+  };
 
   const capture: EarlyConsoleCapture = {
     errorCount: 0,
@@ -148,6 +168,14 @@ const earlyConsoleCapture: EarlyConsoleCapture = (() => {
       info: console.info,
     },
     isPatched: false,
+    listeners,
+    addListener: (listener: LogChangeListener) => {
+      listeners.push(listener);
+    },
+    removeListener: (listener: LogChangeListener) => {
+      const idx = listeners.indexOf(listener);
+      if (idx !== -1) listeners.splice(idx, 1);
+    },
   };
 
   const captureLog = (level: string, args: unknown[]) => {
@@ -166,11 +194,13 @@ const earlyConsoleCapture: EarlyConsoleCapture = (() => {
       captureLog('error', args);
       capture.errorCount++;
       capture.originalConsole!.error(...args);
+      notifyListeners(capture.errorCount, capture.warningCount);
     };
     console.warn = (...args) => {
       captureLog('warn', args);
       capture.warningCount++;
       capture.originalConsole!.warn(...args);
+      notifyListeners(capture.errorCount, capture.warningCount);
     };
     console.info = (...args) => {
       captureLog('info', args);
@@ -281,6 +311,9 @@ export class GlobalDevBar {
 
   // Settings manager for persistence
   private settingsManager: SettingsManager;
+
+  // Console log listener for real-time badge updates
+  private logChangeListener: LogChangeListener | null = null;
 
   constructor(options: GlobalDevBarOptions = {}) {
     // Initialize debug config first so we can log during construction
@@ -448,6 +481,13 @@ export class GlobalDevBar {
     this.consoleLogs = [...earlyConsoleCapture.logs];
     this.debug.lifecycle('Copied early console logs', { count: this.consoleLogs.length });
 
+    // Subscribe to log changes for real-time badge updates
+    this.logChangeListener = () => {
+      this.consoleLogs = [...earlyConsoleCapture.logs];
+      this.render();
+    };
+    earlyConsoleCapture.addListener(this.logChangeListener);
+
     // Setup theme
     this.setupTheme();
 
@@ -511,6 +551,12 @@ export class GlobalDevBar {
     // Remove theme media listener
     if (this.themeMediaQuery && this.themeMediaHandler) {
       this.themeMediaQuery.removeEventListener('change', this.themeMediaHandler);
+    }
+
+    // Remove log change listener
+    if (this.logChangeListener) {
+      earlyConsoleCapture.removeListener(this.logChangeListener);
+      this.logChangeListener = null;
     }
 
     // Restore console
@@ -3366,8 +3412,8 @@ export class GlobalDevBar {
         });
         ellipsisBtn.textContent = '···';
 
-        // Attach tooltip showing hidden metrics
-        this.attachHtmlTooltip(ellipsisBtn, (tooltip) => {
+        // Attach click-toggle tooltip showing hidden metrics (for mobile support)
+        this.attachClickToggleTooltip(ellipsisBtn, (tooltip) => {
           this.addTooltipTitle(tooltip, 'More Metrics');
 
           const metricsContainer = document.createElement('div');
@@ -3707,6 +3753,81 @@ export class GlobalDevBar {
       if (originalOnclick) {
         originalOnclick.call(element, e);
       }
+    };
+  }
+
+  /**
+   * Attach an HTML tooltip with click-to-toggle support for mobile.
+   * - Click toggles tooltip open/closed (pinned state)
+   * - Hover opens tooltip on mouseenter (if not pinned)
+   * - Hover closes tooltip on mouseleave (if not pinned)
+   */
+  private attachClickToggleTooltip(
+    element: HTMLElement,
+    buildContent: (tooltip: HTMLDivElement) => void
+  ): void {
+    let tooltipEl: HTMLDivElement | null = null;
+    let isPinned = false;
+
+    const showTooltip = () => {
+      if (tooltipEl) {
+        this.removeTooltip(tooltipEl);
+      }
+      tooltipEl = this.createTooltipContainer();
+      buildContent(tooltipEl);
+      this.positionTooltip(tooltipEl, element);
+    };
+
+    const hideTooltip = () => {
+      if (tooltipEl) {
+        this.removeTooltip(tooltipEl);
+        tooltipEl = null;
+      }
+    };
+
+    // Click toggles pinned state
+    element.onclick = (e) => {
+      e.stopPropagation();
+      if (isPinned) {
+        // Unpin and hide
+        isPinned = false;
+        hideTooltip();
+      } else {
+        // Pin and show
+        isPinned = true;
+        showTooltip();
+      }
+    };
+
+    // Hover shows tooltip (if not pinned)
+    element.onmouseenter = () => {
+      if (!isPinned) {
+        showTooltip();
+      }
+    };
+
+    // Hover hides tooltip (if not pinned)
+    element.onmouseleave = () => {
+      if (!isPinned) {
+        hideTooltip();
+      }
+    };
+
+    // Close pinned tooltip when clicking outside
+    const handleDocumentClick = (e: MouseEvent) => {
+      if (isPinned && tooltipEl && !element.contains(e.target as Node) && !tooltipEl.contains(e.target as Node)) {
+        isPinned = false;
+        hideTooltip();
+      }
+    };
+
+    // Add document click listener
+    document.addEventListener('click', handleDocumentClick);
+
+    // Store cleanup function on element for later removal
+    (element as HTMLElement & { _tooltipCleanup?: () => void })._tooltipCleanup = () => {
+      document.removeEventListener('click', handleDocumentClick);
+      hideTooltip();
     };
   }
 

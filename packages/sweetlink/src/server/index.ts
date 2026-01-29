@@ -7,12 +7,20 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 
-// Import types
+// Import types and type guards
 import type {
   ConsoleLog,
   HmrScreenshotData,
   SweetlinkCommand,
   SweetlinkResponse,
+} from '../types.js';
+import {
+  getErrorMessage,
+  isDesignReviewScreenshotData,
+  isSaveOutlineData,
+  isSaveSchemaData,
+  isSaveScreenshotData,
+  isSaveSettingsData,
 } from '../types.js';
 
 // Import constants
@@ -47,12 +55,11 @@ function sendSuccess(ws: WebSocket, type: string, data: Record<string, unknown>)
  * Send an error response to the WebSocket client
  */
 function sendError(ws: WebSocket, type: string, error: unknown): void {
-  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   ws.send(
     JSON.stringify({
       success: false,
       type,
-      error: errorMessage,
+      error: getErrorMessage(error),
       timestamp: Date.now(),
     })
   );
@@ -320,92 +327,91 @@ function setupServerHandlers(server: WebSocketServer) {
 
         // Handle browser-originated save commands
         const clientInfo = clients.get(ws);
-        const isBrowserWithData = command.data && clientInfo?.type === 'browser';
+        const isBrowserClient = clientInfo?.type === 'browser';
 
-        if (command.type === 'save-screenshot' && isBrowserWithData) {
+        if (command.type === 'save-screenshot' && isBrowserClient) {
+          if (!isSaveScreenshotData(command.data)) {
+            sendError(ws, 'screenshot-error', 'Invalid screenshot data');
+            return;
+          }
           try {
-            const savedPath = await handleSaveScreenshot(
-              command.data as Parameters<typeof handleSaveScreenshot>[0]
-            );
+            const savedPath = await handleSaveScreenshot(command.data);
             console.log(`[Sweetlink] Screenshot saved to ${savedPath}`);
             sendSuccess(ws, 'screenshot-saved', { path: savedPath });
           } catch (error) {
-            console.error(
-              '[Sweetlink] Screenshot save failed:',
-              error instanceof Error ? error.message : error
-            );
+            console.error('[Sweetlink] Screenshot save failed:', getErrorMessage(error));
             sendError(ws, 'screenshot-error', error);
           }
           return;
         }
 
-        if (command.type === 'design-review-screenshot' && isBrowserWithData) {
+        if (command.type === 'design-review-screenshot' && isBrowserClient) {
+          if (!isDesignReviewScreenshotData(command.data)) {
+            sendError(ws, 'design-review-error', 'Invalid design review data');
+            return;
+          }
           try {
-            const result = await handleDesignReviewScreenshot(
-              command.data as Parameters<typeof handleDesignReviewScreenshot>[0]
-            );
+            const result = await handleDesignReviewScreenshot(command.data);
             console.log(`[Sweetlink] Design review saved to ${result.reviewPath}`);
             sendSuccess(ws, 'design-review-saved', {
               screenshotPath: result.screenshotPath,
               reviewPath: result.reviewPath,
             });
           } catch (error) {
-            console.error(
-              '[Sweetlink] Design review failed:',
-              error instanceof Error ? error.message : error
-            );
+            console.error('[Sweetlink] Design review failed:', getErrorMessage(error));
             sendError(ws, 'design-review-error', error);
           }
           return;
         }
 
-        if (command.type === 'save-outline' && isBrowserWithData) {
+        if (command.type === 'save-outline' && isBrowserClient) {
+          if (!isSaveOutlineData(command.data)) {
+            sendError(ws, 'outline-error', 'Invalid outline data');
+            return;
+          }
           try {
-            const result = await handleSaveOutline(
-              command.data as Parameters<typeof handleSaveOutline>[0]
-            );
+            const result = await handleSaveOutline(command.data);
             console.log(`[Sweetlink] Outline saved to ${result.outlinePath}`);
             sendSuccess(ws, 'outline-saved', { outlinePath: result.outlinePath });
           } catch (error) {
-            console.error(
-              '[Sweetlink] Outline save failed:',
-              error instanceof Error ? error.message : error
-            );
+            console.error('[Sweetlink] Outline save failed:', getErrorMessage(error));
             sendError(ws, 'outline-error', error);
           }
           return;
         }
 
-        if (command.type === 'save-schema' && isBrowserWithData) {
+        if (command.type === 'save-schema' && isBrowserClient) {
+          if (!isSaveSchemaData(command.data)) {
+            sendError(ws, 'schema-error', 'Invalid schema data');
+            return;
+          }
           try {
-            const result = await handleSaveSchema(
-              command.data as Parameters<typeof handleSaveSchema>[0]
-            );
+            const result = await handleSaveSchema(command.data);
             console.log(`[Sweetlink] Schema saved to ${result.schemaPath}`);
             sendSuccess(ws, 'schema-saved', { schemaPath: result.schemaPath });
           } catch (error) {
-            console.error(
-              '[Sweetlink] Schema save failed:',
-              error instanceof Error ? error.message : error
-            );
+            console.error('[Sweetlink] Schema save failed:', getErrorMessage(error));
             sendError(ws, 'schema-error', error);
           }
           return;
         }
 
         // Handle save-settings from browser
-        if (command.type === 'save-settings' && isBrowserWithData) {
+        if (command.type === 'save-settings' && isBrowserClient) {
+          if (!isSaveSettingsData(command.data)) {
+            sendError(ws, 'settings-error', 'Invalid settings data');
+            return;
+          }
           try {
+            // Type assertion after validation - handler expects DevBarSettings
+            // Cast through unknown as the runtime validation ensures structure
             const result = await handleSaveSettings(
-              command.data as Parameters<typeof handleSaveSettings>[0]
+              command.data as unknown as Parameters<typeof handleSaveSettings>[0]
             );
             console.log(`[Sweetlink] Settings saved to ${result.settingsPath}`);
             sendSuccess(ws, 'settings-saved', { settingsPath: result.settingsPath });
           } catch (error) {
-            console.error(
-              '[Sweetlink] Settings save failed:',
-              error instanceof Error ? error.message : error
-            );
+            console.error('[Sweetlink] Settings save failed:', getErrorMessage(error));
             sendError(ws, 'settings-error', error);
           }
           return;

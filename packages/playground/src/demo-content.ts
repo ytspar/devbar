@@ -366,7 +366,7 @@ function createFooter(): HTMLElement {
   footer.className = 'demo-footer';
 
   const text = document.createElement('p');
-  text.textContent = 'DevTools Playground - Built with Vite';
+  text.textContent = 'DevBar Playground - Built with Vite';
   footer.appendChild(text);
 
   const links = document.createElement('div');

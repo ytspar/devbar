@@ -1,5 +1,5 @@
 /**
- * DevTools Playground - Main entry point
+ * DevBar Playground - Main entry point
  *
  * Initializes the DevBar and renders demo content for testing.
  * Uses shared theme from @ytspar/devbar for consistent styling.

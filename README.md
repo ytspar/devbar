@@ -1,10 +1,10 @@
-# @ytspar/devtools
+# devbar
 
-Development tools monorepo containing **DevBar** (development toolbar) and **Sweetlink** (autonomous AI agent toolkit for browser debugging).
+Development toolbar and AI debugging toolkit. This monorepo contains **DevBar** (development toolbar) and **Sweetlink** (autonomous AI agent toolkit for browser debugging).
 
 ## What Is This?
 
-This monorepo provides tools that enable AI agents (like Claude) to autonomously debug, test, and iterate on web applications through real-time browser interaction:
+Tools that enable AI agents (like Claude) to autonomously debug, test, and iterate on web applications through real-time browser interaction:
 
 - **[@ytspar/devbar](./packages/devbar)** - A lightweight development toolbar showing breakpoints, performance stats, console badges, and screenshot capture. Framework-agnostic (vanilla JS) with optional Sweetlink integration.
 

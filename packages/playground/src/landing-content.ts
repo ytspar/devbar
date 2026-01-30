@@ -1,5 +1,5 @@
 /**
- * Landing Page Content for DevTools
+ * Landing Page Content for DevBar
  *
  * Creates the hero section and documentation overview using DevBar styling.
  */
@@ -46,7 +46,7 @@ export function createLandingHero(): HTMLElement {
   // Logo/Title
   const title = document.createElement('h1');
   title.className = 'landing-title';
-  title.textContent = 'devtools';
+  title.textContent = 'devbar';
   hero.appendChild(title);
 
   // Tagline
@@ -54,7 +54,7 @@ export function createLandingHero(): HTMLElement {
     createTextElement(
       'p',
       'landing-tagline',
-      'Autonomous AI development toolkit for browser debugging'
+      'Development toolbar and AI debugging toolkit'
     )
   );
 

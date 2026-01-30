@@ -521,4 +521,4 @@ MIT
 ## Credits
 
 - Inspired by [Peter Steinberger's autonomous debugging](https://x.com/steipete/status/1981998733736001727)
-- Powered by html2canvas, Puppeteer, and WebSocket
+- Powered by html2canvas, Playwright, and WebSocket

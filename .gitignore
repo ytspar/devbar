@@ -22,6 +22,8 @@ pnpm-debug.log*
 
 # Test output
 coverage/
+playwright-report/
+test-results/
 
 # Temporary files
 .tmp/

@@ -12,8 +12,15 @@ import {
   injectThemeCSS,
   STORAGE_KEYS,
 } from '@ytspar/devbar';
-import { createDemoContent } from './demo-content';
-import { initPlaygroundControls } from './playground-controls';
+import { createDemoContent } from './demo-content.js';
+import {
+  createDemoSectionDivider,
+  createFeaturesSection,
+  createLandingHero,
+  createPackagesSection,
+  createQuickStartSection,
+} from './landing-content.js';
+import { initPlaygroundControls } from './playground-controls.js';
 
 /**
  * Apply the current theme to the playground
@@ -54,9 +61,17 @@ window.addEventListener('devbar-theme-change', () => {
   applyTheme();
 });
 
-// Render demo content
+// Render landing page and demo content
 const app = document.getElementById('app');
 if (app) {
+  // Landing sections
+  app.appendChild(createLandingHero());
+  app.appendChild(createFeaturesSection());
+  app.appendChild(createPackagesSection());
+  app.appendChild(createQuickStartSection());
+  app.appendChild(createDemoSectionDivider());
+
+  // Interactive demo
   app.appendChild(createDemoContent());
 }
 

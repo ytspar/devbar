@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/*.d.ts", "!**/pnpm-lock.yaml"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/*.d.ts",
+      "!**/pnpm-lock.yaml",
+      "!**/playwright-report",
+      "!**/.tmp"
+    ]
   },
   "formatter": {
     "enabled": true,

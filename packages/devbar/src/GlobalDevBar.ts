@@ -976,12 +976,10 @@ export class GlobalDevBar {
     const METRIC_WIDTH = 95; // "FCP 1234MS |" including separator
     const BADGE_WIDTH = 30; // Each console badge
     const ACTION_BUTTON_WIDTH = 30; // Each action button
-    const BREAKPOINT_WIDTH = 120; // "MD - 1234x5678 |"
-    const CONNECTION_DOT_WIDTH = 20; // Connection indicator
-    const ELLIPSIS_WIDTH = 28; // "···" button
-    const CONTAINER_PADDING = 32; // Internal padding and gaps
-    const NEXTJS_BAR_WIDTH = 80; // Space reserved for Next.js dev bar on left
-    const RIGHT_MARGIN = 16; // Small margin on right edge
+    const BREAKPOINT_WIDTH = 100; // "MD - 1234x5678 |" (reduced estimate)
+    const CONNECTION_DOT_WIDTH = 16; // Connection indicator
+    const ELLIPSIS_WIDTH = 24; // "···" button
+    const CONTAINER_PADDING = 24; // Internal padding and gaps
 
     // Count visible badges
     const { errorCount, warningCount, infoCount } = this.getLogCounts();
@@ -989,18 +987,26 @@ export class GlobalDevBar {
       (errorCount > 0 ? 1 : 0) + (warningCount > 0 ? 1 : 0) + (infoCount > 0 ? 1 : 0);
 
     // Count action buttons (screenshot, AI review, outline, schema, settings, collapse)
-    const { showScreenshot } = this.options;
+    const { showScreenshot, position } = this.options;
     const actionButtonCount = (showScreenshot ? 1 : 0) + 5; // 5 always-visible buttons
 
-    // Calculate available width for metrics
-    // DevBar spans from NEXTJS_BAR_WIDTH to (windowWidth - RIGHT_MARGIN)
+    // Calculate available width for metrics based on position
+    // Centered: 16px margin each side = 32px total
+    // Left/right: 80px for Next.js bar + 16px margin = 96px total
     const windowWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
-    const containerWidth = windowWidth - NEXTJS_BAR_WIDTH - RIGHT_MARGIN;
+    const isCentered = position === 'bottom-center';
+    const margins = isCentered ? 32 : 96;
+    const containerWidth = windowWidth - margins;
+
+    // At small screens (<640px), action buttons wrap to second row and don't take horizontal space
+    const buttonsWrap = windowWidth < 640;
+    const buttonWidth = buttonsWrap ? 0 : actionButtonCount * ACTION_BUTTON_WIDTH;
+
     const fixedWidth =
       CONNECTION_DOT_WIDTH +
       BREAKPOINT_WIDTH +
       badgeCount * BADGE_WIDTH +
-      actionButtonCount * ACTION_BUTTON_WIDTH +
+      buttonWidth +
       CONTAINER_PADDING;
 
     const availableForMetrics = containerWidth - fixedWidth;
@@ -2786,18 +2792,18 @@ export class GlobalDevBar {
     posLabel.textContent = 'Position';
     positionRow.appendChild(posLabel);
 
-    // Mini-map container
+    // Mini-map container (represents screen)
     const miniMap = document.createElement('div');
     Object.assign(miniMap.style, {
       position: 'relative',
       width: '100%',
-      height: '50px',
+      height: '56px',
       backgroundColor: 'var(--devbar-color-bg-input)',
       border: `1px solid ${color}30`,
       borderRadius: '4px',
     });
 
-    // Position indicator styles
+    // Position indicator styles - squares in corners
     type PositionValue =
       | 'bottom-left'
       | 'bottom-right'
@@ -2809,10 +2815,10 @@ export class GlobalDevBar {
       style: Partial<CSSStyleDeclaration>;
       title: string;
     }> = [
-      { value: 'top-left', style: { top: '8px', left: '10%' }, title: 'Top Left' },
-      { value: 'top-right', style: { top: '8px', right: '6%' }, title: 'Top Right' },
-      { value: 'bottom-left', style: { bottom: '8px', left: '10%' }, title: 'Bottom Left' },
-      { value: 'bottom-right', style: { bottom: '8px', right: '6%' }, title: 'Bottom Right' },
+      { value: 'top-left', style: { top: '6px', left: '6px' }, title: 'Top Left' },
+      { value: 'top-right', style: { top: '6px', right: '6px' }, title: 'Top Right' },
+      { value: 'bottom-left', style: { bottom: '6px', left: '6px' }, title: 'Bottom Left' },
+      { value: 'bottom-right', style: { bottom: '6px', right: '6px' }, title: 'Bottom Right' },
       {
         value: 'bottom-center',
         style: { bottom: '6px', left: '50%', transform: 'translateX(-50%)' },
@@ -2826,11 +2832,11 @@ export class GlobalDevBar {
 
       Object.assign(indicator.style, {
         position: 'absolute',
-        width: '20px',
-        height: '6px',
+        width: '10px',
+        height: '10px',
         backgroundColor: isActive ? accentColor : CSS_COLORS.textMuted,
         border: `1px solid ${isActive ? accentColor : CSS_COLORS.textMuted}`,
-        borderRadius: '2px',
+        borderRadius: '3px',
         cursor: 'pointer',
         padding: '0',
         transition: 'all 150ms',
@@ -3202,11 +3208,11 @@ export class GlobalDevBar {
     this.resetPositionStyles(wrapper);
 
     // Calculate size values with overrides or defaults
-    // Width always fit-content, maxWidth prevents overlap with other dev bars
-    // BASE breakpoint (<640px) wraps buttons to centered second row via CSS
+    // Use fit-content so DevBar only takes space it needs, but allow expansion up to max
+    // Centered: 16px margin each side. Left/right: 80px for Next.js bar + 16px margin
     const defaultWidth = 'fit-content';
     const defaultMinWidth = 'auto';
-    const defaultMaxWidth = isCentered ? 'calc(100vw - 140px)' : 'calc(100vw - 32px)';
+    const defaultMaxWidth = isCentered ? 'calc(100vw - 32px)' : 'calc(100vw - 96px)';
 
     Object.assign(wrapper.style, {
       position: 'fixed',

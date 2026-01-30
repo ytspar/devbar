@@ -37,24 +37,20 @@ export function createDemoContent(): HTMLElement {
 }
 
 /**
- * Create header with navigation
+ * Create header with navigation for demo sections
  */
 function createHeader(): HTMLElement {
   const header = document.createElement('header');
   header.className = 'demo-header';
 
-  const h1 = document.createElement('h1');
-  h1.textContent = 'DevTools Playground';
-  header.appendChild(h1);
-
-  const subtitle = document.createElement('p');
-  subtitle.className = 'subtitle';
-  subtitle.textContent = 'Test environment for DevBar and Sweetlink packages';
-  header.appendChild(subtitle);
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Test the DevBar below';
+  h2.style.marginBottom = '1rem';
+  header.appendChild(h2);
 
   // Navigation for testing outline extraction
   const nav = document.createElement('nav');
-  nav.setAttribute('aria-label', 'Main navigation');
+  nav.setAttribute('aria-label', 'Demo navigation');
 
   const navLinks = ['Console Tests', 'DOM Queries', 'Forms', 'Tables'];
   navLinks.forEach((text, i) => {

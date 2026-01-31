@@ -1,6 +1,8 @@
-<svg width="32" height="32" viewBox="0 0 1420 1419" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1420" height="1419" viewBox="0 0 1420 1419" fill="none" xmlns="http://www.w3.org/2000/svg">
 <style>
+  /* Default: dark mode (emerald green on dark background) */
   .logo-fill { fill: #10b981; }
+  /* Light mode: darker emerald for better contrast */
   @media (prefers-color-scheme: light) {
     .logo-fill { fill: #047857; }
   }

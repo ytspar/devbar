@@ -80,6 +80,17 @@ export {
   PRESET_RESPONSIVE,
 } from './presets.js';
 export { extractPageSchema, schemaToMarkdown } from './schema.js';
+// Settings management
+export {
+  ACCENT_COLOR_PRESETS,
+  DEFAULT_SETTINGS,
+  type DevBarPosition,
+  type DevBarSettings,
+  getSettingsManager,
+  type MetricsVisibility,
+  type SettingsChangeCallback,
+} from './settings.js';
+
 // Storage inspection utilities
 export {
   beautifyJson,
@@ -111,6 +122,16 @@ export type {
   SweetlinkCommand,
   ThemeMode,
 } from './types.js';
+
+// Logo exports for library branding
+export {
+  type CreateLogoOptions,
+  createDevBarLogo,
+  DEVBAR_LOGO_COLORS,
+  DEVBAR_LOGO_PATH,
+  DEVBAR_LOGO_VIEWBOX,
+  getDevBarLogoSvg,
+} from './ui/icons.js';
 
 // Re-export utilities for external use
 export {

@@ -15,6 +15,50 @@ function createTextElement(tag: string, className: string, text: string): HTMLEl
 }
 
 /**
+ * Helper to create a notched card with wing header
+ */
+function createNotchedCard(
+  prefix: string,
+  title: string,
+  titleTag: string = 'h3'
+): { card: HTMLElement; content: HTMLElement } {
+  const card = document.createElement('div');
+  card.className = `${prefix}-card`;
+
+  // Header with wings
+  const header = document.createElement('div');
+  header.className = `${prefix}-card-header`;
+
+  const leftWing = document.createElement('div');
+  leftWing.className = `${prefix}-card-wing ${prefix}-card-wing-left`;
+
+  const titleEl = document.createElement(titleTag);
+  titleEl.className =
+    prefix === 'quickstart-step'
+      ? 'step-title'
+      : prefix === 'package'
+        ? 'package-name'
+        : 'feature-title';
+  titleEl.textContent = title;
+
+  const rightWing = document.createElement('div');
+  rightWing.className = `${prefix}-card-wing ${prefix}-card-wing-right`;
+
+  header.appendChild(leftWing);
+  header.appendChild(titleEl);
+  header.appendChild(rightWing);
+
+  // Content
+  const content = document.createElement('div');
+  content.className = `${prefix}-card-content`;
+
+  card.appendChild(header);
+  card.appendChild(content);
+
+  return { card, content };
+}
+
+/**
  * Helper to create an anchor element
  */
 function createLink(href: string, child: HTMLElement): HTMLAnchorElement {
@@ -43,11 +87,21 @@ export function createLandingHero(): HTMLElement {
   const hero = document.createElement('section');
   hero.className = 'landing-hero';
 
-  // Logo/Title
-  const title = document.createElement('h1');
-  title.className = 'landing-title';
-  title.textContent = 'devbar';
-  hero.appendChild(title);
+  // Logo image (includes "devbar" text) - animated version with sliding shutter
+  const logoContainer = document.createElement('div');
+  logoContainer.className = 'landing-logo';
+  const logo = document.createElement('object');
+  logo.type = 'image/svg+xml';
+  logo.data = '/logo/devbar-animated.svg';
+  logo.className = 'landing-logo-img';
+  logo.setAttribute('aria-label', 'DevBar');
+  // Fallback for browsers that don't support object
+  const fallbackImg = document.createElement('img');
+  fallbackImg.src = '/logo/devbar-themed.svg';
+  fallbackImg.alt = 'DevBar';
+  logo.appendChild(fallbackImg);
+  logoContainer.appendChild(logo);
+  hero.appendChild(logoContainer);
 
   // Tagline
   hero.appendChild(
@@ -313,12 +367,8 @@ export function createFeaturesSection(): HTMLElement {
   grid.className = 'features-grid';
 
   for (const feature of features) {
-    const card = document.createElement('div');
-    card.className = 'feature-card';
-
-    card.appendChild(createTextElement('h3', 'feature-title', feature.title));
-    card.appendChild(createTextElement('p', 'feature-description', feature.description));
-
+    const { card, content } = createNotchedCard('feature', feature.title);
+    content.appendChild(createTextElement('p', 'feature-description', feature.description));
     grid.appendChild(card);
   }
 
@@ -372,12 +422,8 @@ export function createSweetlinkSection(): HTMLElement {
   grid.className = 'features-grid';
 
   for (const feature of features) {
-    const card = document.createElement('div');
-    card.className = 'feature-card';
-
-    card.appendChild(createTextElement('h3', 'feature-title', feature.title));
-    card.appendChild(createTextElement('p', 'feature-description', feature.description));
-
+    const { card, content } = createNotchedCard('feature', feature.title);
+    content.appendChild(createTextElement('p', 'feature-description', feature.description));
     grid.appendChild(card);
   }
 
@@ -425,11 +471,8 @@ export function createPackagesSection(): HTMLElement {
   grid.className = 'packages-grid';
 
   for (const pkg of packages) {
-    const card = document.createElement('div');
-    card.className = 'package-card';
-
-    card.appendChild(createTextElement('h3', 'package-name', pkg.name));
-    card.appendChild(createTextElement('p', 'package-description', pkg.description));
+    const { card, content } = createNotchedCard('package', pkg.name);
+    content.appendChild(createTextElement('p', 'package-description', pkg.description));
 
     const list = document.createElement('ul');
     list.className = 'package-features';
@@ -438,7 +481,7 @@ export function createPackagesSection(): HTMLElement {
       li.textContent = feature;
       list.appendChild(li);
     }
-    card.appendChild(list);
+    content.appendChild(list);
 
     grid.appendChild(card);
   }
@@ -456,21 +499,20 @@ export function createQuickStartSection(): HTMLElement {
 
   section.appendChild(createTextElement('h2', 'section-heading', 'Quick Start'));
 
-  const steps = document.createElement('div');
-  steps.className = 'quickstart-steps';
+  const stepsContainer = document.createElement('div');
+  stepsContainer.className = 'quickstart-steps';
 
   // Step 1: Install
-  const installStep = document.createElement('div');
-  installStep.className = 'quickstart-step';
-  installStep.appendChild(createTextElement('h3', 'step-title', '1. Install'));
-  installStep.appendChild(highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash'));
-  steps.appendChild(installStep);
+  const { card: step1, content: content1 } = createNotchedCard('quickstart-step', '1. Install');
+  content1.appendChild(highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash'));
+  stepsContainer.appendChild(step1);
 
   // Step 2: Vite setup
-  const viteStep = document.createElement('div');
-  viteStep.className = 'quickstart-step';
-  viteStep.appendChild(createTextElement('h3', 'step-title', '2. Add Vite Plugin'));
-  viteStep.appendChild(
+  const { card: step2, content: content2 } = createNotchedCard(
+    'quickstart-step',
+    '2. Add Vite Plugin'
+  );
+  content2.appendChild(
     highlightCode(
       `// vite.config.ts
 import { sweetlink } from '@ytspar/sweetlink/vite'
@@ -481,13 +523,14 @@ export default defineConfig({
       'typescript'
     )
   );
-  steps.appendChild(viteStep);
+  stepsContainer.appendChild(step2);
 
   // Step 3: DevBar setup
-  const devbarStep = document.createElement('div');
-  devbarStep.className = 'quickstart-step';
-  devbarStep.appendChild(createTextElement('h3', 'step-title', '3. Initialize DevBar'));
-  devbarStep.appendChild(
+  const { card: step3, content: content3 } = createNotchedCard(
+    'quickstart-step',
+    '3. Initialize DevBar'
+  );
+  content3.appendChild(
     highlightCode(
       `// main.ts
 import { initGlobalDevBar } from '@ytspar/devbar'
@@ -498,13 +541,11 @@ if (import.meta.env.DEV) {
       'typescript'
     )
   );
-  steps.appendChild(devbarStep);
+  stepsContainer.appendChild(step3);
 
   // Step 4: CLI usage
-  const cliStep = document.createElement('div');
-  cliStep.className = 'quickstart-step';
-  cliStep.appendChild(createTextElement('h3', 'step-title', '4. Use CLI'));
-  cliStep.appendChild(
+  const { card: step4, content: content4 } = createNotchedCard('quickstart-step', '4. Use CLI');
+  content4.appendChild(
     highlightCode(
       `pnpm sweetlink screenshot   # Capture page
 pnpm sweetlink logs         # Get console output
@@ -512,9 +553,9 @@ pnpm sweetlink refresh      # Reload browser`,
       'bash'
     )
   );
-  steps.appendChild(cliStep);
+  stepsContainer.appendChild(step4);
 
-  section.appendChild(steps);
+  section.appendChild(stepsContainer);
   return section;
 }
 

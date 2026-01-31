@@ -27,15 +27,16 @@
 </style>
 
 <defs>
-  <!-- Mask to hide the ENTIRE shutter area from disk body -->
-  <!-- The shutter is the large inset block at the top (x=198-1069, y=95-453) -->
+  <!-- Mask: only hide disk body where magnetic disk IS visible (x=763-800, where disk overlaps open window) -->
+  <!-- When closed (window 813-966): window shows GREEN disk body (not masked there) -->
+  <!-- When open (window 763-916): window shows BROWN magnetic disk at 763-800 (masked), green at 800-916 -->
   <mask id="disk-body-mask">
     <rect width="100%" height="100%" fill="white"/>
-    <rect x="198" y="95" width="871" height="358" fill="black"/>
+    <rect x="763" y="160" width="37" height="240" fill="black"/>
   </mask>
-  <!-- Clip for the frame opening where shutter slides and magnetic disk is visible -->
-  <clipPath id="frame-clip">
-    <rect x="198" y="95" width="871" height="358"/>
+  <!-- Clip for magnetic disk - same area as mask -->
+  <clipPath id="disk-clip">
+    <rect x="763" y="160" width="37" height="240"/>
   </clipPath>
 </defs>
 
@@ -46,9 +47,9 @@
 <rect class="label-line" x="250" y="1080" width="920" height="8"/>
 <rect class="label-line" x="250" y="1150" width="920" height="8"/>
 
-<!-- Layer 2: Magnetic disk (dark brown) - positioned so window reveals it when shutter slides -->
-<!-- Disk right edge at ~800. Window closed=813-966 (no overlap). Window open=763-916 (overlaps 763-800) -->
-<g clip-path="url(#frame-clip)">
+<!-- Layer 2: Magnetic disk (dark brown) - only visible where disk body is masked -->
+<!-- Clipped to x=763-800 where it overlaps with the open window position -->
+<g clip-path="url(#disk-clip)">
   <circle class="magnetic-disk" cx="400" cy="280" r="400"/>
 </g>
 

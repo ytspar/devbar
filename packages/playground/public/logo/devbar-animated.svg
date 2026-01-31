@@ -51,12 +51,11 @@
 </g>
 
 <!-- Layer 3: SOLID shutter that slides LEFT to reveal magnetic disk -->
-<!-- Shutter width = container width (153px). When it slides -50px, reveals 50px of magnetic disk on right -->
-<!-- Closed: covers x=813-966 (full container). Open: covers x=763-916, reveals x=916-966 -->
-<g clip-path="url(#container-clip)">
-  <g class="shutter-group">
-    <rect class="shutter" x="813" y="95" width="153" height="306"/>
-  </g>
+<!-- NO clip-path so the ENTIRE block visually slides (not just the visible portion) -->
+<!-- When it slides -50px, the left edge moves over the disk body (same color, invisible) -->
+<!-- and the right edge reveals the magnetic disk beneath -->
+<g class="shutter-group">
+  <rect class="shutter" x="813" y="95" width="153" height="306"/>
 </g>
 
 </svg>

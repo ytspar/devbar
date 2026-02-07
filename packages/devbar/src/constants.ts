@@ -1,7 +1,7 @@
 /**
- * DevBar Constants
+ * devbar Constants
  *
- * Shared constants used by the DevBar components.
+ * Shared constants used by the devbar components.
  */
 
 import type { ThemeMode } from './types.js';
@@ -131,7 +131,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
 // Storage Keys
 // ============================================================================
 
-/** LocalStorage keys for DevBar persistence */
+/** LocalStorage keys for devbar persistence */
 export const STORAGE_KEYS = {
   /** Theme mode preference: 'dark' | 'light' | 'system' */
   themeMode: 'devbar-theme-mode',
@@ -143,7 +143,7 @@ export const STORAGE_KEYS = {
 // Design System Theme
 // ============================================================================
 
-/** Complete DevBar design system theme */
+/** Complete devbar design system theme */
 export const DEVBAR_THEME = {
   colors: {
     // Primary accent
@@ -184,7 +184,7 @@ export const DEVBAR_THEME = {
     mono: "'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
   },
 
-  // Typography scale (matches DevBar UI)
+  // Typography scale (matches devbar UI)
   typography: {
     // Font sizes
     sizeXs: '0.625rem', // 10px - badges, tiny labels
@@ -354,7 +354,7 @@ function safeGetItem(key: string): string | null {
     return localStorage.getItem(key);
   } catch (error) {
     // Handle SecurityError in private browsing or iframe contexts
-    console.warn('[DevBar] localStorage access failed:', error);
+    console.warn('[devbar] localStorage access failed:', error);
     return null;
   }
 }
@@ -371,9 +371,9 @@ function safeSetItem(key: string, value: string): boolean {
     // Handle QuotaExceededError or SecurityError
     if (error instanceof Error) {
       if (error.name === 'QuotaExceededError') {
-        console.warn('[DevBar] localStorage quota exceeded');
+        console.warn('[devbar] localStorage quota exceeded');
       } else {
-        console.warn('[DevBar] localStorage access failed:', error.message);
+        console.warn('[devbar] localStorage access failed:', error.message);
       }
     }
     return false;
@@ -743,6 +743,10 @@ export const TOOLTIP_STYLES = `
 @keyframes devbar-collapse {
   0% { transform: scale(0.8); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
+}
+@keyframes devbar-collapsed-pulse {
+  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(16, 185, 129, 0.1); }
+  50% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px rgba(16, 185, 129, 0.4); }
 }
 /* Main row - single row by default (SM, MD, LG, XL) */
 .devbar-main {

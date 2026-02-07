@@ -1,7 +1,7 @@
 /**
  * Settings Handler
  *
- * Handles saving and loading DevBar settings to/from .devbar/settings.json
+ * Handles saving and loading devbar settings to/from .devbar/settings.json
  */
 
 import { promises as fs } from 'fs';
@@ -12,7 +12,7 @@ import { getProjectRoot } from '../index.js';
 // Constants
 // ============================================================================
 
-/** Directory for DevBar settings */
+/** Directory for devbar settings */
 export const SETTINGS_DIR = '.devbar';
 
 /** Settings file name */
@@ -23,7 +23,7 @@ export const SETTINGS_FILE = 'settings.json';
 // ============================================================================
 
 /**
- * DevBar settings schema (must match devbar package)
+ * devbar settings schema (must match devbar package)
  */
 export interface DevBarSettings {
   version: 1;

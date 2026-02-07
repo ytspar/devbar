@@ -1,7 +1,7 @@
 /**
- * DevBar Modals
+ * devbar Modals
  *
- * Modal creation utilities for the DevBar UI.
+ * Modal creation utilities for the devbar UI.
  */
 
 import { MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';

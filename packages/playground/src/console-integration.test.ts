@@ -1,8 +1,8 @@
 /**
- * Integration tests for console capture with DevBar
+ * Integration tests for console capture with devbar
  *
  * Tests that the ConsoleCapture class properly tracks log messages
- * and counts errors/warnings that would be displayed in DevBar badges.
+ * and counts errors/warnings that would be displayed in devbar badges.
  */
 
 import { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';

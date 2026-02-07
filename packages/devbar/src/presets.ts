@@ -1,7 +1,7 @@
 /**
- * DevBar Configuration Presets
+ * devbar Configuration Presets
  *
- * Pre-configured options for common DevBar use cases.
+ * Pre-configured options for common devbar use cases.
  */
 
 import { type GlobalDevBar, initGlobalDevBar } from './GlobalDevBar.js';
@@ -85,7 +85,7 @@ export const PRESET_RESPONSIVE: GlobalDevBarOptions = {
 
 /**
  * Debug preset - full features with debug logging
- * Good for troubleshooting DevBar itself
+ * Good for troubleshooting devbar itself
  */
 export const PRESET_DEBUG: GlobalDevBarOptions = {
   showMetrics: {
@@ -107,7 +107,7 @@ export const PRESET_DEBUG: GlobalDevBarOptions = {
 // ============================================================================
 
 /**
- * Initialize DevBar with minimal preset
+ * Initialize devbar with minimal preset
  * @param options Additional options to merge with preset
  */
 export function initMinimal(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {
@@ -115,7 +115,7 @@ export function initMinimal(options?: Partial<GlobalDevBarOptions>): GlobalDevBa
 }
 
 /**
- * Initialize DevBar with full preset
+ * Initialize devbar with full preset
  * @param options Additional options to merge with preset
  */
 export function initFull(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {
@@ -123,7 +123,7 @@ export function initFull(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {
 }
 
 /**
- * Initialize DevBar with performance preset
+ * Initialize devbar with performance preset
  * @param options Additional options to merge with preset
  */
 export function initPerformance(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {
@@ -131,7 +131,7 @@ export function initPerformance(options?: Partial<GlobalDevBarOptions>): GlobalD
 }
 
 /**
- * Initialize DevBar with responsive preset
+ * Initialize devbar with responsive preset
  * @param options Additional options to merge with preset
  */
 export function initResponsive(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {
@@ -139,7 +139,7 @@ export function initResponsive(options?: Partial<GlobalDevBarOptions>): GlobalDe
 }
 
 /**
- * Initialize DevBar with debug preset
+ * Initialize devbar with debug preset
  * @param options Additional options to merge with preset
  */
 export function initDebug(options?: Partial<GlobalDevBarOptions>): GlobalDevBar {

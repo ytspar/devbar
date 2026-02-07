@@ -1,7 +1,7 @@
 /**
- * DevBar Settings Persistence
+ * devbar Settings Persistence
  *
- * Handles saving and loading DevBar settings with Sweetlink server persistence
+ * Handles saving and loading devbar settings with Sweetlink server persistence
  * and localStorage fallback.
  */
 
@@ -12,7 +12,7 @@ import type { ThemeMode } from './types.js';
 // ============================================================================
 
 /**
- * Position options for the DevBar
+ * Position options for the devbar
  */
 export type DevBarPosition =
   | 'bottom-left'
@@ -34,7 +34,7 @@ export interface MetricsVisibility {
 }
 
 /**
- * Complete DevBar settings schema
+ * Complete devbar settings schema
  */
 export interface DevBarSettings {
   /** Schema version for future migrations */
@@ -110,7 +110,7 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
 // Storage Keys
 // ============================================================================
 
-/** LocalStorage key for DevBar settings fallback */
+/** LocalStorage key for devbar settings fallback */
 export const SETTINGS_STORAGE_KEY = 'devbar-settings';
 
 // ============================================================================
@@ -123,7 +123,7 @@ export const SETTINGS_STORAGE_KEY = 'devbar-settings';
 export type SettingsChangeCallback = (settings: DevBarSettings) => void;
 
 /**
- * SettingsManager handles loading and saving DevBar settings.
+ * SettingsManager handles loading and saving devbar settings.
  *
  * Storage priority:
  * 1. Sweetlink server (.devbar/settings.json) when connected
@@ -199,7 +199,7 @@ export class SettingsManager {
           this.saveToLocalStorage(this.settings);
         }
       } catch (error) {
-        console.warn('[DevBar] Failed to load settings from server, using localStorage:', error);
+        console.warn('[devbar] Failed to load settings from server, using localStorage:', error);
       }
     }
 
@@ -297,7 +297,7 @@ export class SettingsManager {
       try {
         callback(this.settings);
       } catch (error) {
-        console.error('[DevBar] Settings change callback error:', error);
+        console.error('[devbar] Settings change callback error:', error);
       }
     }
   }
@@ -316,7 +316,7 @@ export class SettingsManager {
       const parsed = JSON.parse(stored) as Partial<DevBarSettings>;
       return this.migrateSettings(parsed);
     } catch (error) {
-      console.warn('[DevBar] Failed to parse localStorage settings:', error);
+      console.warn('[devbar] Failed to parse localStorage settings:', error);
       return { ...DEFAULT_SETTINGS };
     }
   }
@@ -327,7 +327,7 @@ export class SettingsManager {
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     } catch (error) {
-      console.warn('[DevBar] Failed to save settings to localStorage:', error);
+      console.warn('[devbar] Failed to save settings to localStorage:', error);
     }
   }
 

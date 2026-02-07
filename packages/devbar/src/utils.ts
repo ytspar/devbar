@@ -1,7 +1,7 @@
 /**
- * DevBar Utility Functions
+ * devbar Utility Functions
  *
- * Re-exports shared utilities from @ytspar/sweetlink for use by DevBar components.
+ * Re-exports shared utilities from @ytspar/sweetlink for use by devbar components.
  * This avoids code duplication between packages.
  *
  * NOTE: We import from specific sub-paths to avoid pulling in Node.js-only modules

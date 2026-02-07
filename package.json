@@ -1,7 +1,7 @@
 {
   "name": "@ytspar/devbar-monorepo",
   "private": true,
-  "description": "DevBar development toolbar and Sweetlink AI debugging toolkit",
+  "description": "devbar development toolbar and sweetlink AI debugging toolkit",
   "workspaces": [
     "packages/*"
   ],

@@ -10,9 +10,38 @@
 import type { SweetlinkCommand, SweetlinkResponse } from '../../types.js';
 
 const MAX_CODE_LENGTH = 10000;
+const SCRIPT_RESULT_KEY = '__sweetlink_exec_result__';
 
 function errorResponse(error: string): SweetlinkResponse {
   return { success: false, error, timestamp: Date.now() };
+}
+
+/**
+ * Check whether an error was caused by CSP blocking `unsafe-eval`.
+ */
+function isCspEvalBlocked(error: unknown): boolean {
+  return (
+    error instanceof EvalError ||
+    (error instanceof DOMException && error.message.includes('unsafe-eval'))
+  );
+}
+
+/**
+ * Execute code via inline `<script>` tag injection.
+ * Works on pages where CSP allows 'unsafe-inline' but not 'unsafe-eval'.
+ */
+function execViaScriptTag(code: string): unknown {
+  const global = window as unknown as Record<string, unknown>;
+  delete global[SCRIPT_RESULT_KEY];
+
+  const script = document.createElement('script');
+  script.textContent = `window["${SCRIPT_RESULT_KEY}"] = (function(){ return (${code}); })()`;
+  document.documentElement.appendChild(script);
+  script.remove();
+
+  const result = global[SCRIPT_RESULT_KEY];
+  delete global[SCRIPT_RESULT_KEY];
+  return result;
 }
 
 /**
@@ -37,9 +66,17 @@ export function handleExecJS(command: SweetlinkCommand): SweetlinkResponse {
   }
 
   try {
-    // Execute the code - intentional for dev tools debugging
-    // eslint-disable-next-line no-eval
-    const result = (0, eval)(command.code);
+    let result: unknown;
+    try {
+      // eslint-disable-next-line no-eval
+      result = (0, eval)(command.code);
+    } catch (evalError) {
+      if (isCspEvalBlocked(evalError)) {
+        result = execViaScriptTag(command.code);
+      } else {
+        throw evalError;
+      }
+    }
 
     return {
       success: true,

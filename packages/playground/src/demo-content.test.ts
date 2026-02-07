@@ -2,7 +2,7 @@
  * Tests for demo-content log buttons
  *
  * Verifies that all console log buttons trigger the correct console methods
- * and that the DevBar's console capture properly tracks them.
+ * and that the devbar's console capture properly tracks them.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

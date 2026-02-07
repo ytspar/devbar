@@ -1,7 +1,7 @@
 /**
- * DevBar Type Definitions
+ * devbar Type Definitions
  *
- * Re-exports shared types from @ytspar/sweetlink and defines DevBar-specific types.
+ * Re-exports shared types from @ytspar/sweetlink and defines devbar-specific types.
  *
  * NOTE: We import from the types sub-path to avoid pulling in Node.js-only modules.
  */
@@ -15,16 +15,16 @@ export type {
 } from '@ytspar/sweetlink/types';
 
 // ============================================================================
-// DevBar Configuration Types
+// devbar Configuration Types
 // ============================================================================
 
 /**
- * Theme mode for DevBar display
+ * Theme mode for devbar display
  */
 export type ThemeMode = 'dark' | 'light' | 'system';
 
 /**
- * Debug configuration for DevBar
+ * Debug configuration for devbar
  * When true, all debug options are enabled.
  * When an object, specific options can be toggled.
  */

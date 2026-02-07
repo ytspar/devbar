@@ -1,5 +1,5 @@
 /**
- * DevBar Playground - Styles
+ * devbar Playground - Styles
  *
  * Uses CSS variables from @ytspar/devbar theme (injected via injectThemeCSS).
  * All colors, fonts, typography, and design tokens come from the shared theme.
@@ -41,65 +41,49 @@ body {
 
 /* Header */
 .demo-header {
-  text-align: center;
   margin-bottom: 3rem;
-  padding: 2rem;
-  background: var(--devbar-color-bg-card);
-  border: 1px solid var(--devbar-color-border);
-  border-radius: var(--devbar-radius-lg);
-  box-shadow: var(--devbar-shadow-lg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  padding: 1.5rem 0;
 }
 
-.demo-header h1 {
-  font-size: var(--devbar-text-2xl);
-  font-weight: var(--devbar-font-semibold);
-  color: var(--devbar-color-primary);
-  margin-bottom: 0.5rem;
-  letter-spacing: var(--devbar-tracking-tight);
-  text-shadow: 0 0 30px var(--devbar-color-primary-glow);
-}
-
-.demo-header .subtitle {
-  color: var(--devbar-color-text-secondary);
-  font-size: var(--devbar-text-lg);
-  margin-bottom: 1.5rem;
-  font-weight: var(--devbar-font-normal);
-}
-
+/* Navigation - text inset in horizontal line */
 .demo-header nav {
   display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+}
+
+.demo-header nav .nav-line {
+  flex: 1;
+  height: 0;
+  border-top: 1px solid var(--devbar-color-primary);
 }
 
 .demo-header nav a {
-  color: var(--devbar-color-text-muted);
+  color: var(--devbar-color-primary);
   text-decoration: none;
-  padding: 0.5rem 1rem;
-  border-radius: var(--devbar-radius-md);
-  border: 1px solid transparent;
-  font-size: var(--devbar-text-base);
+  font-size: 10px;
   font-weight: var(--devbar-font-medium);
   text-transform: uppercase;
-  letter-spacing: var(--devbar-tracking-wide);
-  transition: all var(--devbar-transition-fast);
+  letter-spacing: 0.1em;
+  padding: 0 1rem;
+  white-space: nowrap;
 }
 
 .demo-header nav a:hover {
-  color: var(--devbar-color-primary);
-  background-color: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
+  text-shadow: 0 0 8px var(--devbar-color-primary-glow);
 }
 
-/* Grid Layout */
+/* Masonry-style columns layout */
 .demo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
+  columns: 3;
+  column-gap: 1.5rem;
   margin-bottom: 2rem;
+}
+
+/* Prevent sections from breaking across columns */
+.demo-grid .demo-section {
+  break-inside: avoid;
+  margin-bottom: 0.75rem;
 }
 
 /* Sections - Notched Card Design */
@@ -184,7 +168,7 @@ body {
   line-height: var(--devbar-leading-normal);
 }
 
-/* Buttons - DevBar style */
+/* Buttons - devbar style */
 .button-group {
   display: flex;
   flex-wrap: wrap;
@@ -263,7 +247,7 @@ body {
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
 }
 
-/* Cards - DevBar category colors */
+/* Cards - devbar category colors */
 .card-container {
   display: flex;
   gap: 0.75rem;
@@ -348,7 +332,7 @@ body {
   color: var(--devbar-color-primary);
 }
 
-/* Forms - DevBar input style */
+/* Forms - devbar input style */
 .demo-form {
   display: flex;
   flex-direction: column;
@@ -518,7 +502,7 @@ body {
     0 0 8px var(--devbar-color-primary-glow);
 }
 
-/* Table - DevBar modal style */
+/* Table - devbar modal style */
 .demo-table {
   width: 100%;
   border-collapse: collapse;
@@ -554,7 +538,7 @@ body {
   color: var(--devbar-color-text);
 }
 
-/* Status badges - DevBar badge style */
+/* Status badges - devbar badge style */
 .status-badge {
   display: inline-block;
   padding: 0.25rem 0.5rem;
@@ -583,50 +567,86 @@ body {
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
 }
 
-/* Footer */
+/* Footer — mirrors the nav header as a bookend */
 .demo-footer {
-  text-align: center;
-  padding: 1.5rem;
-  background: var(--devbar-color-bg-card);
-  border: 1px solid var(--devbar-color-border);
-  border-radius: var(--devbar-radius-lg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: var(--devbar-color-text-muted);
-  font-size: var(--devbar-text-sm);
+  max-width: 1200px;
+  margin: 8rem auto 0;
+  padding: 0 2rem 3rem;
+}
+
+.footer-rule {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.footer-line {
+  flex: 1;
+  height: 0;
+  border-top: 1px solid var(--devbar-color-primary);
+}
+
+.footer-label {
+  color: var(--devbar-color-primary);
+  font-size: 10px;
+  font-weight: var(--devbar-font-medium);
+  font-family: var(--devbar-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0 1rem;
+  white-space: nowrap;
 }
 
 .footer-links {
-  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
 }
 
-.footer-links a {
-  color: var(--devbar-color-primary);
+.footer-handle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--devbar-color-text-muted);
   text-decoration: none;
-  transition: all var(--devbar-transition-fast);
+  font-size: 10px;
+  font-family: var(--devbar-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: color var(--devbar-transition-fast);
 }
 
-.footer-links a:hover {
+.footer-handle:hover {
+  color: var(--devbar-color-primary);
   text-shadow: 0 0 8px var(--devbar-color-primary-glow);
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .demo-grid {
+    columns: 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .demo-grid {
+    columns: 1;
+  }
+}
+
 @media (max-width: 640px) {
   .demo-container {
     padding: 1rem;
   }
 
   .demo-header {
-    padding: 1.25rem;
+    padding: 1rem 0;
   }
 
-  .demo-header h1 {
-    font-size: var(--devbar-text-xl);
-  }
-
-  .demo-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
+  .demo-header nav {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 
   .card-container {
@@ -653,16 +673,6 @@ body.theme-light {
     radial-gradient(ellipse at 80% 80%, rgba(124, 58, 237, 0.06) 0%, transparent 40%);
 }
 
-/* Header adjustments */
-.theme-light .demo-header h1 {
-  text-shadow: 0 0 20px rgba(4, 120, 87, 0.3);
-}
-
-/* Navigation hover */
-.theme-light .demo-header nav a:hover {
-  background-color: rgba(4, 120, 87, 0.12);
-  border-color: rgba(4, 120, 87, 0.4);
-}
 
 /* Button adjustments */
 .theme-light .btn.primary {
@@ -781,8 +791,8 @@ body.theme-light {
 }
 
 .landing-logo-img {
-  width: 200px;
-  height: 200px;
+  width: 400px;
+  height: auto;
 }
 
 .landing-tagline {
@@ -820,7 +830,6 @@ body.theme-light {
   padding: 0.75rem 1.25rem;
   background: var(--devbar-color-bg-card);
   border: 1px solid var(--devbar-color-border);
-  border-radius: var(--devbar-radius-lg);
   box-shadow: var(--devbar-shadow-md);
 }
 
@@ -1117,62 +1126,11 @@ body.theme-light {
   color: var(--devbar-color-text);
 }
 
-/* Sweetlink features section alternate style */
-.sweetlink-features {
-  background: linear-gradient(180deg, rgba(168, 85, 247, 0.03) 0%, transparent 100%);
-  padding-top: 3rem;
-  padding-bottom: 3rem;
-  margin-top: -1rem;
-}
-
-.sweetlink-features .section-heading {
-  color: var(--devbar-color-purple);
-  text-shadow: 0 0 30px rgba(168, 85, 247, 0.4);
-}
-
-.sweetlink-features .feature-card {
-  border-color: rgba(168, 85, 247, 0.2);
-}
-
-.sweetlink-features .feature-card:hover {
-  border-color: rgba(168, 85, 247, 0.4);
-  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.15);
-}
-
-.sweetlink-features .feature-title {
-  color: var(--devbar-color-purple);
-}
-
-/* Demo Divider */
-.demo-divider {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  max-width: 1200px;
-  margin: 3rem auto;
-  padding: 0 2rem;
-}
-
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(to right, transparent, var(--devbar-color-primary), transparent);
-}
-
-.divider-text {
-  font-size: var(--devbar-text-xl);
-  font-weight: var(--devbar-font-semibold);
-  color: var(--devbar-color-primary);
-  text-transform: uppercase;
-  letter-spacing: var(--devbar-tracking-wide);
-  white-space: nowrap;
-}
 
 /* Responsive Landing */
 @media (max-width: 768px) {
   .landing-logo-img {
-    width: 160px;
-    height: 160px;
+    width: 320px;
   }
 
   .landing-tagline {
@@ -1195,8 +1153,7 @@ body.theme-light {
   }
 
   .landing-logo-img {
-    width: 140px;
-    height: 140px;
+    width: 260px;
   }
 
   .landing-features,

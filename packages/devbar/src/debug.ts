@@ -1,7 +1,7 @@
 /**
- * DevBar Debug Utilities
+ * devbar Debug Utilities
  *
- * Debug logging system for DevBar lifecycle, state, and events.
+ * Debug logging system for devbar lifecycle, state, and events.
  */
 
 import type { DebugConfig } from './types.js';
@@ -32,11 +32,11 @@ export function normalizeDebugConfig(debug: boolean | DebugConfig | undefined): 
 }
 
 /**
- * Debug logger for DevBar
+ * Debug logger for devbar
  */
 export class DebugLogger {
   private config: DebugConfig;
-  private prefix = '[DevBar]';
+  private prefix = '[devbar]';
 
   constructor(config: DebugConfig) {
     this.config = config;

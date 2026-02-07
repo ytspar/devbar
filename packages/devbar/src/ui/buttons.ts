@@ -1,7 +1,7 @@
 /**
- * DevBar Buttons
+ * devbar Buttons
  *
- * Button creation and styling utilities for the DevBar UI.
+ * Button creation and styling utilities for the devbar UI.
  */
 
 import { ACTION_BUTTON_BASE_STYLES } from '../constants.js';

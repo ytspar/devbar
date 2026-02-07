@@ -213,7 +213,7 @@ describe('extractDocumentOutline', () => {
     document.body.innerHTML = `
       <h1>Main Content</h1>
       <div data-devbar="true">
-        <h2>DevBar Content</h2>
+        <h2>devbar Content</h2>
       </div>
     `;
     const outline = extractDocumentOutline();

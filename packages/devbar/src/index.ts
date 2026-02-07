@@ -1,4 +1,4 @@
-// DevBar - Development toolbar and utilities
+// devbar - Development toolbar and utilities
 // Pure vanilla JavaScript - no framework dependencies
 
 // Accessibility audit utilities
@@ -128,7 +128,8 @@ export {
   type CreateLogoOptions,
   createDevBarLogo,
   DEVBAR_LOGO_COLORS,
-  DEVBAR_LOGO_PATH,
+  DEVBAR_LOGO_PATHS,
+  DEVBAR_LOGO_SHAPES,
   DEVBAR_LOGO_VIEWBOX,
   getDevBarLogoSvg,
 } from './ui/icons.js';

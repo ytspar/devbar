@@ -221,6 +221,15 @@ const earlyConsoleCapture: EarlyConsoleCapture = (() => {
 // GlobalDevBar Class
 // ============================================================================
 
+/** CSS positioning properties for devbar placement */
+type PositionStyle = {
+  bottom?: string;
+  left?: string;
+  top?: string;
+  right?: string;
+  transform?: string;
+};
+
 export class GlobalDevBar {
   // Static storage for custom controls
   private static customControls: DevBarControl[] = [];
@@ -392,11 +401,7 @@ export class GlobalDevBar {
    * Reset position style properties on an element to clear stale values
    */
   private resetPositionStyles(element: HTMLElement): void {
-    element.style.top = '';
-    element.style.bottom = '';
-    element.style.left = '';
-    element.style.right = '';
-    element.style.transform = '';
+    Object.assign(element.style, { top: '', bottom: '', left: '', right: '', transform: '' });
   }
 
   /**
@@ -2333,10 +2338,7 @@ export class GlobalDevBar {
     const { errorCount, warningCount, infoCount } = this.getLogCounts();
 
     // Simple position styles - same anchor points as expanded mode
-    const positionStyles: Record<
-      string,
-      { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
-    > = {
+    const positionStyles: Record<string, PositionStyle> = {
       'bottom-left': { bottom: '20px', left: '80px' },
       'bottom-right': { bottom: '20px', right: '16px' },
       'top-left': { top: '20px', left: '80px' },
@@ -2467,6 +2469,7 @@ export class GlobalDevBar {
   private createSettingsButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.setAttribute('data-testid', 'devbar-settings-button');
 
     // Attach HTML tooltip
     this.attachButtonTooltip(btn, CSS_COLORS.textSecondary, (_tooltip, h) => {
@@ -2697,7 +2700,7 @@ export class GlobalDevBar {
 
     Object.assign(popover.style, {
       position: 'fixed',
-      [isTop ? 'top' : 'bottom']: isTop ? '70px' : '70px',
+      [isTop ? 'top' : 'bottom']: '70px',
       [isRight ? 'right' : 'left']: isRight ? '16px' : '80px',
       zIndex: '10003',
       backgroundColor: 'var(--devbar-color-bg-elevated)',
@@ -2792,18 +2795,18 @@ export class GlobalDevBar {
     posLabel.textContent = 'Position';
     positionRow.appendChild(posLabel);
 
-    // Mini-map container (represents screen)
+    // Mini-map container (represents screen with ~16:10 aspect ratio)
     const miniMap = document.createElement('div');
     Object.assign(miniMap.style, {
       position: 'relative',
       width: '100%',
-      height: '56px',
+      height: '70px',
       backgroundColor: 'var(--devbar-color-bg-input)',
       border: `1px solid ${color}30`,
       borderRadius: '4px',
     });
 
-    // Position indicator styles - squares in corners
+    // Position indicator styles - rectangular bars representing DevBar
     type PositionValue =
       | 'bottom-left'
       | 'bottom-right'
@@ -2828,15 +2831,16 @@ export class GlobalDevBar {
 
     positionConfigs.forEach(({ value, style, title }) => {
       const indicator = document.createElement('button');
+      indicator.setAttribute('data-position', value);
       const isActive = this.options.position === value;
 
       Object.assign(indicator.style, {
         position: 'absolute',
-        width: '10px',
-        height: '10px',
+        width: '24px',
+        height: '6px',
         backgroundColor: isActive ? accentColor : CSS_COLORS.textMuted,
         border: `1px solid ${isActive ? accentColor : CSS_COLORS.textMuted}`,
-        borderRadius: '3px',
+        borderRadius: '2px',
         cursor: 'pointer',
         padding: '0',
         transition: 'all 150ms',
@@ -3049,13 +3053,7 @@ export class GlobalDevBar {
 
     // Use captured dot position if available, otherwise fall back to preset positions
     // The 13px offset accounts for half the collapsed circle diameter (26px / 2)
-    let posStyle: {
-      bottom?: string;
-      left?: string;
-      top?: string;
-      right?: string;
-      transform?: string;
-    };
+    let posStyle: PositionStyle;
 
     if (this.lastDotPosition) {
       // Position based on where the dot actually was
@@ -3068,10 +3066,7 @@ export class GlobalDevBar {
           };
     } else {
       // Fallback preset positions for when no dot position was captured
-      const collapsedPositions: Record<
-        string,
-        { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
-      > = {
+      const collapsedPositions: Record<string, PositionStyle> = {
         'bottom-left': { bottom: '27px', left: '86px' },
         'bottom-right': { bottom: '27px', right: '29px' },
         'top-left': { top: '27px', left: '86px' },
@@ -3089,6 +3084,9 @@ export class GlobalDevBar {
     );
 
     this.resetPositionStyles(wrapper);
+
+    // Set CSS variable for accent color (used by pulse animation)
+    wrapper.style.setProperty('--devbar-color-accent', accentColor);
 
     Object.assign(wrapper.style, {
       position: 'fixed',
@@ -3108,7 +3106,7 @@ export class GlobalDevBar {
       width: '26px',
       height: '26px',
       boxSizing: 'border-box',
-      animation: 'devbar-collapse 150ms ease-out',
+      animation: 'devbar-collapse 150ms ease-out, devbar-collapsed-pulse 2s ease-in-out 0.2s 3',
     });
 
     wrapper.onclick = () => {
@@ -3116,6 +3114,15 @@ export class GlobalDevBar {
       this.debug.state('Expanded DevBar');
       this.render();
     };
+
+    // Create inner container for dot + chevron
+    const innerContainer = document.createElement('span');
+    Object.assign(innerContainer.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative',
+    });
 
     // Connection indicator dot (same size as in expanded state)
     const dot = document.createElement('span');
@@ -3125,8 +3132,40 @@ export class GlobalDevBar {
       borderRadius: '50%',
       backgroundColor: this.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
       boxShadow: this.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
+      transition: 'transform 150ms ease-out, opacity 150ms ease-out',
     });
-    wrapper.appendChild(dot);
+    innerContainer.appendChild(dot);
+
+    // Expand chevron indicator (appears on hover)
+    const chevron = document.createElement('span');
+    Object.assign(chevron.style, {
+      position: 'absolute',
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      opacity: '0',
+      transition: 'opacity 150ms ease-out',
+      fontSize: '10px',
+      color: accentColor,
+    });
+    chevron.textContent = '↗';
+    innerContainer.appendChild(chevron);
+
+    // Hover effects: show chevron, hide dot
+    wrapper.onmouseenter = () => {
+      dot.style.opacity = '0';
+      dot.style.transform = 'scale(0)';
+      chevron.style.opacity = '1';
+    };
+    wrapper.onmouseleave = () => {
+      dot.style.opacity = '1';
+      dot.style.transform = 'scale(1)';
+      chevron.style.opacity = '0';
+    };
+
+    wrapper.appendChild(innerContainer);
 
     // Error badge (absolute, top-right of circle, shifted left if warning badge exists)
     if (errorCount > 0) {
@@ -3161,13 +3200,7 @@ export class GlobalDevBar {
 
     const isCentered = position === 'bottom-center';
 
-    let posStyle: {
-      bottom?: string;
-      left?: string;
-      top?: string;
-      right?: string;
-      transform?: string;
-    };
+    let posStyle: PositionStyle;
 
     // Use captured dot position to align the expanded bar's dot with where it was
     // Always use top/left positioning for precise alignment
@@ -3188,10 +3221,7 @@ export class GlobalDevBar {
       // Clear the position after using it
       this.lastDotPosition = null;
     } else {
-      const positionStyles: Record<
-        string,
-        { bottom?: string; left?: string; top?: string; right?: string; transform?: string }
-      > = {
+      const positionStyles: Record<string, PositionStyle> = {
         'bottom-left': { bottom: '20px', left: '80px' },
         'bottom-right': { bottom: '20px', right: '16px' },
         'top-left': { top: '20px', left: '80px' },
@@ -4229,7 +4259,8 @@ export class GlobalDevBar {
     count: number,
     color: string
   ): HTMLSpanElement {
-    const label = type === 'error' ? 'error' : type === 'warn' ? 'warning' : 'info';
+    const labelMap = { error: 'error', warn: 'warning', info: 'info' } as const;
+    const label = labelMap[type];
     const isActive = this.consoleFilter === type;
 
     const badge = document.createElement('span');

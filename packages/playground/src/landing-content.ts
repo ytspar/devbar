@@ -1,7 +1,7 @@
 /**
- * Landing Page Content for DevBar
+ * Landing Page Content for devbar
  *
- * Creates the hero section and documentation overview using DevBar styling.
+ * Creates the hero section and documentation overview using devbar styling.
  */
 
 /**
@@ -33,12 +33,11 @@ function createNotchedCard(
   leftWing.className = `${prefix}-card-wing ${prefix}-card-wing-left`;
 
   const titleEl = document.createElement(titleTag);
-  titleEl.className =
-    prefix === 'quickstart-step'
-      ? 'step-title'
-      : prefix === 'package'
-        ? 'package-name'
-        : 'feature-title';
+  const titleClassMap: Record<string, string> = {
+    'quickstart-step': 'step-title',
+    package: 'package-name',
+  };
+  titleEl.className = titleClassMap[prefix] ?? 'feature-title';
   titleEl.textContent = title;
 
   const rightWing = document.createElement('div');
@@ -65,7 +64,7 @@ function createLink(href: string, child: HTMLElement): HTMLAnchorElement {
   const a = document.createElement('a');
   a.href = href;
   a.target = '_blank';
-  a.rel = 'noopener';
+  a.rel = 'noopener noreferrer';
   a.appendChild(child);
   return a;
 }
@@ -87,19 +86,13 @@ export function createLandingHero(): HTMLElement {
   const hero = document.createElement('section');
   hero.className = 'landing-hero';
 
-  // Logo image (includes "devbar" text) - animated version with sliding shutter
+  // Logotype logo
   const logoContainer = document.createElement('div');
   logoContainer.className = 'landing-logo';
-  const logo = document.createElement('object');
-  logo.type = 'image/svg+xml';
-  logo.data = '/logo/devbar-animated.svg';
+  const logo = document.createElement('img');
+  logo.src = '/logo/devbar-logo.svg';
+  logo.alt = 'devbar';
   logo.className = 'landing-logo-img';
-  logo.setAttribute('aria-label', 'DevBar');
-  // Fallback for browsers that don't support object
-  const fallbackImg = document.createElement('img');
-  fallbackImg.src = '/logo/devbar-themed.svg';
-  fallbackImg.alt = 'DevBar';
-  logo.appendChild(fallbackImg);
   logoContainer.appendChild(logo);
   hero.appendChild(logoContainer);
 
@@ -150,11 +143,20 @@ export function createLandingHero(): HTMLElement {
   copyBtn.className = 'copy-btn';
   copyBtn.textContent = 'Copy';
   copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText('pnpm add @ytspar/devbar @ytspar/sweetlink');
-    copyBtn.textContent = 'Copied!';
-    setTimeout(() => {
-      copyBtn.textContent = 'Copy';
-    }, 2000);
+    navigator.clipboard.writeText('pnpm add @ytspar/devbar @ytspar/sweetlink').then(
+      () => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy';
+        }, 2000);
+      },
+      () => {
+        copyBtn.textContent = 'Failed';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy';
+        }, 2000);
+      }
+    );
   });
   install.appendChild(copyBtn);
   hero.appendChild(install);
@@ -323,13 +325,13 @@ function tokenizeTS(code: string): Token[] {
 }
 
 /**
- * Create the features overview section - DevBar toolbar features
+ * Create the features overview section - devbar toolbar features
  */
 export function createFeaturesSection(): HTMLElement {
   const section = document.createElement('section');
   section.className = 'landing-features';
 
-  section.appendChild(createTextElement('h2', 'section-heading', 'DevBar Toolbar'));
+  section.appendChild(createTextElement('h2', 'section-heading', 'devbar toolbar'));
 
   const features = [
     {
@@ -383,7 +385,7 @@ export function createSweetlinkSection(): HTMLElement {
   const section = document.createElement('section');
   section.className = 'landing-features sweetlink-features';
 
-  section.appendChild(createTextElement('h2', 'section-heading', 'Sweetlink AI Bridge'));
+  section.appendChild(createTextElement('h2', 'section-heading', 'sweetlink AI bridge'));
 
   const features = [
     {
@@ -525,10 +527,10 @@ export default defineConfig({
   );
   stepsContainer.appendChild(step2);
 
-  // Step 3: DevBar setup
+  // Step 3: devbar setup
   const { card: step3, content: content3 } = createNotchedCard(
     'quickstart-step',
-    '3. Initialize DevBar'
+    '3. Initialize devbar'
   );
   content3.appendChild(
     highlightCode(
@@ -557,24 +559,4 @@ pnpm sweetlink refresh      # Reload browser`,
 
   section.appendChild(stepsContainer);
   return section;
-}
-
-/**
- * Create the demo section divider
- */
-export function createDemoSectionDivider(): HTMLElement {
-  const divider = document.createElement('div');
-  divider.className = 'demo-divider';
-
-  const line1 = document.createElement('div');
-  line1.className = 'divider-line';
-  divider.appendChild(line1);
-
-  divider.appendChild(createTextElement('span', 'divider-text', 'Interactive Demo'));
-
-  const line2 = document.createElement('div');
-  line2.className = 'divider-line';
-  divider.appendChild(line2);
-
-  return divider;
 }

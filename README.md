@@ -1,6 +1,6 @@
 # devbar
 
-Development toolbar and AI debugging toolkit. This monorepo contains **DevBar** (development toolbar) and **Sweetlink** (autonomous AI agent toolkit for browser debugging).
+Development toolbar and AI debugging toolkit. This monorepo contains **devbar** (development toolbar) and **sweetlink** (autonomous AI agent toolkit for browser debugging).
 
 ## What Is This?
 
@@ -189,11 +189,11 @@ pnpm sweetlink refresh
 
 ## Adding App-Specific Functions (Custom Controls)
 
-DevBar supports registering custom controls that appear in the toolbar. This lets you add app-specific debugging functions.
+devbar supports registering custom controls that appear in the toolbar. This lets you add app-specific debugging functions.
 
 ### React Integration Example
 
-Create a React wrapper that initializes DevBar and provides context for custom controls:
+Create a React wrapper that initializes devbar and provides context for custom controls:
 
 ```tsx
 // app/hooks/useDevBar.tsx

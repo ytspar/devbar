@@ -59,7 +59,7 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
           },
         });
 
-        console.log(`[Sweetlink] Ready for DevBar connections (app port: ${vitePort})`);
+        console.log(`[Sweetlink] Ready for devbar connections (app port: ${vitePort})`);
       });
     },
 

@@ -18,7 +18,7 @@
  *
  * Port Calculation:
  * - Reads app port from process.env.PORT (default: 3000)
- * - WebSocket port = app port + 6223 (matches DevBar's calculation)
+ * - WebSocket port = app port + 6223 (matches devbar's calculation)
  * - Example: app on 3000 → Sweetlink on 9223
  */
 
@@ -78,7 +78,7 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
   const appPort =
     options.appPort ?? (process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_APP_PORT);
 
-  // Calculate WebSocket port (matches DevBar's calculation)
+  // Calculate WebSocket port (matches devbar's calculation)
   const wsPort = options.wsPort ?? appPort + WS_PORT_OFFSET;
 
   initSweetlink({
@@ -91,7 +91,7 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
       } else {
         console.log(`[Sweetlink] Started on port ${actualPort}`);
       }
-      console.log(`[Sweetlink] DevBar will auto-connect from app port ${appPort}`);
+      console.log(`[Sweetlink] devbar will auto-connect from app port ${appPort}`);
     },
   });
 

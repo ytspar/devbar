@@ -1,7 +1,7 @@
 /**
- * DevBar Playground - Main entry point
+ * devbar Playground - Main entry point
  *
- * Initializes the DevBar and renders demo content for testing.
+ * Initializes the devbar and renders demo content for testing.
  * Uses shared theme from @ytspar/devbar for consistent styling.
  */
 
@@ -15,7 +15,6 @@ import {
 } from '@ytspar/devbar';
 import { createDemoContent } from './demo-content.js';
 import {
-  createDemoSectionDivider,
   createFeaturesSection,
   createLandingHero,
   createPackagesSection,
@@ -71,15 +70,14 @@ if (app) {
   app.appendChild(createSweetlinkSection());
   app.appendChild(createPackagesSection());
   app.appendChild(createQuickStartSection());
-  app.appendChild(createDemoSectionDivider());
 
   // Interactive demo
   app.appendChild(createDemoContent());
 }
 
-// Initialize DevBar (use gear icon to access settings)
+// Initialize devbar (use gear icon to access settings)
 initGlobalDevBar();
 
 // Log some sample messages for testing console capture
 console.log('[Playground] Application initialized');
-console.info('[Playground] DevBar and Sweetlink packages loaded');
+console.info('[Playground] devbar and sweetlink packages loaded');

@@ -4,7 +4,7 @@
  * This module provides framework-agnostic browser integration for Sweetlink,
  * eliminating the React dependency to avoid conflicts with host applications.
  *
- * @version 2.1.0
+ * @version 1.0.0
  */
 
 import type { ConsoleLog, ServerInfo, SweetlinkCommand, SweetlinkResponse } from '../types.js';
@@ -16,13 +16,7 @@ import {
   handleRequestScreenshot,
   handleScreenshot,
 } from './commands/index.js';
-import {
-  createErrorHandler,
-  createRejectionHandler,
-  formatArgs,
-  MAX_CONSOLE_LOGS,
-  type OriginalConsoleMethods,
-} from './consoleCapture.js';
+import { ConsoleCapture } from './consoleCapture.js';
 
 // Import HMR utilities
 import {
@@ -36,9 +30,8 @@ import {
 // Constants
 // ============================================================================
 
-/** Port offset from app port to calculate WebSocket port */
-const SWEETLINK_PORT_OFFSET = 6223;
-const DEFAULT_WS_PORT = 9223;
+import { DEFAULT_WS_PORT, WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET } from '../types.js';
+
 const DEFAULT_MAX_PORT_RETRIES = 10;
 
 /** HMR settings */
@@ -89,7 +82,7 @@ export class SweetlinkBridge {
 
   // Cleanup functions
   private cleanupFunctions: (() => void)[] = [];
-  private originalConsole: OriginalConsoleMethods;
+  private capture = new ConsoleCapture();
 
   constructor(config: SweetlinkBridgeConfig = {}) {
     // Skip on server-side
@@ -102,12 +95,6 @@ export class SweetlinkBridge {
         captureDelay: DEFAULT_HMR_CAPTURE_DELAY_MS,
       };
       this.currentAppPort = 0;
-      this.originalConsole = {
-        log: console.log,
-        error: console.error,
-        warn: console.warn,
-        info: console.info,
-      };
       return;
     }
 
@@ -126,14 +113,6 @@ export class SweetlinkBridge {
       debounceMs: config.hmrDebounceMs ?? DEFAULT_HMR_DEBOUNCE_MS,
       captureDelay: config.hmrCaptureDelay ?? DEFAULT_HMR_CAPTURE_DELAY_MS,
     };
-
-    // Store original console methods
-    this.originalConsole = {
-      log: console.log.bind(console),
-      error: console.error.bind(console),
-      warn: console.warn.bind(console),
-      info: console.info.bind(console),
-    };
   }
 
   /**
@@ -142,7 +121,12 @@ export class SweetlinkBridge {
   init(): void {
     if (typeof window === 'undefined') return;
 
-    this.setupConsoleCapture();
+    this.capture.importEarlyLogs();
+    this.capture.start();
+    this.consoleLogs = this.capture.getLogs();
+    this.capture.addListener(() => {
+      this.consoleLogs = this.capture.getLogs();
+    });
     this.setupErrorHandlers();
     this.connectWebSocket(this.basePort);
 
@@ -193,10 +177,7 @@ export class SweetlinkBridge {
     }
 
     // Restore console
-    console.log = this.originalConsole.log;
-    console.error = this.originalConsole.error;
-    console.warn = this.originalConsole.warn;
-    console.info = this.originalConsole.info;
+    this.capture.stop();
 
     // Run cleanup functions
     this.cleanupFunctions.forEach((fn) => fn());
@@ -230,43 +211,9 @@ export class SweetlinkBridge {
   // Private Methods
   // ==========================================================================
 
-  private setupConsoleCapture(): void {
-    const captureLog = (level: string, args: unknown[]) => {
-      this.consoleLogs.push({
-        level,
-        message: formatArgs(args),
-        timestamp: Date.now(),
-      });
-
-      // Keep only last N logs
-      if (this.consoleLogs.length > MAX_CONSOLE_LOGS) {
-        this.consoleLogs = this.consoleLogs.slice(-MAX_CONSOLE_LOGS);
-      }
-    };
-
-    // Patch all console methods with a unified wrapper
-    const levels = ['log', 'error', 'warn', 'info'] as const;
-    for (const level of levels) {
-      const original = this.originalConsole[level];
-      console[level] = (...args: unknown[]) => {
-        captureLog(level, args);
-        original(...args);
-      };
-    }
-  }
-
   private setupErrorHandlers(): void {
-    const logsRef = { logs: this.consoleLogs };
-    const errorHandler = createErrorHandler(logsRef, MAX_CONSOLE_LOGS);
-    const rejectionHandler = createRejectionHandler(logsRef, MAX_CONSOLE_LOGS);
-
-    window.addEventListener('error', errorHandler);
-    window.addEventListener('unhandledrejection', rejectionHandler);
-
-    this.cleanupFunctions.push(() => {
-      window.removeEventListener('error', errorHandler);
-      window.removeEventListener('unhandledrejection', rejectionHandler);
-    });
+    const cleanup = this.capture.startErrorHandlers();
+    this.cleanupFunctions.push(cleanup);
   }
 
   private connectWebSocket(port: number): void {

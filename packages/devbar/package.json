@@ -18,7 +18,9 @@
   ],
   "author": "ytspar",
   "license": "MIT",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/GlobalDevBar.js"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

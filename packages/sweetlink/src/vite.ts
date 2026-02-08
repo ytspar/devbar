@@ -17,9 +17,7 @@
 
 import type { Plugin } from 'vite';
 import { closeSweetlink, initSweetlink } from './server/index.js';
-
-/** Port offset from Vite port to calculate WebSocket port */
-const WS_PORT_OFFSET = 6223;
+import { WS_PORT_OFFSET } from './types.js';
 
 export interface SweetlinkPluginOptions {
   /**

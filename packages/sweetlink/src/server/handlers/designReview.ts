@@ -4,7 +4,6 @@
  * Handles design review screenshots with Claude Vision API.
  */
 
-import type Anthropic from '@anthropic-ai/sdk';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import {
@@ -21,7 +20,8 @@ import {
   CLAUDE_MAX_TOKENS,
   CLAUDE_MODEL,
   CLAUDE_PRICING,
-  getAnthropicClient,
+  callClaude,
+  type TextBlock,
 } from '../anthropic.js';
 import { getProjectRoot } from '../index.js';
 
@@ -120,9 +120,7 @@ export async function handleDesignReviewScreenshot(data: {
   // Call Claude Vision API for design review
   console.log('[Sweetlink] Calling Claude Vision API for design review...');
 
-  const client = getAnthropicClient();
-
-  const response = await client.messages.create({
+  const response = await callClaude({
     model: CLAUDE_MODEL,
     max_tokens: CLAUDE_MAX_TOKENS,
     messages: [
@@ -148,7 +146,7 @@ export async function handleDesignReviewScreenshot(data: {
 
   // Extract text content from response
   const reviewContent = response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .filter((block): block is TextBlock => block.type === 'text')
     .map((block) => block.text)
     .join('\n\n');
 

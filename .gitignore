@@ -30,3 +30,18 @@ test-results/
 
 # DevBar settings (user-specific)
 .devbar/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Claude Code local settings
+.claude/
+
+# E2E test snapshots (platform-specific)
+e2e/*-snapshots/
+e2e/screenshots/
+
+# Root working copies
+/public/

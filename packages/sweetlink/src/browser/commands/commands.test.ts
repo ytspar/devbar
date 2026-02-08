@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ConsoleLog, SweetlinkCommand } from '../../types.js';
+import type { ConsoleLog, ExecJsCommand, GetLogsCommand, QueryDomCommand, SweetlinkResponse } from '../../types.js';
 import { handleQueryDOM } from './dom.js';
 import { handleExecJS } from './exec.js';
 import { handleGetLogs } from './logs.js';
+
+// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
+const d = (r: SweetlinkResponse): any => r.data;
 
 describe('handleGetLogs', () => {
   const sampleLogs: ConsoleLog[] = [
@@ -13,54 +16,54 @@ describe('handleGetLogs', () => {
   ];
 
   it('returns all logs when no filter', () => {
-    const command: SweetlinkCommand = { type: 'get-logs' };
+    const command: GetLogsCommand = { type: 'get-logs' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.success).toBe(true);
-    expect(response.data.logs.length).toBe(4);
-    expect(response.data.totalCount).toBe(4);
-    expect(response.data.filteredCount).toBe(4);
+    expect(d(response).logs.length).toBe(4);
+    expect(d(response).totalCount).toBe(4);
+    expect(d(response).filteredCount).toBe(4);
   });
 
   it('filters by log level', () => {
-    const command: SweetlinkCommand = { type: 'get-logs', filter: 'error' };
+    const command: GetLogsCommand = { type: 'get-logs', filter: 'error' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.success).toBe(true);
-    expect(response.data.logs.length).toBe(1);
-    expect(response.data.logs[0].level).toBe('error');
-    expect(response.data.totalCount).toBe(4);
-    expect(response.data.filteredCount).toBe(1);
+    expect(d(response).logs.length).toBe(1);
+    expect(d(response).logs[0].level).toBe('error');
+    expect(d(response).totalCount).toBe(4);
+    expect(d(response).filteredCount).toBe(1);
   });
 
   it('filters by message content', () => {
-    const command: SweetlinkCommand = { type: 'get-logs', filter: 'warning' };
+    const command: GetLogsCommand = { type: 'get-logs', filter: 'warning' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.success).toBe(true);
-    expect(response.data.logs.length).toBe(1);
-    expect(response.data.logs[0].message).toContain('warning');
+    expect(d(response).logs.length).toBe(1);
+    expect(d(response).logs[0].message).toContain('warning');
   });
 
   it('filter is case-insensitive', () => {
-    const command: SweetlinkCommand = { type: 'get-logs', filter: 'HELLO' };
+    const command: GetLogsCommand = { type: 'get-logs', filter: 'HELLO' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.success).toBe(true);
-    expect(response.data.logs.length).toBe(1);
+    expect(d(response).logs.length).toBe(1);
   });
 
   it('returns empty array when no matches', () => {
-    const command: SweetlinkCommand = { type: 'get-logs', filter: 'nonexistent' };
+    const command: GetLogsCommand = { type: 'get-logs', filter: 'nonexistent' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.success).toBe(true);
-    expect(response.data.logs.length).toBe(0);
-    expect(response.data.filteredCount).toBe(0);
+    expect(d(response).logs.length).toBe(0);
+    expect(d(response).filteredCount).toBe(0);
   });
 
   it('includes timestamp in response', () => {
-    const command: SweetlinkCommand = { type: 'get-logs' };
+    const command: GetLogsCommand = { type: 'get-logs' };
     const response = handleGetLogs(command, sampleLogs);
 
     expect(response.timestamp).toBeGreaterThan(0);
@@ -69,34 +72,34 @@ describe('handleGetLogs', () => {
 
 describe('handleExecJS', () => {
   it('executes simple expressions', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: '1 + 2' };
+    const command: ExecJsCommand = { type: 'exec-js', code: '1 + 2' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.result).toBe(3);
-    expect(response.data.type).toBe('number');
+    expect(d(response).result).toBe(3);
+    expect(d(response).type).toBe('number');
   });
 
   it('executes string expressions', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: '"hello".toUpperCase()' };
+    const command: ExecJsCommand = { type: 'exec-js', code: '"hello".toUpperCase()' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.result).toBe('HELLO');
-    expect(response.data.type).toBe('string');
+    expect(d(response).result).toBe('HELLO');
+    expect(d(response).type).toBe('string');
   });
 
   it('executes object expressions', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: '({ a: 1, b: 2 })' };
+    const command: ExecJsCommand = { type: 'exec-js', code: '({ a: 1, b: 2 })' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.result).toEqual({ a: 1, b: 2 });
-    expect(response.data.type).toBe('object');
+    expect(d(response).result).toEqual({ a: 1, b: 2 });
+    expect(d(response).type).toBe('object');
   });
 
   it('returns error when code is missing', () => {
-    const command: SweetlinkCommand = { type: 'exec-js' };
+    const command: ExecJsCommand = { type: 'exec-js' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(false);
@@ -104,7 +107,7 @@ describe('handleExecJS', () => {
   });
 
   it('handles syntax errors gracefully', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: 'invalid syntax {{' };
+    const command: ExecJsCommand = { type: 'exec-js', code: 'invalid syntax {{' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(false);
@@ -112,7 +115,7 @@ describe('handleExecJS', () => {
   });
 
   it('handles runtime errors gracefully', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: 'nonExistentVariable.property' };
+    const command: ExecJsCommand = { type: 'exec-js', code: 'nonExistentVariable.property' };
     const response = handleExecJS(command);
 
     expect(response.success).toBe(false);
@@ -120,10 +123,88 @@ describe('handleExecJS', () => {
   });
 
   it('includes timestamp in response', () => {
-    const command: SweetlinkCommand = { type: 'exec-js', code: 'true' };
+    const command: ExecJsCommand = { type: 'exec-js', code: 'true' };
     const response = handleExecJS(command);
 
     expect(response.timestamp).toBeGreaterThan(0);
+  });
+
+  it('returns error when code is not a string', () => {
+    const command = { type: 'exec-js', code: 123 } as unknown as ExecJsCommand;
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(false);
+    expect(response.error).toBe('Code must be a string');
+  });
+
+  it('returns error when code exceeds maximum length', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'x'.repeat(10001) };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('exceeds maximum length');
+    expect(response.error).toContain('10000');
+  });
+
+  it('accepts code at exactly the maximum length', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: `${'1+'.repeat(4999)}1` };
+    // 4999 * 2 + 1 = 9999, which is under 10000
+    const response = handleExecJS(command);
+
+    // Should succeed (it is valid JS)
+    expect(response.success).toBe(true);
+  });
+
+  it('handles boolean results', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'true' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(true);
+    expect(d(response).result).toBe(true);
+    expect(d(response).type).toBe('boolean');
+  });
+
+  it('handles undefined results', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'undefined' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(true);
+    expect(d(response).result).toBeUndefined();
+    expect(d(response).type).toBe('undefined');
+  });
+
+  it('handles null results', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'null' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(true);
+    expect(d(response).result).toBeNull();
+    expect(d(response).type).toBe('object');
+  });
+
+  it('handles array results', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: '[1, 2, 3]' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(true);
+    expect(d(response).result).toEqual([1, 2, 3]);
+    expect(d(response).type).toBe('object');
+  });
+
+  it('returns error message from Error instances', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'throw new TypeError("bad type")' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(false);
+    expect(response.error).toBe('bad type');
+  });
+
+  it('returns generic message for non-Error throws', () => {
+    const command: ExecJsCommand = { type: 'exec-js', code: 'throw "string error"' };
+    const response = handleExecJS(command);
+
+    expect(response.success).toBe(false);
+    expect(response.error).toBe('Execution failed');
   });
 });
 
@@ -137,7 +218,7 @@ describe('handleQueryDOM', () => {
   });
 
   it('returns error when selector is missing', () => {
-    const command: SweetlinkCommand = { type: 'query-dom' };
+    const command: QueryDomCommand = { type: 'query-dom' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(false);
@@ -145,13 +226,13 @@ describe('handleQueryDOM', () => {
   });
 
   it('returns empty results for no matches', () => {
-    const command: SweetlinkCommand = { type: 'query-dom', selector: '#nonexistent' };
+    const command: QueryDomCommand = { type: 'query-dom', selector: '#nonexistent' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.found).toBe(false);
-    expect(response.data.count).toBe(0);
-    expect(response.data.elements).toEqual([]);
+    expect(d(response).found).toBe(false);
+    expect(d(response).count).toBe(0);
+    expect(d(response).elements).toEqual([]);
   });
 
   it('finds elements by selector', () => {
@@ -161,16 +242,16 @@ describe('handleQueryDOM', () => {
     div.textContent = 'Hello';
     document.body.appendChild(div);
 
-    const command: SweetlinkCommand = { type: 'query-dom', selector: '#test-div' };
+    const command: QueryDomCommand = { type: 'query-dom', selector: '#test-div' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.found).toBe(true);
-    expect(response.data.count).toBe(1);
-    expect(response.data.elements[0].tagName).toBe('div');
-    expect(response.data.elements[0].id).toBe('test-div');
-    expect(response.data.elements[0].className).toBe('test-class');
-    expect(response.data.elements[0].textContent).toBe('Hello');
+    expect(d(response).found).toBe(true);
+    expect(d(response).count).toBe(1);
+    expect(d(response).elements[0].tagName).toBe('div');
+    expect(d(response).elements[0].id).toBe('test-div');
+    expect(d(response).elements[0].className).toBe('test-class');
+    expect(d(response).elements[0].textContent).toBe('Hello');
   });
 
   it('finds multiple elements', () => {
@@ -180,12 +261,12 @@ describe('handleQueryDOM', () => {
       document.body.appendChild(span);
     }
 
-    const command: SweetlinkCommand = { type: 'query-dom', selector: '.multi' };
+    const command: QueryDomCommand = { type: 'query-dom', selector: '.multi' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.count).toBe(3);
-    expect(response.data.elements.length).toBe(3);
+    expect(d(response).count).toBe(3);
+    expect(d(response).elements.length).toBe(3);
   });
 
   it('includes computed style when requested', () => {
@@ -193,7 +274,7 @@ describe('handleQueryDOM', () => {
     div.style.display = 'block';
     document.body.appendChild(div);
 
-    const command: SweetlinkCommand = {
+    const command: QueryDomCommand = {
       type: 'query-dom',
       selector: 'div',
       property: 'computedStyle',
@@ -201,15 +282,15 @@ describe('handleQueryDOM', () => {
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.elements[0].computedStyle).toBeDefined();
-    expect(response.data.elements[0].computedStyle.display).toBeDefined();
+    expect(d(response).elements[0].computedStyle).toBeDefined();
+    expect(d(response).elements[0].computedStyle.display).toBeDefined();
   });
 
   it('includes bounding rect when requested', () => {
     const div = document.createElement('div');
     document.body.appendChild(div);
 
-    const command: SweetlinkCommand = {
+    const command: QueryDomCommand = {
       type: 'query-dom',
       selector: 'div',
       property: 'boundingRect',
@@ -217,7 +298,7 @@ describe('handleQueryDOM', () => {
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.elements[0].boundingRect).toBeDefined();
+    expect(d(response).elements[0].boundingRect).toBeDefined();
   });
 
   it('includes attributes when requested', () => {
@@ -226,7 +307,7 @@ describe('handleQueryDOM', () => {
     div.setAttribute('aria-label', 'Test');
     document.body.appendChild(div);
 
-    const command: SweetlinkCommand = {
+    const command: QueryDomCommand = {
       type: 'query-dom',
       selector: 'div',
       property: 'attributes',
@@ -234,16 +315,16 @@ describe('handleQueryDOM', () => {
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.elements[0].attributes['data-value']).toBe('123');
-    expect(response.data.elements[0].attributes['aria-label']).toBe('Test');
+    expect(d(response).elements[0].attributes['data-value']).toBe('123');
+    expect(d(response).elements[0].attributes['aria-label']).toBe('Test');
   });
 
   it('handles selectors that return no results', () => {
-    const command: SweetlinkCommand = { type: 'query-dom', selector: '#does-not-exist' };
+    const command: QueryDomCommand = { type: 'query-dom', selector: '#does-not-exist' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.found).toBe(false);
+    expect(d(response).found).toBe(false);
   });
 
   it('truncates long text content', () => {
@@ -251,10 +332,10 @@ describe('handleQueryDOM', () => {
     div.textContent = 'x'.repeat(500);
     document.body.appendChild(div);
 
-    const command: SweetlinkCommand = { type: 'query-dom', selector: 'div' };
+    const command: QueryDomCommand = { type: 'query-dom', selector: 'div' };
     const response = handleQueryDOM(command);
 
     expect(response.success).toBe(true);
-    expect(response.data.elements[0].textContent.length).toBeLessThanOrEqual(200);
+    expect(d(response).elements[0].textContent.length).toBeLessThanOrEqual(200);
   });
 });

@@ -38,6 +38,10 @@ This provides AI agents with easy access to visual state and debugging informati
 
 **File Location Rationale**: Files are saved to `.tmp/sweetlink-screenshots/` (relative to project root) for easy agent access - keeps screenshots with the project and is typically gitignored via `.tmp/` patterns.
 
+## Requirements
+
+This package is **ESM-only**. It requires `"type": "module"` in your `package.json` or an ESM-capable bundler (Vite, webpack, esbuild, etc.).
+
 ## Installation
 
 ```bash

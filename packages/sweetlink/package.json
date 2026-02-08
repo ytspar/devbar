@@ -15,7 +15,9 @@
   "author": "ytspar",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/auto.js"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -42,6 +44,10 @@
     "./browser/consoleCapture": {
       "types": "./dist/browser/consoleCapture.d.ts",
       "import": "./dist/browser/consoleCapture.js"
+    },
+    "./browser/earlyConsoleCapture": {
+      "types": "./dist/browser/earlyConsoleCapture.d.ts",
+      "import": "./dist/browser/earlyConsoleCapture.js"
     },
     "./browser/screenshotUtils": {
       "types": "./dist/browser/screenshotUtils.d.ts",
@@ -94,7 +100,6 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.2",
     "dotenv": "^17.2.3",
     "html2canvas-pro": "^1.5.13",
     "puppeteer-core": "^24.26.1",

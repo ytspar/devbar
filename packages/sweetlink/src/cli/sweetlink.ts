@@ -122,12 +122,12 @@ interface SweetlinkCommand {
   property?: string;
   code?: string;
   filter?: string;
-  options?: Record<string, any>;
+  options?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 interface SweetlinkResponse {
   success: boolean;
-  data?: any;
+  data?: any; // eslint-disable-line @typescript-eslint/no-explicit-any -- shape varies per command
   error?: string;
   timestamp: number;
 }
@@ -405,7 +405,7 @@ async function queryDOM(options: { selector: string; property?: string }) {
     if (options.property) {
       // If querying a property, show the values
       console.log('\nValues:');
-      response.data.results.forEach((value: any, index: number) => {
+      response.data.results.forEach((value: unknown, index: number) => {
         console.log(`  [${index}] ${JSON.stringify(value)}`);
       });
     } else {

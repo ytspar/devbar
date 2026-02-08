@@ -4,12 +4,12 @@
  * Handles DOM query commands from the server.
  */
 
-import type { SweetlinkCommand, SweetlinkResponse } from '../../types.js';
+import type { QueryDomCommand, SweetlinkResponse } from '../../types.js';
 
 /**
  * Handle query-dom command
  */
-export function handleQueryDOM(command: SweetlinkCommand): SweetlinkResponse {
+export function handleQueryDOM(command: QueryDomCommand): SweetlinkResponse {
   try {
     if (!command.selector) {
       return {

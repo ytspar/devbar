@@ -15,6 +15,10 @@ Development toolbar with Sweetlink integration for browser-based development too
 - **Page Schema**: View JSON-LD, Open Graph, and meta tag data
 - **Sweetlink integration**: Real-time connection to dev server
 
+## Requirements
+
+This package is **ESM-only**. It requires `"type": "module"` in your `package.json` or an ESM-capable bundler (Vite, webpack, esbuild, etc.).
+
 ## Installation
 
 ```bash

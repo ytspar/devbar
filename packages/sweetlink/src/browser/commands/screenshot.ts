@@ -5,7 +5,11 @@
  */
 
 import html2canvas from 'html2canvas-pro';
-import type { SweetlinkCommand, SweetlinkResponse } from '../../types.js';
+import type {
+  RequestScreenshotCommand,
+  ScreenshotCommand,
+  SweetlinkResponse,
+} from '../../types.js';
 import {
   canvasToDataUrl,
   DEFAULT_SCREENSHOT_QUALITY,
@@ -16,7 +20,7 @@ import {
 /**
  * Handle basic screenshot command
  */
-export async function handleScreenshot(command: SweetlinkCommand): Promise<SweetlinkResponse> {
+export async function handleScreenshot(command: ScreenshotCommand): Promise<SweetlinkResponse> {
   try {
     const element = command.selector ? document.querySelector(command.selector) : document.body;
 
@@ -61,7 +65,7 @@ export async function handleScreenshot(command: SweetlinkCommand): Promise<Sweet
  * This version sends the response directly over WebSocket
  */
 export async function handleRequestScreenshot(
-  command: SweetlinkCommand,
+  command: RequestScreenshotCommand,
   ws: WebSocket | null
 ): Promise<SweetlinkResponse> {
   try {

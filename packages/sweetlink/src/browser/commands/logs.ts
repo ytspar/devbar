@@ -4,13 +4,13 @@
  * Handles console log retrieval commands.
  */
 
-import type { ConsoleLog, SweetlinkCommand, SweetlinkResponse } from '../../types.js';
+import type { ConsoleLog, GetLogsCommand, SweetlinkResponse } from '../../types.js';
 
 /**
  * Handle get-logs command
  */
 export function handleGetLogs(
-  command: SweetlinkCommand,
+  command: GetLogsCommand,
   consoleLogs: ConsoleLog[]
 ): SweetlinkResponse {
   let logs = [...consoleLogs];

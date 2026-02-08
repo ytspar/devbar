@@ -171,7 +171,7 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         // Return package info for direct HTTP requests (not WebSocket upgrades)
         res.writeHead(200, {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': 'http://localhost',
         });
         res.end(
           JSON.stringify(

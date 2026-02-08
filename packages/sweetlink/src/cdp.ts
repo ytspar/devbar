@@ -128,7 +128,7 @@ export async function screenshotViaCDP(options: {
       }
     }
 
-    const screenshotOptions: any = {
+    const screenshotOptions: { type: 'png'; fullPage: boolean; clip?: { x: number; y: number; width: number; height: number } } = {
       type: 'png',
       fullPage: options.fullPage || false,
     };

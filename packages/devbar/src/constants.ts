@@ -27,11 +27,8 @@ export const MAX_RECONNECT_DELAY_MS = 30000;
 // WebSocket Settings
 // ============================================================================
 
-/** Default WebSocket port for Sweetlink connection (legacy fallback) */
-export const WS_PORT = 9223;
-
-/** Port offset from app port to calculate WebSocket port (matches SweetlinkBridge) */
-export const WS_PORT_OFFSET = 6223;
+// Re-export port constants from sweetlink
+export { DEFAULT_WS_PORT as WS_PORT, WS_PORT_OFFSET } from '@ytspar/sweetlink/types';
 
 /** Maximum ports to try when scanning for matching server */
 export const MAX_PORT_RETRIES = 10;

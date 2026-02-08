@@ -48,6 +48,11 @@ export interface ConsoleCaptureConfig {
   onLog?: (log: ConsoleLog) => void;
 }
 
+/**
+ * Listener callback for log count changes
+ */
+export type LogChangeListener = (errorCount: number, warningCount: number, infoCount: number) => void;
+
 // ============================================================================
 // Formatting Utilities
 // ============================================================================
@@ -95,11 +100,13 @@ export class ConsoleCapture {
   private logs: ConsoleLog[] = [];
   private errorCount = 0;
   private warningCount = 0;
+  private infoCount = 0;
   private originalConsole: OriginalConsoleMethods | null = null;
   private isPatched = false;
   private maxLogs: number;
   private trackCounts: boolean;
   private onLog?: (log: ConsoleLog) => void;
+  private listeners: LogChangeListener[] = [];
 
   constructor(config: ConsoleCaptureConfig = {}) {
     this.maxLogs = config.maxLogs ?? MAX_CONSOLE_LOGS;
@@ -135,12 +142,15 @@ export class ConsoleCapture {
 
       if (this.trackCounts) {
         if (level === 'error') this.errorCount++;
-        if (level === 'warn') this.warningCount++;
+        else if (level === 'warn') this.warningCount++;
+        else if (level === 'info') this.infoCount++;
       }
 
       if (this.onLog) {
         this.onLog(log);
       }
+
+      this.notifyListeners();
     };
 
     // Patch all console methods with a unified wrapper
@@ -202,6 +212,38 @@ export class ConsoleCapture {
   }
 
   /**
+   * Get info count
+   */
+  getInfoCount(): number {
+    return this.infoCount;
+  }
+
+  /**
+   * Add a listener for log count changes
+   */
+  addListener(listener: LogChangeListener): void {
+    this.listeners.push(listener);
+  }
+
+  /**
+   * Remove a listener
+   */
+  removeListener(listener: LogChangeListener): void {
+    const idx = this.listeners.indexOf(listener);
+    if (idx !== -1) this.listeners.splice(idx, 1);
+  }
+
+  private notifyListeners(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(this.errorCount, this.warningCount, this.infoCount);
+      } catch {
+        // Ignore listener errors
+      }
+    }
+  }
+
+  /**
    * Get current state
    */
   getState(): ConsoleCaptureState {
@@ -222,12 +264,79 @@ export class ConsoleCapture {
   }
 
   /**
+   * Import early logs from window.__sweetlinkEarlyLogs (set by EARLY_CONSOLE_CAPTURE_SCRIPT)
+   * and clear the global array. Converts ISO timestamp strings to epoch milliseconds.
+   */
+  importEarlyLogs(): void {
+    if (typeof window === 'undefined' || !window.__sweetlinkEarlyLogs) return;
+
+    const earlyLogs: ConsoleLog[] = window.__sweetlinkEarlyLogs.map((log) => ({
+      level: log.level,
+      message: log.message,
+      timestamp: typeof log.timestamp === 'string' ? new Date(log.timestamp).getTime() : Number(log.timestamp),
+    }));
+
+    this.importLogs(earlyLogs);
+    window.__sweetlinkEarlyLogs = [];
+  }
+
+  /**
+   * Push a log entry directly (used by error/rejection handlers)
+   */
+  addLog(log: ConsoleLog): void {
+    this.logs.push(log);
+    if (this.logs.length > this.maxLogs) {
+      this.logs = this.logs.slice(-this.maxLogs);
+    }
+    if (this.trackCounts && log.level === 'error') this.errorCount++;
+    this.notifyListeners();
+  }
+
+  /**
+   * Start listening for uncaught errors and unhandled rejections
+   */
+  startErrorHandlers(): () => void {
+    if (typeof window === 'undefined') return () => {};
+
+    const errorHandler = (event: ErrorEvent) => {
+      this.addLog({
+        level: 'error',
+        message: `Uncaught: ${event.message}`,
+        timestamp: Date.now(),
+        source: event.filename,
+        stack: event.error?.stack,
+      });
+    };
+
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      this.addLog({
+        level: 'error',
+        message: reason instanceof Error
+          ? `Unhandled rejection: ${reason.name}: ${reason.message}`
+          : `Unhandled rejection: ${String(reason)}`,
+        timestamp: Date.now(),
+        stack: reason?.stack,
+      });
+    };
+
+    window.addEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
+  }
+
+  /**
    * Clear all logs and reset counts
    */
   clear(): void {
     this.logs = [];
     this.errorCount = 0;
     this.warningCount = 0;
+    this.infoCount = 0;
   }
 }
 

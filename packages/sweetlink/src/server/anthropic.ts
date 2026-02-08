@@ -1,30 +1,74 @@
 /**
- * Anthropic Client
+ * Anthropic API Client
  *
- * Lazy-loaded Anthropic client for Claude API access.
+ * Fetch-based Claude API client — no SDK dependency.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const API_VERSION = '2023-06-01';
 
-/** Claude API settings */
-export const CLAUDE_MODEL = 'claude-opus-4-5-20251101';
+/** Default model — uses the latest Sonnet via alias */
+export const CLAUDE_MODEL = process.env.SWEETLINK_CLAUDE_MODEL ?? 'claude-sonnet-4-5-latest';
 export const CLAUDE_MAX_TOKENS = 2048;
 
-/** Claude Opus 4.5 pricing (per million tokens) */
+/** Approximate pricing (per million tokens) — used for cost display only */
 export const CLAUDE_PRICING = {
   input: 15,
   output: 75,
 } as const;
 
-// Lazy-loaded Anthropic client
-let anthropicClient: Anthropic | null = null;
+/** A text block in a Claude API response */
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+/** Claude Messages API response shape */
+export interface MessageResponse {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  content: Array<TextBlock | { type: string }>;
+  model: string;
+  stop_reason: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
+
+/** Content block sent to the API */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
 /**
- * Get the Anthropic client instance (lazy-loaded)
+ * Call the Claude Messages API using fetch.
  */
-export function getAnthropicClient(): Anthropic {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic();
+export async function callClaude(payload: {
+  model: string;
+  max_tokens: number;
+  messages: Array<{ role: 'user' | 'assistant'; content: ContentBlock[] }>;
+}): Promise<MessageResponse> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
   }
-  return anthropicClient;
+
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': API_VERSION,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Anthropic API error (${response.status}): ${body}`);
+  }
+
+  return response.json() as Promise<MessageResponse>;
 }

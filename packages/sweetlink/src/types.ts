@@ -6,6 +6,16 @@
  */
 
 // ============================================================================
+// Port Constants (shared across all packages)
+// ============================================================================
+
+/** Default WebSocket port for Sweetlink connection */
+export const DEFAULT_WS_PORT = 9223;
+
+/** Port offset from app port to calculate WebSocket port */
+export const WS_PORT_OFFSET = 6223;
+
+// ============================================================================
 // Console Log Types
 // ============================================================================
 
@@ -25,73 +35,224 @@ export interface ConsoleLog {
 // ============================================================================
 
 /**
- * Commands that can be sent over the Sweetlink WebSocket connection
+ * Individual command interfaces for the discriminated union.
+ * Each command type declares only the fields it actually uses.
  */
-export interface SweetlinkCommand {
-  type:
-    | 'screenshot'
-    | 'query-dom'
-    | 'get-logs'
-    | 'exec-js'
-    | 'get-network'
-    | 'browser-client-ready'
-    | 'save-screenshot'
-    | 'design-review-screenshot'
-    | 'check-api-key'
-    | 'api-key-status'
-    | 'save-outline'
-    | 'save-schema'
-    | 'save-settings'
-    | 'load-settings'
-    | 'settings-loaded'
-    | 'settings-saved'
-    | 'settings-error'
-    | 'refresh'
-    | 'request-screenshot'
-    | 'screenshot-response'
-    | 'log-subscribe'
-    | 'log-unsubscribe'
-    | 'log-event'
-    | 'hmr-screenshot'
-    | 'subscribe'
-    | 'unsubscribe'
-    | 'screenshot-saved'
-    | 'design-review-saved'
-    | 'design-review-error'
-    | 'outline-saved'
-    | 'outline-error'
-    | 'schema-saved'
-    | 'schema-error';
+
+export interface ScreenshotCommand {
+  type: 'screenshot';
+  selector?: string;
+  options?: Record<string, unknown>;
+}
+
+export interface QueryDomCommand {
+  type: 'query-dom';
   selector?: string;
   property?: string;
-  code?: string;
+}
+
+export interface GetLogsCommand {
+  type: 'get-logs';
   filter?: string;
-  options?: Record<string, unknown>;
+}
+
+export interface ExecJsCommand {
+  type: 'exec-js';
+  code?: string;
+}
+
+export interface GetNetworkCommand {
+  type: 'get-network';
+}
+
+export interface BrowserClientReadyCommand {
+  type: 'browser-client-ready';
+}
+
+export interface SaveScreenshotCommand {
+  type: 'save-screenshot';
   data?: unknown;
-  path?: string;
-  screenshotPath?: string;
-  reviewPath?: string;
-  outlinePath?: string;
-  schemaPath?: string;
-  settingsPath?: string;
+}
+
+export interface DesignReviewScreenshotCommand {
+  type: 'design-review-screenshot';
+  data?: unknown;
+}
+
+export interface CheckApiKeyCommand {
+  type: 'check-api-key';
+}
+
+export interface ApiKeyStatusCommand {
+  type: 'api-key-status';
+}
+
+export interface SaveOutlineCommand {
+  type: 'save-outline';
+  data?: unknown;
+}
+
+export interface SaveSchemaCommand {
+  type: 'save-schema';
+  data?: unknown;
+}
+
+export interface SaveSettingsCommand {
+  type: 'save-settings';
+  data?: unknown;
+}
+
+export interface LoadSettingsCommand {
+  type: 'load-settings';
+}
+
+export interface SettingsLoadedCommand {
+  type: 'settings-loaded';
   settings?: unknown;
+}
+
+export interface SettingsSavedCommand {
+  type: 'settings-saved';
+  settingsPath?: string;
+}
+
+export interface SettingsErrorCommand {
+  type: 'settings-error';
   error?: string;
-  // v1.4.0 fields
+}
+
+export interface RefreshCommand {
+  type: 'refresh';
+  options?: Record<string, unknown>;
+}
+
+export interface RequestScreenshotCommand {
+  type: 'request-screenshot';
   requestId?: string;
-  subscriptionId?: string;
-  channel?: string;
-  captureConsole?: boolean;
-  timeout?: number;
+  selector?: string;
   format?: 'jpeg' | 'png';
   quality?: number;
   scale?: number;
   includeMetadata?: boolean;
+  options?: Record<string, unknown>;
+}
+
+export interface ScreenshotResponseCommand {
+  type: 'screenshot-response';
+  requestId?: string;
+  data?: unknown;
+}
+
+export interface LogSubscribeCommand {
+  type: 'log-subscribe';
+  subscriptionId?: string;
   filters?: {
     levels?: ('log' | 'error' | 'warn' | 'info' | 'debug')[];
     pattern?: string;
     source?: string;
   };
 }
+
+export interface LogUnsubscribeCommand {
+  type: 'log-unsubscribe';
+  subscriptionId?: string;
+}
+
+export interface LogEventCommand {
+  type: 'log-event';
+  data?: unknown;
+}
+
+export interface HmrScreenshotCommand {
+  type: 'hmr-screenshot';
+  data?: unknown;
+}
+
+export interface ChannelSubscribeCommand {
+  type: 'subscribe';
+  channel?: string;
+}
+
+export interface ChannelUnsubscribeCommand {
+  type: 'unsubscribe';
+  channel?: string;
+}
+
+export interface ScreenshotSavedCommand {
+  type: 'screenshot-saved';
+  path?: string;
+}
+
+export interface DesignReviewSavedCommand {
+  type: 'design-review-saved';
+  reviewPath?: string;
+}
+
+export interface DesignReviewErrorCommand {
+  type: 'design-review-error';
+  error?: string;
+}
+
+export interface OutlineSavedCommand {
+  type: 'outline-saved';
+  outlinePath?: string;
+}
+
+export interface OutlineErrorCommand {
+  type: 'outline-error';
+  error?: string;
+}
+
+export interface SchemaSavedCommand {
+  type: 'schema-saved';
+  schemaPath?: string;
+}
+
+export interface SchemaErrorCommand {
+  type: 'schema-error';
+  error?: string;
+}
+
+/**
+ * Commands that can be sent over the Sweetlink WebSocket connection.
+ *
+ * This is a discriminated union on the `type` field. Each variant carries
+ * only the fields that are relevant for that particular command.
+ */
+export type SweetlinkCommand =
+  | ScreenshotCommand
+  | QueryDomCommand
+  | GetLogsCommand
+  | ExecJsCommand
+  | GetNetworkCommand
+  | BrowserClientReadyCommand
+  | SaveScreenshotCommand
+  | DesignReviewScreenshotCommand
+  | CheckApiKeyCommand
+  | ApiKeyStatusCommand
+  | SaveOutlineCommand
+  | SaveSchemaCommand
+  | SaveSettingsCommand
+  | LoadSettingsCommand
+  | SettingsLoadedCommand
+  | SettingsSavedCommand
+  | SettingsErrorCommand
+  | RefreshCommand
+  | RequestScreenshotCommand
+  | ScreenshotResponseCommand
+  | LogSubscribeCommand
+  | LogUnsubscribeCommand
+  | LogEventCommand
+  | HmrScreenshotCommand
+  | ChannelSubscribeCommand
+  | ChannelUnsubscribeCommand
+  | ScreenshotSavedCommand
+  | DesignReviewSavedCommand
+  | DesignReviewErrorCommand
+  | OutlineSavedCommand
+  | OutlineErrorCommand
+  | SchemaSavedCommand
+  | SchemaErrorCommand;
 
 /**
  * Response structure for Sweetlink commands

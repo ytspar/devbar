@@ -7,7 +7,7 @@
  * It is restricted to localhost connections and development environments only.
  */
 
-import type { SweetlinkCommand, SweetlinkResponse } from '../../types.js';
+import type { ExecJsCommand, SweetlinkResponse } from '../../types.js';
 
 const MAX_CODE_LENGTH = 10000;
 const SCRIPT_RESULT_KEY = '__sweetlink_exec_result__';
@@ -47,7 +47,7 @@ function execViaScriptTag(code: string): unknown {
 /**
  * Handle exec-js command with security guards
  */
-export function handleExecJS(command: SweetlinkCommand): SweetlinkResponse {
+export function handleExecJS(command: ExecJsCommand): SweetlinkResponse {
   // Security: Block in production environments
   if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
     return errorResponse('exec-js is disabled in production for security reasons');

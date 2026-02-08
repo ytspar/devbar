@@ -40,9 +40,7 @@
         "noConsole": "off",
         "useIterableCallbackReturn": "off"
       },
-      "security": {
-        "noGlobalEval": "off"
-      },
+      "security": {},
       "correctness": {
         "noUnusedVariables": "warn",
         "noUnusedImports": "warn"
@@ -54,5 +52,20 @@
       "quoteStyle": "single",
       "trailingCommas": "es5"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/sweetlink/src/browser/commands/exec.ts",
+        "packages/devbar/src/GlobalDevBar.ts"
+      ],
+      "linter": {
+        "rules": {
+          "security": {
+            "noGlobalEval": "off"
+          }
+        }
+      }
+    }
+  ]
 }

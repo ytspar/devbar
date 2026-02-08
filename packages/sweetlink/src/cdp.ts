@@ -11,6 +11,7 @@ import puppeteer, {
   type ConsoleMessage,
   type HTTPRequest,
   type HTTPResponse,
+  type Metrics,
   type Page,
 } from 'puppeteer-core';
 import { parseViewport } from './viewportUtils.js';
@@ -20,7 +21,7 @@ import { parseViewport } from './viewportUtils.js';
 // ============================================================================
 
 const CDP_URL = process.env.CHROME_CDP_URL || 'http://127.0.0.1:9222';
-const DEFAULT_DEV_URL = 'http://localhost:3000';
+const DEFAULT_DEV_URL = process.env.SWEETLINK_DEV_URL || 'http://localhost:3000';
 
 /** Timeouts */
 const NETWORK_IDLE_TIMEOUT_MS = 10000;
@@ -45,7 +46,7 @@ export async function detectCDP(): Promise<boolean> {
 /**
  * Connect to Chrome via CDP
  */
-export async function getCDPBrowser() {
+export async function getCDPBrowser(): Promise<Browser> {
   try {
     const browser = await puppeteer.connect({
       browserURL: CDP_URL,
@@ -63,7 +64,7 @@ export async function getCDPBrowser() {
 /**
  * Find the local development page (localhost:3000)
  */
-export async function findLocalDevPage(browser: Browser) {
+export async function findLocalDevPage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
   let devPage = pages.find((p: Page) => {
     const url = p.url();
@@ -240,7 +241,7 @@ export async function getConsoleLogsViaCDP(): Promise<
 /**
  * Query DOM elements via CDP
  */
-export async function queryDOMViaCDP(selector: string, property?: string): Promise<any> {
+export async function queryDOMViaCDP(selector: string, property?: string): Promise<unknown[]> {
   const browser = await getCDPBrowser();
 
   try {
@@ -252,7 +253,7 @@ export async function queryDOMViaCDP(selector: string, property?: string): Promi
 
         return elements.map((el) => {
           if (prop) {
-            return (el as any)[prop];
+            return (el as unknown as Record<string, unknown>)[prop];
           }
 
           return {
@@ -387,7 +388,16 @@ export async function getNetworkRequestsViaCDP(options?: { filter?: string }): P
 /**
  * Get page performance metrics
  */
-export async function getPerformanceMetricsViaCDP() {
+export async function getPerformanceMetricsViaCDP(): Promise<{
+  metrics: Metrics;
+  timings: {
+    domContentLoaded: number;
+    loadComplete: number;
+    domInteractive: number;
+    firstPaint: number | undefined;
+    firstContentfulPaint: number | undefined;
+  };
+}> {
   const browser = await getCDPBrowser();
 
   try {

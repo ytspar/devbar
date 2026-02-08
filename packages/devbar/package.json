@@ -40,26 +40,26 @@
     "README.md",
     "LICENSE"
   ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/ytspar/devbar/issues"
+  },
+  "homepage": "https://github.com/ytspar/devbar/tree/main/packages/devbar#readme",
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "peerDependencies": {
-    "@ytspar/sweetlink": "^1.0.0 || ^2.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@ytspar/sweetlink": {
-      "optional": true
-    }
-  },
   "dependencies": {
+    "@ytspar/sweetlink": "workspace:^",
     "axe-core": "^4.10.2",
     "html2canvas-pro": "^1.5.8"
   },
   "devDependencies": {
-    "@ytspar/sweetlink": "workspace:*",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.0.0",
     "typescript": "^5.0.0"
   }
 }

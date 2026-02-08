@@ -13,10 +13,10 @@ import { getProjectRoot } from '../index.js';
 // ============================================================================
 
 /** Directory for devbar settings */
-export const SETTINGS_DIR = '.devbar';
+const SETTINGS_DIR = '.devbar';
 
 /** Settings file name */
-export const SETTINGS_FILE = 'settings.json';
+const SETTINGS_FILE = 'settings.json';
 
 // ============================================================================
 // Types

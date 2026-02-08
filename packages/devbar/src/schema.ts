@@ -65,7 +65,7 @@ export function extractPageSchema(): PageSchema {
     });
 
     if (itemType || Object.keys(props).length > 0) {
-      schema.microdata.push({ type: itemType, properties: props });
+      schema.microdata.push({ type: itemType ?? undefined, properties: props });
     }
   });
 
@@ -112,10 +112,9 @@ export function schemaToMarkdown(schema: PageSchema): string {
 
   if (schema.microdata.length > 0) {
     md += '## Microdata\n\n';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    schema.microdata.forEach((item: any, i) => {
+    schema.microdata.forEach((item, i) => {
       md += `### Item ${i + 1}${item.type ? ` (${item.type})` : ''}\n\n`;
-      for (const [key, value] of Object.entries(item.properties || {})) {
+      for (const [key, value] of Object.entries(item.properties ?? {})) {
         md += `- **${key}**: ${value}\n`;
       }
       md += '\n';

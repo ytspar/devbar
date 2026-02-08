@@ -1,8 +1,8 @@
 /**
  * Tooltip creation, positioning, and management helpers.
  *
- * Extracted from GlobalDevBar to reduce file size.
- * Provides a DRY system for building rich HTML tooltips.
+ * Unified tooltip system: text tooltips, HTML tooltips with rich content builders,
+ * click-to-toggle tooltips for mobile, and composable hover behavior via TooltipHoverOptions.
  */
 
 import { CSS_COLORS, FONT_MONO } from '../constants.js';
@@ -20,7 +20,7 @@ const TOOLTIP_BASE_STYLES = {
   fontFamily: FONT_MONO,
   maxWidth: '280px',
   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-  pointerEvents: 'none',
+  pointerEvents: 'auto',
 } as const;
 
 /** Create a tooltip container element and track it for cleanup */
@@ -180,35 +180,88 @@ export function positionTooltip(tooltip: HTMLElement, anchor: HTMLElement): void
   }
 }
 
+/** Options for composing additional hover behavior with tooltips */
+export type TooltipHoverOptions = {
+  onEnter?: () => void;
+  onLeave?: () => void;
+};
+
+/** Attach a plain-text tooltip to an element (evaluated at hover time) */
+export function attachTextTooltip(
+  state: DevBarState,
+  element: HTMLElement,
+  getText: () => string,
+  hoverOptions?: TooltipHoverOptions
+): void {
+  attachHtmlTooltip(state, element, (tooltip) => {
+    const text = getText();
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const div = document.createElement('div');
+      Object.assign(div.style, {
+        color: CSS_COLORS.primary,
+        lineHeight: '1.4',
+      });
+      div.textContent = line;
+      tooltip.appendChild(div);
+    }
+  }, hoverOptions);
+}
+
 /** Attach an HTML tooltip to an element with custom content builder */
 export function attachHtmlTooltip(
   state: DevBarState,
   element: HTMLElement,
-  buildContent: (tooltip: HTMLDivElement) => void
+  buildContent: (tooltip: HTMLDivElement) => void,
+  hoverOptions?: TooltipHoverOptions
 ): void {
+  if (!state.options.showTooltips) return;
+
   let tooltipEl: HTMLDivElement | null = null;
+  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const cancelHide = () => {
+    if (hideTimeout) {
+      clearTimeout(hideTimeout);
+      hideTimeout = null;
+    }
+  };
+
+  const scheduleHide = () => {
+    cancelHide();
+    hideTimeout = setTimeout(() => {
+      if (tooltipEl) {
+        removeTooltip(state, tooltipEl);
+        tooltipEl = null;
+      }
+    }, 100);
+  };
 
   element.onmouseenter = () => {
+    cancelHide();
     // Clear any existing tooltip for this element first
     if (tooltipEl) {
       removeTooltip(state, tooltipEl);
       tooltipEl = null;
     }
     tooltipEl = createTooltipContainer(state);
+    // Keep tooltip open when mouse enters it
+    tooltipEl.onmouseenter = cancelHide;
+    tooltipEl.onmouseleave = scheduleHide;
     buildContent(tooltipEl);
     positionTooltip(tooltipEl, element);
+    hoverOptions?.onEnter?.();
   };
 
   element.onmouseleave = () => {
-    if (tooltipEl) {
-      removeTooltip(state, tooltipEl);
-      tooltipEl = null;
-    }
+    scheduleHide();
+    hoverOptions?.onLeave?.();
   };
 
   // Also clean up tooltip on click (in case element triggers re-render)
   const originalOnclick = element.onclick;
   element.onclick = (e) => {
+    cancelHide();
     if (tooltipEl) {
       removeTooltip(state, tooltipEl);
       tooltipEl = null;
@@ -230,6 +283,8 @@ export function attachClickToggleTooltip(
   element: HTMLElement,
   buildContent: (tooltip: HTMLDivElement) => void
 ): void {
+  if (!state.options.showTooltips) return;
+
   let tooltipEl: HTMLDivElement | null = null;
   let isPinned = false;
 

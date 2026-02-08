@@ -63,7 +63,7 @@ export interface DevBarSettings {
 // ============================================================================
 
 /** Default accent color (emerald) */
-export const DEFAULT_ACCENT_COLOR = '#10b981';
+const DEFAULT_ACCENT_COLOR = '#10b981';
 
 /** Preset accent colors for the color picker */
 export const ACCENT_COLOR_PRESETS = [

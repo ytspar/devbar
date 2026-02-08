@@ -25,7 +25,6 @@ export {
   copyCanvasToClipboard,
   DEFAULT_SCREENSHOT_QUALITY,
   DEFAULT_SCREENSHOT_SCALE,
-  DESIGN_REVIEW_SCALE,
   DEVBAR_SCREENSHOT_QUALITY,
   delay,
   extractBase64FromDataUrl,
@@ -37,19 +36,7 @@ export {
   scaleCanvas,
   type ToDataUrlOptions,
 } from './browser/screenshotUtils.js';
-// CDP integration
-export {
-  detectCDP,
-  execJSViaCDP,
-  findLocalDevPage,
-  getCDPBrowser,
-  getConsoleLogsViaCDP,
-  getNetworkRequestsViaCDP,
-  getPerformanceMetricsViaCDP,
-  queryDOMViaCDP,
-  screenshotViaCDP,
-  testCDPConnection,
-} from './cdp.js';
+// CDP integration: import from '@ytspar/sweetlink/cdp' for these functions
 export type {
   ElementMeasurement,
   MeasurementOptions,
@@ -62,7 +49,6 @@ export {
   getNavigationPreset,
   measureElementsScript,
   measureViaPlaywright,
-  removeRulerScript,
 } from './ruler.js';
 export type { InitSweetlinkOptions } from './server.js';
 // Server infrastructure

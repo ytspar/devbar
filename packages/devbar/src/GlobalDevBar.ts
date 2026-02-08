@@ -18,9 +18,9 @@
 
 import {
   CSS_COLORS,
+  DEVBAR_STYLES,
   getThemeColors,
   MAX_RECONNECT_ATTEMPTS,
-  TOOLTIP_STYLES,
   WS_PORT,
   WS_PORT_OFFSET,
 } from './constants.js';
@@ -229,19 +229,6 @@ export class GlobalDevBar {
   }
 
   /**
-   * Get tooltip class name(s) if tooltips are enabled, otherwise empty string
-   */
-  tooltipClass(
-    direction: 'left' | 'right' = 'left',
-    ...additionalClasses: string[]
-  ): string {
-    if (!this.options.showTooltips) {
-      return additionalClasses.join(' ');
-    }
-    return ['devbar-tooltip', `devbar-tooltip-${direction}`, ...additionalClasses].join(' ');
-  }
-
-  /**
    * Get current error, warning, and info counts from the log array
    */
   getLogCounts(): { errorCount: number; warningCount: number; infoCount: number } {
@@ -341,7 +328,7 @@ export class GlobalDevBar {
 
     this.debug.lifecycle('Initializing DevBar');
 
-    // Inject tooltip styles
+    // Inject animation and utility CSS
     this.injectStyles();
 
     // Copy captured logs
@@ -443,11 +430,11 @@ export class GlobalDevBar {
   }
 
   private injectStyles(): void {
-    const styleId = 'devbar-tooltip-styles';
+    const styleId = 'devbar-styles';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
       style.id = styleId;
-      style.textContent = TOOLTIP_STYLES;
+      style.textContent = DEVBAR_STYLES;
       document.head.appendChild(style);
     }
   }

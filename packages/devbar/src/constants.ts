@@ -617,91 +617,8 @@ export const MODAL_BOX_BASE_STYLES: Record<string, string> = {
 // CSS Styles
 // ============================================================================
 
-/** Tooltip and animation CSS styles (uses CSS variables for theming) */
-export const TOOLTIP_STYLES = `
-.devbar-tooltip {
-  position: relative;
-}
-/* Invisible bridge to keep tooltip open when moving mouse to it */
-.devbar-tooltip::before {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  height: 16px;
-  pointer-events: none;
-}
-.devbar-tooltip:hover::before {
-  pointer-events: auto;
-}
-/* Extend bridge for right-aligned tooltips (tooltip extends left) */
-.devbar-tooltip-right::before {
-  left: -400px;
-  right: 0;
-}
-/* Extend bridge for left-aligned tooltips (tooltip extends right) */
-.devbar-tooltip-left::before {
-  left: 0;
-  right: -400px;
-}
-.devbar-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) scale(0.95);
-  padding: 0.625rem 1rem;
-  background: var(--devbar-color-bg-elevated);
-  color: var(--devbar-color-primary);
-  font-family: ${FONT_MONO};
-  font-size: 0.75rem;
-  line-height: 1.5;
-  border-radius: 6px;
-  border: 1px solid var(--devbar-color-border);
-  box-shadow: var(--devbar-shadow-md);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  min-width: min(200px, calc(100vw - 32px));
-  max-width: min(400px, calc(100vw - 32px));
-  white-space: pre-wrap;
-  z-index: 10001;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  will-change: opacity, transform;
-  transition: opacity 150ms ease-out, transform 150ms ease-out, visibility 150ms;
-  user-select: text;
-  cursor: text;
-}
-.devbar-tooltip:hover::after {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) scale(1);
-  pointer-events: auto;
-}
-.devbar-tooltip-left::after {
-  left: 8px !important;
-  right: auto !important;
-  transform: translateX(0) scale(0.95) !important;
-}
-.devbar-tooltip-left:hover::after {
-  transform: translateX(0) scale(1) !important;
-}
-.devbar-tooltip-right::after {
-  left: auto !important;
-  right: 8px !important;
-  transform: translateX(0) scale(0.95) !important;
-}
-.devbar-tooltip-right:hover::after {
-  transform: translateX(0) scale(1) !important;
-}
-.devbar-capturing .devbar-tooltip::after,
-.devbar-capturing .devbar-tooltip:hover::after {
-  display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-}
+/** Animation and utility CSS styles (uses CSS variables for theming) */
+export const DEVBAR_STYLES = `
 .devbar-item {
   transition: opacity 150ms ease-out, color 150ms ease-out;
 }
@@ -795,20 +712,6 @@ export const TOOLTIP_STYLES = `
     margin-top: 0.25rem;
     flex-wrap: nowrap;
     width: 100%;
-  }
-  /* Constrain tooltips to viewport on mobile */
-  .devbar-tooltip::after {
-    left: auto !important;
-    right: 0 !important;
-    transform: translateX(0) scale(0.95) !important;
-    max-width: calc(100vw - 24px) !important;
-  }
-  .devbar-tooltip:hover::after {
-    transform: translateX(0) scale(1) !important;
-  }
-  .devbar-tooltip-left::after {
-    left: 0 !important;
-    right: auto !important;
   }
 }
 `;

@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Development playground for testing devbar and sweetlink",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

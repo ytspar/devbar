@@ -14,6 +14,8 @@ import {
   canvasToDataUrl,
   DEFAULT_SCREENSHOT_QUALITY,
   DEFAULT_SCREENSHOT_SCALE,
+  delay,
+  prepareForCapture,
   scaleCanvas,
 } from '../screenshotUtils.js';
 
@@ -61,6 +63,20 @@ export async function handleScreenshot(command: ScreenshotCommand): Promise<Swee
 }
 
 /**
+ * Send a screenshot response over WebSocket and return it as a SweetlinkResponse.
+ */
+function sendAndReturn(
+  ws: WebSocket | null,
+  requestId: string | undefined,
+  result: Omit<SweetlinkResponse, 'timestamp'>
+): SweetlinkResponse {
+  const timestamp = Date.now();
+  const wsResponse = { type: 'screenshot-response', requestId, ...result, timestamp };
+  ws?.send(JSON.stringify(wsResponse));
+  return { ...result, timestamp };
+}
+
+/**
  * Handle request-screenshot command (from CLI/Agent)
  * This version sends the response directly over WebSocket
  */
@@ -72,27 +88,33 @@ export async function handleRequestScreenshot(
     const element = command.selector ? document.querySelector(command.selector) : document.body;
 
     if (!element) {
-      const errorResponse = {
-        type: 'screenshot-response',
-        requestId: command.requestId,
+      return sendAndReturn(ws, command.requestId, {
         success: false,
         error: `Element not found: ${command.selector}`,
-        timestamp: Date.now(),
-      };
-      ws?.send(JSON.stringify(errorResponse));
-      return errorResponse;
+      });
     }
 
     const scaleFactor = command.scale || DEFAULT_SCREENSHOT_SCALE;
     const format = command.format || 'jpeg';
     const quality = command.quality || DEFAULT_SCREENSHOT_QUALITY;
 
-    const originalCanvas = await html2canvas(element as HTMLElement, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      ...command.options,
-    });
+    // Prepare page for capture (hide tooltips, blur active element)
+    const cleanup = prepareForCapture();
+    await delay(50);
+
+    let originalCanvas: HTMLCanvasElement;
+    try {
+      originalCanvas = await html2canvas(element as HTMLElement, {
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        width: window.innerWidth,
+        windowWidth: window.innerWidth,
+        ...command.options,
+      });
+    } finally {
+      cleanup();
+    }
 
     // Scale down using shared utility
     const smallCanvas = scaleCanvas(originalCanvas, { scale: scaleFactor });
@@ -114,31 +136,14 @@ export async function handleRequestScreenshot(
       };
     }
 
-    const response = {
-      type: 'screenshot-response',
-      requestId: command.requestId,
+    return sendAndReturn(ws, command.requestId, {
       success: true,
       data: responseData,
-      timestamp: Date.now(),
-    };
-
-    ws?.send(JSON.stringify(response));
-
-    return {
-      success: true,
-      data: responseData,
-      timestamp: Date.now(),
-    };
+    });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Screenshot failed';
-    const errorResponse = {
-      type: 'screenshot-response',
-      requestId: command.requestId,
+    return sendAndReturn(ws, command.requestId, {
       success: false,
-      error: errorMessage,
-      timestamp: Date.now(),
-    };
-    ws?.send(JSON.stringify(errorResponse));
-    return errorResponse;
+      error: error instanceof Error ? error.message : 'Screenshot failed',
+    });
   }
 }

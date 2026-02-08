@@ -1,6 +1,6 @@
+import { sweetlink } from '@ytspar/sweetlink/vite';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
-import { sweetlink } from '../sweetlink/src/vite.js';
 
 export default defineConfig({
   plugins: [sweetlink()],

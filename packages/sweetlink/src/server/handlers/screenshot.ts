@@ -13,7 +13,7 @@ import { getProjectRoot } from '../index.js';
 /**
  * Web Vitals metrics included with screenshot
  */
-export interface WebVitalsMetrics {
+interface WebVitalsMetrics {
   fcp?: number;
   lcp?: number;
   cls?: number;

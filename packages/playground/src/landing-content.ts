@@ -133,32 +133,43 @@ export function createLandingHero(): HTMLElement {
   );
   hero.appendChild(badges);
 
-  // Quick install
+  // Quick install — entire card is clickable to copy
   const install = document.createElement('div');
   install.className = 'landing-install';
+  install.setAttribute('role', 'button');
+  install.setAttribute('tabindex', '0');
+  install.setAttribute('aria-label', 'Copy install command');
   const code = document.createElement('code');
   code.textContent = 'pnpm add @ytspar/devbar @ytspar/sweetlink';
   install.appendChild(code);
-  const copyBtn = document.createElement('button');
-  copyBtn.className = 'copy-btn';
-  copyBtn.textContent = 'Copy';
-  copyBtn.addEventListener('click', () => {
+  const copyLabel = document.createElement('span');
+  copyLabel.className = 'copy-btn';
+  copyLabel.textContent = 'Copy';
+  install.appendChild(copyLabel);
+
+  const doCopy = () => {
     navigator.clipboard.writeText('pnpm add @ytspar/devbar @ytspar/sweetlink').then(
       () => {
-        copyBtn.textContent = 'Copied!';
+        copyLabel.textContent = 'Copied!';
         setTimeout(() => {
-          copyBtn.textContent = 'Copy';
+          copyLabel.textContent = 'Copy';
         }, 2000);
       },
       () => {
-        copyBtn.textContent = 'Failed';
+        copyLabel.textContent = 'Failed';
         setTimeout(() => {
-          copyBtn.textContent = 'Copy';
+          copyLabel.textContent = 'Copy';
         }, 2000);
       }
     );
+  };
+  install.addEventListener('click', doCopy);
+  install.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      doCopy();
+    }
   });
-  install.appendChild(copyBtn);
   hero.appendChild(install);
 
   return hero;

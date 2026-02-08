@@ -124,7 +124,6 @@ export interface DevBarState {
   // Methods that modules may call back into
   render: () => void;
   getLogCounts: () => { errorCount: number; warningCount: number; infoCount: number };
-  tooltipClass: (direction?: 'left' | 'right', ...additionalClasses: string[]) => string;
   resetPositionStyles: (element: HTMLElement) => void;
   createCollapsedBadge: (count: number, bgColor: string, rightPos: string) => HTMLSpanElement;
   handleScreenshot: (copyToClipboard: boolean) => Promise<void>;

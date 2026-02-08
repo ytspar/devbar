@@ -5,11 +5,7 @@
  * Extracted from GlobalDevBar to reduce file size.
  */
 
-import {
-  ACCENT_COLOR_PRESETS,
-  DEFAULT_SETTINGS,
-  type DevBarSettings,
-} from '../settings.js';
+import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
 import {
   BUTTON_COLORS,
   CATEGORY_COLORS,
@@ -19,6 +15,7 @@ import {
 } from '../constants.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
 import { extractPageSchema, schemaToMarkdown } from '../schema.js';
+import { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS } from '../settings.js';
 import type { ConsoleLog, OutlineNode, ThemeMode } from '../types.js';
 import {
   createEmptyMessage,
@@ -31,8 +28,7 @@ import {
   createSvgIcon,
   getButtonStyles,
 } from '../ui/index.js';
-import { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
-import type { DevBarState, PositionStyle } from './types.js';
+import { getResponsiveMetricVisibility } from './performance.js';
 import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
@@ -44,6 +40,7 @@ import {
   proceedWithDesignReview,
   showDesignReviewConfirmation,
 } from './screenshot.js';
+import { setThemeMode } from './theme.js';
 import {
   addTooltipTitle,
   attachBreakpointTooltip,
@@ -51,15 +48,23 @@ import {
   attachClickToggleTooltip,
   attachInfoTooltip,
   attachMetricTooltip,
+  attachTextTooltip,
   clearAllTooltips,
 } from './tooltips.js';
-import { getResponsiveMetricVisibility } from './performance.js';
-import { setThemeMode } from './theme.js';
+import type { DevBarState, PositionStyle } from './types.js';
 
-// We need access to the consoleCapture singleton for log filtering.
-// This is passed in via the render functions rather than importing it directly,
-// but for the console popup we need the singleton reference.
-// We use a parameter approach instead.
+/**
+ * Capture the center of an element's bounding rect as a dot position.
+ * Used to animate the collapsed circle to the same spot as the connection dot.
+ */
+function captureDotPosition(state: DevBarState, element: Element): void {
+  const rect = element.getBoundingClientRect();
+  state.lastDotPosition = {
+    left: rect.left + rect.width / 2,
+    top: rect.top + rect.height / 2,
+    bottom: window.innerHeight - (rect.top + rect.height / 2),
+  };
+}
 
 /**
  * Main render dispatch - creates container and delegates to appropriate renderer.
@@ -67,7 +72,14 @@ import { setThemeMode } from './theme.js';
 export function render(
   state: DevBarState,
   consoleCaptureSingleton: ConsoleCapture,
-  customControls: { id: string; label: string; onClick: () => void; active?: boolean; disabled?: boolean; variant?: 'default' | 'warning' }[]
+  customControls: {
+    id: string;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    variant?: 'default' | 'warning';
+  }[]
 ): void {
   if (state.destroyed) return;
   if (typeof document === 'undefined') return;
@@ -173,11 +185,7 @@ function renderCollapsed(state: DevBarState): void {
   }
 
   const wrapper = state.container;
-  wrapper.className = state.tooltipClass('left', 'devbar-collapse');
-  wrapper.setAttribute(
-    'data-tooltip',
-    `Click to expand DevBar${state.sweetlinkConnected ? ' (Sweetlink connected)' : ' (Sweetlink not connected)'}${errorCount > 0 ? `\n${errorCount} console error${errorCount === 1 ? '' : 's'}` : ''}`
-  );
+  wrapper.className = 'devbar-collapse';
 
   state.resetPositionStyles(wrapper);
 
@@ -249,17 +257,24 @@ function renderCollapsed(state: DevBarState): void {
   chevron.textContent = '\u2197';
   innerContainer.appendChild(chevron);
 
-  // Hover effects: show chevron, hide dot
-  wrapper.onmouseenter = () => {
-    dot.style.opacity = '0';
-    dot.style.transform = 'scale(0)';
-    chevron.style.opacity = '1';
-  };
-  wrapper.onmouseleave = () => {
-    dot.style.opacity = '1';
-    dot.style.transform = 'scale(1)';
-    chevron.style.opacity = '0';
-  };
+  attachTextTooltip(
+    state,
+    wrapper,
+    () =>
+      `Click to expand DevBar${state.sweetlinkConnected ? ' (Sweetlink connected)' : ' (Sweetlink not connected)'}${errorCount > 0 ? `\n${errorCount} console error${errorCount === 1 ? '' : 's'}` : ''}`,
+    {
+      onEnter: () => {
+        dot.style.opacity = '0';
+        dot.style.transform = 'scale(0)';
+        chevron.style.opacity = '1';
+      },
+      onLeave: () => {
+        dot.style.opacity = '1';
+        dot.style.transform = 'scale(1)';
+        chevron.style.opacity = '0';
+      },
+    }
+  );
 
   wrapper.appendChild(innerContainer);
 
@@ -327,11 +342,7 @@ function renderCompact(state: DevBarState): void {
 
   // Connection indicator
   const connIndicator = document.createElement('span');
-  connIndicator.className = state.tooltipClass('left', 'devbar-clickable');
-  connIndicator.setAttribute(
-    'data-tooltip',
-    state.sweetlinkConnected ? 'Sweetlink connected' : 'Sweetlink disconnected'
-  );
+  connIndicator.className = 'devbar-clickable';
   Object.assign(connIndicator.style, {
     width: '12px',
     height: '12px',
@@ -341,8 +352,12 @@ function renderCompact(state: DevBarState): void {
     justifyContent: 'center',
     cursor: 'pointer',
   });
+  attachTextTooltip(state, connIndicator, () =>
+    state.sweetlinkConnected ? 'Sweetlink connected' : 'Sweetlink disconnected'
+  );
   connIndicator.onclick = (e) => {
     e.stopPropagation();
+    captureDotPosition(state, connDot);
     state.collapsed = true;
     state.debug.state('Collapsed DevBar from compact mode');
     state.render();
@@ -385,8 +400,6 @@ function renderCompact(state: DevBarState): void {
   // Expand button (double-arrow)
   const expandBtn = document.createElement('button');
   expandBtn.type = 'button';
-  expandBtn.className = state.tooltipClass('right');
-  expandBtn.setAttribute('data-tooltip', 'Expand DevBar');
   Object.assign(expandBtn.style, {
     display: 'flex',
     alignItems: 'center',
@@ -402,16 +415,18 @@ function renderCompact(state: DevBarState): void {
     transition: 'all 150ms',
   });
   expandBtn.textContent = '\u27EB';
-  expandBtn.onmouseenter = () => {
-    expandBtn.style.backgroundColor = `${accentColor}20`;
-    expandBtn.style.borderColor = accentColor;
-    expandBtn.style.color = accentColor;
-  };
-  expandBtn.onmouseleave = () => {
-    expandBtn.style.backgroundColor = 'transparent';
-    expandBtn.style.borderColor = `${accentColor}60`;
-    expandBtn.style.color = `${accentColor}99`;
-  };
+  attachTextTooltip(state, expandBtn, () => 'Expand DevBar', {
+    onEnter: () => {
+      expandBtn.style.backgroundColor = `${accentColor}20`;
+      expandBtn.style.borderColor = accentColor;
+      expandBtn.style.color = accentColor;
+    },
+    onLeave: () => {
+      expandBtn.style.backgroundColor = 'transparent';
+      expandBtn.style.borderColor = `${accentColor}60`;
+      expandBtn.style.color = `${accentColor}99`;
+    },
+  });
   expandBtn.onclick = () => {
     state.toggleCompactMode();
   };
@@ -424,7 +439,14 @@ function renderCompact(state: DevBarState): void {
 
 function renderExpanded(
   state: DevBarState,
-  customControls: { id: string; label: string; onClick: () => void; active?: boolean; disabled?: boolean; variant?: 'default' | 'warning' }[]
+  customControls: {
+    id: string;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    variant?: 'default' | 'warning';
+  }[]
 ): void {
   if (!state.container) return;
 
@@ -502,15 +524,9 @@ function renderExpanded(
   });
 
   wrapper.ondblclick = () => {
-    // Capture dot position before collapsing
-    const dotEl = wrapper.querySelector('.devbar-status span span') as HTMLElement;
+    const dotEl = wrapper.querySelector('.devbar-status span span');
     if (dotEl) {
-      const rect = dotEl.getBoundingClientRect();
-      state.lastDotPosition = {
-        left: rect.left + rect.width / 2,
-        top: rect.top + rect.height / 2,
-        bottom: window.innerHeight - (rect.top + rect.height / 2),
-      };
+      captureDotPosition(state, dotEl);
     }
     state.collapsed = true;
     state.debug.state('Collapsed DevBar (double-click)');
@@ -536,13 +552,7 @@ function renderExpanded(
 
   // Connection indicator (click to collapse)
   const connIndicator = document.createElement('span');
-  connIndicator.className = state.tooltipClass('left', 'devbar-clickable');
-  connIndicator.setAttribute(
-    'data-tooltip',
-    state.sweetlinkConnected
-      ? 'Sweetlink connected (click to minimize)'
-      : 'Sweetlink disconnected (click to minimize)'
-  );
+  connIndicator.className = 'devbar-clickable';
   Object.assign(connIndicator.style, {
     width: '12px',
     height: '12px',
@@ -554,15 +564,14 @@ function renderExpanded(
     cursor: 'pointer',
     flexShrink: '0',
   });
+  attachTextTooltip(state, connIndicator, () =>
+    state.sweetlinkConnected
+      ? 'Sweetlink connected (click to minimize)'
+      : 'Sweetlink disconnected (click to minimize)'
+  );
   connIndicator.onclick = (e) => {
     e.stopPropagation();
-    // Capture dot position before collapsing (connDot is the inner 6px dot)
-    const rect = connIndicator.getBoundingClientRect();
-    state.lastDotPosition = {
-      left: rect.left + rect.width / 2,
-      top: rect.top + rect.height / 2,
-      bottom: window.innerHeight - (rect.top + rect.height / 2),
-    };
+    captureDotPosition(state, connIndicator);
     state.collapsed = true;
     state.debug.state('Collapsed DevBar (connection dot click)');
     state.render();
@@ -876,11 +885,7 @@ function createConsoleBadge(
   const isActive = state.consoleFilter === type;
 
   const badge = document.createElement('span');
-  badge.className = state.tooltipClass('right', 'devbar-badge');
-  badge.setAttribute(
-    'data-tooltip',
-    `${count} console ${label}${count === 1 ? '' : 's'} (click to view)`
-  );
+  badge.className = 'devbar-badge';
   Object.assign(badge.style, {
     display: 'flex',
     alignItems: 'center',
@@ -897,6 +902,11 @@ function createConsoleBadge(
     boxShadow: isActive ? `0 0 8px ${color}CC` : 'none',
   });
   badge.textContent = count > 99 ? '99+' : String(count);
+  attachTextTooltip(
+    state,
+    badge,
+    () => `${count} console ${label}${count === 1 ? '' : 's'} (click to view)`
+  );
   badge.onclick = () => {
     state.consoleFilter = state.consoleFilter === type ? null : type;
     state.showOutlineModal = false;
@@ -917,7 +927,7 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
   const isGreyedOut = !state.sweetlinkConnected && !hasSuccessState;
 
   // Attach HTML tooltip
-  attachButtonTooltip(state, btn, accentColor, (_tooltip, h) => {
+  attachButtonTooltip(state, btn, accentColor, (tooltip, h) => {
     if (state.copiedToClipboard) {
       h.addSuccess('Copied to clipboard!');
       return;
@@ -927,8 +937,38 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
       return;
     }
     if (state.lastScreenshot) {
-      h.addSuccess('Screenshot saved!', state.lastScreenshot);
-      h.addDescription('Click to copy path');
+      const screenshotPath = state.lastScreenshot;
+      h.addSuccess('Screenshot saved!', screenshotPath);
+
+      const copyLink = document.createElement('div');
+      Object.assign(copyLink.style, {
+        color: accentColor,
+        cursor: 'pointer',
+        fontSize: '0.625rem',
+        marginTop: '6px',
+        opacity: '0.8',
+        transition: 'opacity 150ms',
+      });
+      copyLink.textContent = 'copy path';
+      copyLink.onmouseenter = () => {
+        copyLink.style.opacity = '1';
+      };
+      copyLink.onmouseleave = () => {
+        copyLink.style.opacity = '0.8';
+      };
+      copyLink.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(screenshotPath);
+          copyLink.textContent = '\u2713 copied!';
+          copyLink.style.cursor = 'default';
+          copyLink.onclick = null;
+        } catch {
+          copyLink.textContent = '\u00d7 failed to copy';
+          copyLink.style.color = CSS_COLORS.error;
+        }
+      };
+      tooltip.appendChild(copyLink);
       return;
     }
 
@@ -1112,9 +1152,7 @@ function createOutlineButton(state: DevBarState): HTMLButtonElement {
     btn.textContent = 'v';
     btn.style.fontSize = '0.5rem';
   } else {
-    btn.appendChild(
-      createSvgIcon('M3 4h18v2H3V4zm0 7h12v2H3v-2zm0 7h18v2H3v-2z', { fill: true })
-    );
+    btn.appendChild(createSvgIcon('M3 4h18v2H3V4zm0 7h12v2H3v-2zm0 7h18v2H3v-2z', { fill: true }));
   }
 
   return btn;
@@ -1237,12 +1275,8 @@ function createSettingsButton(state: DevBarState): HTMLButtonElement {
 function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = state.tooltipClass('right');
 
   const isCompact = state.compactMode;
-  const tooltip = isCompact ? 'Expand (Cmd+Shift+M)' : 'Compact (Cmd+Shift+M)';
-  btn.setAttribute('data-tooltip', tooltip);
-
   const { accentColor } = state.options;
   const iconColor = CSS_COLORS.textSecondary;
 
@@ -1263,17 +1297,23 @@ function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
     transition: 'all 150ms',
   });
 
-  btn.onmouseenter = () => {
-    btn.style.borderColor = accentColor;
-    btn.style.backgroundColor = `${accentColor}20`;
-    btn.style.color = iconColor;
-  };
-
-  btn.onmouseleave = () => {
-    btn.style.borderColor = `${accentColor}60`;
-    btn.style.backgroundColor = 'transparent';
-    btn.style.color = `${iconColor}99`;
-  };
+  attachTextTooltip(
+    state,
+    btn,
+    () => (isCompact ? 'Expand (Cmd+Shift+M)' : 'Compact (Cmd+Shift+M)'),
+    {
+      onEnter: () => {
+        btn.style.borderColor = accentColor;
+        btn.style.backgroundColor = `${accentColor}20`;
+        btn.style.color = iconColor;
+      },
+      onLeave: () => {
+        btn.style.borderColor = `${accentColor}60`;
+        btn.style.backgroundColor = 'transparent';
+        btn.style.color = `${iconColor}99`;
+      },
+    }
+  );
 
   btn.onclick = () => {
     state.toggleCompactMode();
@@ -1307,7 +1347,9 @@ function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: Console
   const filterType = state.consoleFilter;
   if (!filterType) return;
 
-  const logs = consoleCaptureSingleton.getLogs().filter((log: ConsoleLog) => log.level === filterType);
+  const logs = consoleCaptureSingleton
+    .getLogs()
+    .filter((log: ConsoleLog) => log.level === filterType);
   const color = filterType === 'error' ? BUTTON_COLORS.error : BUTTON_COLORS.warning;
   const label = filterType === 'error' ? 'Errors' : 'Warnings';
 
@@ -2071,12 +2113,7 @@ function renderSettingsPopover(state: DevBarState): void {
   });
 
   // Position indicator styles - rectangular bars representing DevBar
-  type PositionValue =
-    | 'bottom-left'
-    | 'bottom-right'
-    | 'top-left'
-    | 'top-right'
-    | 'bottom-center';
+  type PositionValue = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
   const positionConfigs: Array<{
     value: PositionValue;
     style: Partial<CSSStyleDeclaration>;

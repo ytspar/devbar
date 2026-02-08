@@ -325,6 +325,14 @@ export interface OutlineNode {
 }
 
 /**
+ * A single microdata item extracted from the page
+ */
+export interface MicrodataItem {
+  type?: string;
+  properties?: Record<string, unknown>;
+}
+
+/**
  * Extracted page schema information
  */
 export interface PageSchema {
@@ -332,7 +340,7 @@ export interface PageSchema {
   metaTags: Record<string, string>;
   openGraph: Record<string, string>;
   twitter: Record<string, string>;
-  microdata: unknown[];
+  microdata: MicrodataItem[];
 }
 
 // ============================================================================

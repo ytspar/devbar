@@ -36,6 +36,14 @@ test-results/
 .env.*
 !.env.example
 
+# Secrets / certificates
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+serviceAccountKey.json
+
 # Claude Code local settings
 .claude/
 

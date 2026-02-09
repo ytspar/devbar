@@ -21,6 +21,20 @@ import {
 } from '../utils.js';
 import type { DevBarState } from './types.js';
 
+/** Build html2canvas options shared by screenshot and design review capture */
+function baseCaptureOptions(scale: number): Record<string, unknown> {
+  return {
+    logging: false,
+    useCORS: true,
+    allowTaint: true,
+    scale,
+    width: window.innerWidth,
+    windowWidth: window.innerWidth,
+    scrollX: 0,
+    scrollY: 0,
+  };
+}
+
 /**
  * Copy a file path to the clipboard and update state.
  */
@@ -59,16 +73,7 @@ export async function handleScreenshot(
     await delay(SCREENSHOT_BLUR_DELAY_MS);
 
     const html2canvas = await getHtml2Canvas();
-    const canvas = await html2canvas(document.body, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      scale: SCREENSHOT_SCALE,
-      width: window.innerWidth,
-      windowWidth: window.innerWidth,
-      scrollX: 0,
-      scrollY: 0,
-    });
+    const canvas = await html2canvas(document.body, baseCaptureOptions(SCREENSHOT_SCALE));
 
     // Restore page state
     cleanup();
@@ -162,16 +167,7 @@ export async function handleDesignReview(state: DevBarState): Promise<void> {
     await delay(SCREENSHOT_BLUR_DELAY_MS);
 
     const html2canvas = await getHtml2Canvas();
-    const canvas = await html2canvas(document.body, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      scale: 1, // Full quality for design review
-      width: window.innerWidth,
-      windowWidth: window.innerWidth,
-      scrollX: 0,
-      scrollY: 0,
-    });
+    const canvas = await html2canvas(document.body, baseCaptureOptions(1)); // Full quality for design review
 
     // Restore page state
     cleanup();
@@ -307,6 +303,41 @@ export function handleSaveOutline(state: DevBarState): void {
         type: 'save-outline',
         data: {
           outline,
+          markdown,
+          url: window.location.href,
+          title: document.title,
+          timestamp: Date.now(),
+        },
+      })
+    );
+  }
+}
+
+/**
+ * Save console logs to file via WebSocket.
+ */
+export function handleSaveConsoleLogs(
+  state: DevBarState,
+  filteredLogs: { level: string; message: string; timestamp: number }[]
+): void {
+  if (state.savingConsoleLogs) return;
+
+  // Format logs as markdown
+  const lines = filteredLogs.map((log) => {
+    const time = new Date(log.timestamp).toLocaleTimeString();
+    return `- **[${time}]** \`${log.level}\` ${log.message}`;
+  });
+  const markdown = lines.length > 0 ? lines.join('\n') : '_No logs_';
+
+  if (state.ws?.readyState === WebSocket.OPEN) {
+    state.savingConsoleLogs = true;
+    state.render();
+
+    state.ws.send(
+      JSON.stringify({
+        type: 'save-console-logs',
+        data: {
+          logs: filteredLogs,
           markdown,
           url: window.location.href,
           title: document.title,

@@ -5,7 +5,6 @@
  * reducing initial bundle size and page load time.
  */
 
-// Type for the html2canvas function
 type Html2CanvasFunc = (
   element: HTMLElement,
   options?: {

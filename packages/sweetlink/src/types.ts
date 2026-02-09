@@ -213,6 +213,21 @@ export interface SchemaErrorCommand {
   error?: string;
 }
 
+export interface SaveConsoleLogsCommand {
+  type: 'save-console-logs';
+  data?: unknown;
+}
+
+export interface ConsoleLogsSavedCommand {
+  type: 'console-logs-saved';
+  consoleLogsPath?: string;
+}
+
+export interface ConsoleLogsErrorCommand {
+  type: 'console-logs-error';
+  error?: string;
+}
+
 /**
  * Commands that can be sent over the Sweetlink WebSocket connection.
  *
@@ -252,7 +267,10 @@ export type SweetlinkCommand =
   | OutlineSavedCommand
   | OutlineErrorCommand
   | SchemaSavedCommand
-  | SchemaErrorCommand;
+  | SchemaErrorCommand
+  | SaveConsoleLogsCommand
+  | ConsoleLogsSavedCommand
+  | ConsoleLogsErrorCommand;
 
 /**
  * Response structure for Sweetlink commands
@@ -482,6 +500,28 @@ export function isSaveSchemaData(
   return (
     obj.schema !== null &&
     typeof obj.schema === 'object' &&
+    typeof obj.markdown === 'string' &&
+    typeof obj.url === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.timestamp === 'number'
+  );
+}
+
+/**
+ * Type guard for save-console-logs command data
+ * Validates minimum required fields for handleSaveConsoleLogs
+ */
+export function isSaveConsoleLogsData(value: unknown): value is {
+  logs: unknown[];
+  markdown: string;
+  url: string;
+  title: string;
+  timestamp: number;
+} {
+  if (value === null || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    Array.isArray(obj.logs) &&
     typeof obj.markdown === 'string' &&
     typeof obj.url === 'string' &&
     typeof obj.title === 'string' &&

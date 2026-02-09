@@ -257,6 +257,14 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
     case 'schema-error':
       console.error('[GlobalDevBar] Schema save failed:', command.error);
       break;
+    case 'console-logs-saved':
+      handleNotification(state, 'consoleLogs', command.consoleLogsPath, SCREENSHOT_NOTIFICATION_MS);
+      break;
+    case 'console-logs-error':
+      state.savingConsoleLogs = false;
+      console.error('[GlobalDevBar] Console logs save failed:', command.error);
+      state.render();
+      break;
     case 'settings-loaded':
       handleSettingsLoaded(state, command.settings as DevBarSettings | null);
       break;
@@ -274,7 +282,7 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
  */
 export function handleNotification(
   state: DevBarState,
-  type: 'screenshot' | 'designReview' | 'outline' | 'schema',
+  type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
   path: string | undefined,
   durationMs: number
 ): void {
@@ -313,6 +321,15 @@ export function handleNotification(
       if (state.schemaTimeout) clearTimeout(state.schemaTimeout);
       state.schemaTimeout = setTimeout(() => {
         state.lastSchema = null;
+        state.render();
+      }, durationMs);
+      break;
+    case 'consoleLogs':
+      state.savingConsoleLogs = false;
+      state.lastConsoleLogs = path;
+      if (state.consoleLogsTimeout) clearTimeout(state.consoleLogsTimeout);
+      state.consoleLogsTimeout = setTimeout(() => {
+        state.lastConsoleLogs = null;
         state.render();
       }, durationMs);
       break;

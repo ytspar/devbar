@@ -10,6 +10,7 @@ export {
   handleDesignReviewScreenshot,
 } from './designReview.js';
 export { type HmrScreenshotResult, handleHmrScreenshot } from './hmr.js';
+export { handleSaveConsoleLogs, type ConsoleLogsSaveResult } from './consoleLogs.js';
 export { handleSaveOutline, type OutlineSaveResult } from './outline.js';
 export { handleSaveSchema, type SchemaSaveResult } from './schema.js';
 export { handleSaveScreenshot } from './screenshot.js';

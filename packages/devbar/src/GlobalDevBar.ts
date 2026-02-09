@@ -122,6 +122,9 @@ export class GlobalDevBar {
   savingOutline = false;
   savingSchema = false;
   consoleFilter: 'error' | 'warn' | 'info' | null = null;
+  savingConsoleLogs = false;
+  lastConsoleLogs: string | null = null;
+  consoleLogsTimeout: ReturnType<typeof setTimeout> | undefined;
 
   // Modal states
   showOutlineModal = false;
@@ -391,6 +394,7 @@ export class GlobalDevBar {
     if (this.designReviewTimeout) clearTimeout(this.designReviewTimeout);
     if (this.outlineTimeout) clearTimeout(this.outlineTimeout);
     if (this.schemaTimeout) clearTimeout(this.schemaTimeout);
+    if (this.consoleLogsTimeout) clearTimeout(this.consoleLogsTimeout);
 
     // Remove event listeners
     if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
@@ -446,7 +450,7 @@ export class GlobalDevBar {
   }
 
   handleNotification(
-    type: 'screenshot' | 'designReview' | 'outline' | 'schema',
+    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
     path: string | undefined,
     durationMs: number
   ): void {

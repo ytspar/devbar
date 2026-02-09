@@ -18,12 +18,30 @@ import {
   scaleCanvas,
 } from '../screenshotUtils.js';
 
+/** Base options shared by all html2canvas calls in this module */
+const BASE_CAPTURE_OPTIONS = {
+  logging: false,
+  useCORS: true,
+  allowTaint: true,
+  scrollX: 0,
+  scrollY: 0,
+} as const;
+
+/**
+ * Resolve the target element for a screenshot command.
+ * Returns null if a selector was provided but matched nothing.
+ */
+function resolveElement(selector: string | undefined): Element | null {
+  if (!selector) return document.body;
+  return document.querySelector(selector);
+}
+
 /**
  * Handle basic screenshot command
  */
 export async function handleScreenshot(command: ScreenshotCommand): Promise<SweetlinkResponse> {
   try {
-    const element = command.selector ? document.querySelector(command.selector) : document.body;
+    const element = resolveElement(command.selector);
 
     if (!element) {
       return {
@@ -35,11 +53,7 @@ export async function handleScreenshot(command: ScreenshotCommand): Promise<Swee
 
     const { default: html2canvas } = await import('html2canvas-pro');
     const canvas = await html2canvas(element as HTMLElement, {
-      logging: false,
-      useCORS: true,
-      allowTaint: true,
-      scrollX: 0,
-      scrollY: 0,
+      ...BASE_CAPTURE_OPTIONS,
       ...command.options,
     });
 
@@ -87,7 +101,7 @@ export async function handleRequestScreenshot(
   ws: WebSocket | null
 ): Promise<SweetlinkResponse> {
   try {
-    const element = command.selector ? document.querySelector(command.selector) : document.body;
+    const element = resolveElement(command.selector);
 
     if (!element) {
       return sendAndReturn(ws, command.requestId, {
@@ -108,13 +122,9 @@ export async function handleRequestScreenshot(
     try {
       const { default: html2canvas } = await import('html2canvas-pro');
       originalCanvas = await html2canvas(element as HTMLElement, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
+        ...BASE_CAPTURE_OPTIONS,
         width: window.innerWidth,
         windowWidth: window.innerWidth,
-        scrollX: 0,
-        scrollY: 0,
         ...command.options,
       });
     } finally {

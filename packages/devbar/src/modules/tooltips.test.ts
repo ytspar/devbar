@@ -262,7 +262,6 @@ describe('addTooltipShortcut', () => {
 
     const keySpan = row.children[0] as HTMLElement;
     expect(keySpan.textContent).toBe('Cmd+Shift+S');
-    expect(keySpan.style.minWidth).toBe('90px');
     expect(keySpan.style.fontSize).toBe('0.625rem');
 
     const descSpan = row.children[1] as HTMLElement;

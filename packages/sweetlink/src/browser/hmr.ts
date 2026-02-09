@@ -110,10 +110,8 @@ export async function captureHmrScreenshot(
       quality: DEFAULT_SCREENSHOT_QUALITY,
     });
 
-    // Prepare logs
-    const allLogs = [...consoleLogs];
-    const errors = allLogs.filter((l) => l.level === 'error');
-    const warnings = allLogs.filter((l) => l.level === 'warn');
+    const errors = consoleLogs.filter((l) => l.level === 'error');
+    const warnings = consoleLogs.filter((l) => l.level === 'warn');
 
     state.sequence++;
 
@@ -125,10 +123,10 @@ export async function captureHmrScreenshot(
       timestamp: Date.now(),
       sequenceNumber: state.sequence,
       logs: {
-        all: allLogs,
+        all: consoleLogs,
         errors,
         warnings,
-        sinceLastCapture: allLogs.length,
+        sinceLastCapture: consoleLogs.length,
       },
       hmrMetadata,
     };

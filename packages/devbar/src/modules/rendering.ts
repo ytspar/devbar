@@ -35,6 +35,7 @@ import {
   copyPathToClipboard,
   handleDocumentOutline,
   handlePageSchema,
+  handleSaveConsoleLogs,
   handleSaveOutline,
   handleSaveSchema,
   proceedWithDesignReview,
@@ -983,8 +984,8 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
       h.addShortcut('Click', 'Save to file');
       h.addShortcut('Shift+Click', 'Copy to clipboard');
       h.addSectionHeader('Keyboard');
-      h.addShortcut('Cmd/Ctrl+Shift+S', 'Save');
-      h.addShortcut('Cmd/Ctrl+Shift+C', 'Copy');
+      h.addShortcut('Cmd or Ctrl+Shift+S', 'Save');
+      h.addShortcut('Cmd or Ctrl+Shift+C', 'Copy');
     }
   });
 
@@ -1209,7 +1210,7 @@ function createSettingsButton(state: DevBarState): HTMLButtonElement {
   attachButtonTooltip(state, btn, CSS_COLORS.textSecondary, (_tooltip, h) => {
     h.addTitle('Settings');
     h.addSectionHeader('Keyboard');
-    h.addShortcut('Cmd/Ctrl+Shift+M', 'Toggle compact mode');
+    h.addShortcut('Cmd or Ctrl+Shift+M', 'Toggle compact mode');
   });
 
   const isActive = state.showSettingsPopover;
@@ -1300,7 +1301,7 @@ function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   attachTextTooltip(
     state,
     btn,
-    () => (isCompact ? 'Expand (Cmd+Shift+M)' : 'Compact (Cmd+Shift+M)'),
+    () => (isCompact ? 'Expand (Cmd or Ctrl+Shift+M)' : 'Compact (Cmd or Ctrl+Shift+M)'),
     {
       onEnter: () => {
         btn.style.borderColor = accentColor;
@@ -1350,102 +1351,50 @@ function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: Console
   const logs = consoleCaptureSingleton
     .getLogs()
     .filter((log: ConsoleLog) => log.level === filterType);
-  const color = filterType === 'error' ? BUTTON_COLORS.error : BUTTON_COLORS.warning;
-  const label = filterType === 'error' ? 'Errors' : 'Warnings';
+  const colorMap = { error: BUTTON_COLORS.error, warn: BUTTON_COLORS.warning, info: BUTTON_COLORS.info };
+  const color = colorMap[filterType];
+  const labelMap = { error: 'Errors', warn: 'Warnings', info: 'Info' } as const;
+  const label = labelMap[filterType];
 
-  const popup = document.createElement('div');
-  popup.setAttribute('data-devbar', 'true');
-  Object.assign(popup.style, {
-    position: 'fixed',
-    bottom: '60px',
-    left: '80px',
-    zIndex: '10002',
-    backgroundColor: 'var(--devbar-color-bg-elevated)',
-    border: `1px solid ${color}`,
-    borderRadius: '8px',
-    boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${color}33`,
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    minWidth: '400px',
-    maxWidth: '600px',
-    maxHeight: '400px',
-    display: 'flex',
-    flexDirection: 'column',
-    fontFamily: FONT_MONO,
-  });
-
-  // Header
-  const header = document.createElement('div');
-  Object.assign(header.style, {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 14px',
-    borderBottom: `1px solid ${color}40`,
-  });
-
-  const title = document.createElement('span');
-  Object.assign(title.style, { color, fontSize: '0.8125rem', fontWeight: '600' });
-  title.textContent = `Console ${label} (${logs.length})`;
-  header.appendChild(title);
-
-  const headerButtons = document.createElement('div');
-  Object.assign(headerButtons.style, { display: 'flex', gap: '8px' });
-
-  // Clear button
-  const clearBtn = createStyledButton({
-    color,
-    text: 'Clear All',
-    padding: '4px 10px',
-    borderRadius: '4px',
-    fontSize: '0.6875rem',
-  });
-  clearBtn.onclick = () => {
-    consoleCaptureSingleton.clear();
-    state.consoleLogs = [];
+  const closeModal = () => {
     state.consoleFilter = null;
     state.render();
   };
-  headerButtons.appendChild(clearBtn);
 
-  // Close button - match Clear button padding for consistent height
-  const closeBtn = createStyledButton({
+  const overlay = createModalOverlay(closeModal);
+  const modal = createModalBox(color);
+
+  const header = createModalHeader({
     color,
-    text: '\u00D7',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    fontSize: '0.75rem',
+    title: `Console ${label} (${logs.length})`,
+    onClose: closeModal,
+    onCopyMd: async () => {
+      const lines = logs.map((log) => {
+        const time = new Date(log.timestamp).toLocaleTimeString();
+        return `[${time}] ${log.level}: ${log.message}`;
+      });
+      await navigator.clipboard.writeText(lines.join('\n'));
+    },
+    onSave: () => handleSaveConsoleLogs(state, logs),
+    sweetlinkConnected: state.sweetlinkConnected,
+    isSaving: state.savingConsoleLogs,
+    savedPath: state.lastConsoleLogs,
   });
-  closeBtn.onclick = () => {
-    state.consoleFilter = null;
-    state.render();
-  };
-  headerButtons.appendChild(closeBtn);
+  modal.appendChild(header);
 
-  header.appendChild(headerButtons);
-  popup.appendChild(header);
-
-  // Content
-  const content = document.createElement('div');
-  Object.assign(content.style, { flex: '1', overflow: 'auto', padding: '8px 0' });
+  const content = createModalContent();
 
   if (logs.length === 0) {
-    const emptyMsg = document.createElement('div');
-    Object.assign(emptyMsg.style, {
-      padding: '20px',
-      textAlign: 'center',
-      color: CSS_COLORS.textMuted,
-      fontSize: '0.75rem',
-    });
-    emptyMsg.textContent = `No ${filterType}s recorded`;
-    content.appendChild(emptyMsg);
+    content.appendChild(createEmptyMessage(`No ${filterType}s recorded`));
   } else {
     renderConsoleLogs(content, logs, color);
   }
 
-  popup.appendChild(content);
-  state.overlayElement = popup;
-  document.body.appendChild(popup);
+  modal.appendChild(content);
+  overlay.appendChild(modal);
+
+  state.overlayElement = overlay;
+  document.body.appendChild(overlay);
 }
 
 function renderConsoleLogs(container: HTMLElement, logs: ConsoleLog[], color: string): void {
@@ -1472,8 +1421,7 @@ function renderConsoleLogs(container: HTMLElement, logs: ConsoleLog[], color: st
       wordBreak: 'break-word',
       whiteSpace: 'pre-wrap',
     });
-    message.textContent =
-      log.message.length > 500 ? `${log.message.slice(0, 500)}...` : log.message;
+    message.textContent = log.message;
     logItem.appendChild(message);
 
     container.appendChild(logItem);
@@ -2196,7 +2144,7 @@ function renderSettingsPopover(state: DevBarState): void {
     marginTop: '2px',
     marginBottom: '8px',
   });
-  shortcutHint.textContent = 'Keyboard: Cmd+Shift+M';
+  shortcutHint.textContent = 'Keyboard: Cmd or Ctrl+Shift+M';
   displaySection.appendChild(shortcutHint);
 
   // Accent color

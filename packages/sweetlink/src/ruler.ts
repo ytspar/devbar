@@ -250,7 +250,6 @@ export const measureElementsScript = `
 })
 `;
 
-
 /**
  * Measure elements and inject visual overlay using Playwright
  */

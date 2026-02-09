@@ -77,6 +77,11 @@ export interface DevBarState {
   showOutlineModal: boolean;
   showSchemaModal: boolean;
 
+  // Console Logs save
+  savingConsoleLogs: boolean;
+  lastConsoleLogs: string | null;
+  consoleLogsTimeout: ReturnType<typeof setTimeout> | undefined;
+
   // Timeouts
   screenshotTimeout: ReturnType<typeof setTimeout> | null;
   copiedPathTimeout: ReturnType<typeof setTimeout> | null;
@@ -130,7 +135,7 @@ export interface DevBarState {
   toggleCompactMode: () => void;
   connectWebSocket: (port?: number) => void;
   handleNotification: (
-    type: 'screenshot' | 'designReview' | 'outline' | 'schema',
+    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
     path: string | undefined,
     durationMs: number
   ) => void;

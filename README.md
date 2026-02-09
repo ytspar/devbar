@@ -488,6 +488,21 @@ Sweetlink is designed for token-efficient autonomous loops:
 
 Default strategy: Use html2canvas first, escalate to CDP only when needed. This 15x savings enables 10+ autonomous iterations within Claude's budget.
 
+### Screenshot Caveats (html2canvas)
+
+Sweetlink's default screenshot method uses [html2canvas](https://html2canvas.hertzen.com/), which builds a canvas representation by reading DOM properties rather than capturing actual rendered pixels. This means screenshots **may not always match what you see in the browser**. Key limitations:
+
+- **SVGs may not render correctly** — inline and external SVGs are a known trouble area and may appear broken or missing
+- **CSS `filter` is unsupported** — `blur()`, `brightness()`, `drop-shadow()`, etc. will not appear
+- **`box-shadow` is unsupported** — elements with shadows will render without them
+- **CSS blend modes are unsupported** — `mix-blend-mode` and `background-blend-mode` are ignored
+- **Cross-origin images** — images from other domains may not render unless the server provides CORS headers
+- **`object-fit` is unsupported** — images using `object-fit: cover/contain` may render at incorrect aspect ratios
+- **Limited `transform` support** — complex CSS transforms may not render accurately
+- **No `writing-mode` or `zoom`** — these properties are ignored entirely
+
+If you need pixel-perfect screenshots, use the CDP method instead (requires Chrome launched with `--remote-debugging-port=9222`). See [Troubleshooting > CDP Not Available](#cdp-not-available) below.
+
 ## Troubleshooting
 
 ### WebSocket Connection Fails

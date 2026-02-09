@@ -17,6 +17,7 @@ import type {
 import {
   getErrorMessage,
   isDesignReviewScreenshotData,
+  isSaveConsoleLogsData,
   isSaveOutlineData,
   isSaveSchemaData,
   isSaveScreenshotData,
@@ -31,6 +32,7 @@ import {
   handleDesignReviewScreenshot,
   handleHmrScreenshot,
   handleLoadSettings,
+  handleSaveConsoleLogs,
   handleSaveOutline,
   handleSaveSchema,
   handleSaveScreenshot,
@@ -392,6 +394,22 @@ function setupServerHandlers(server: WebSocketServer) {
           } catch (error) {
             console.error('[Sweetlink] Schema save failed:', getErrorMessage(error));
             sendError(ws, 'schema-error', error);
+          }
+          return;
+        }
+
+        if (command.type === 'save-console-logs' && isBrowserClient) {
+          if (!isSaveConsoleLogsData(command.data)) {
+            sendError(ws, 'console-logs-error', 'Invalid console logs data');
+            return;
+          }
+          try {
+            const result = await handleSaveConsoleLogs(command.data);
+            console.log(`[Sweetlink] Console logs saved to ${result.consoleLogsPath}`);
+            sendSuccess(ws, 'console-logs-saved', { consoleLogsPath: result.consoleLogsPath });
+          } catch (error) {
+            console.error('[Sweetlink] Console logs save failed:', getErrorMessage(error));
+            sendError(ws, 'console-logs-error', error);
           }
           return;
         }

@@ -384,13 +384,17 @@ export function addTooltipShortcut(
   Object.assign(keySpan.style, {
     color: CSS_COLORS.textMuted,
     fontSize: '0.625rem',
-    minWidth: '90px',
+    minWidth: '60px',
+    wordBreak: 'break-word',
   });
   keySpan.textContent = key;
   row.appendChild(keySpan);
 
   const descSpan = document.createElement('span');
-  Object.assign(descSpan.style, { color: CSS_COLORS.text });
+  Object.assign(descSpan.style, {
+    color: CSS_COLORS.text,
+    wordBreak: 'break-word',
+  });
   descSpan.textContent = description;
   row.appendChild(descSpan);
 

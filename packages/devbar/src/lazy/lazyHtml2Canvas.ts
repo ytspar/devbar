@@ -14,7 +14,11 @@ type Html2CanvasFunc = (
     allowTaint?: boolean;
     scale?: number;
     width?: number;
+    height?: number;
     windowWidth?: number;
+    windowHeight?: number;
+    scrollX?: number;
+    scrollY?: number;
   }
 ) => Promise<HTMLCanvasElement>;
 

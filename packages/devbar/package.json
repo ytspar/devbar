@@ -56,7 +56,7 @@
   "dependencies": {
     "@ytspar/sweetlink": "workspace:^",
     "axe-core": "^4.10.2",
-    "html2canvas-pro": "^1.5.8"
+    "html2canvas-pro": "^1.5.13"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

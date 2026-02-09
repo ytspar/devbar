@@ -4,7 +4,6 @@
  * Handles Hot Module Replacement detection and automatic screenshot capture.
  */
 
-import html2canvas from 'html2canvas-pro';
 import type { ConsoleLog, HmrScreenshotData } from '../types.js';
 import {
   canvasToDataUrl,
@@ -95,10 +94,13 @@ export async function captureHmrScreenshot(
   await new Promise((resolve) => setTimeout(resolve, config.captureDelay));
 
   try {
+    const { default: html2canvas } = await import('html2canvas-pro');
     const originalCanvas = await html2canvas(document.body, {
       logging: false,
       useCORS: true,
       allowTaint: true,
+      scrollX: 0,
+      scrollY: 0,
     });
 
     // Scale down for efficiency using shared utility

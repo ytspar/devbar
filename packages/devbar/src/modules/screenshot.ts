@@ -66,6 +66,8 @@ export async function handleScreenshot(
       scale: SCREENSHOT_SCALE,
       width: window.innerWidth,
       windowWidth: window.innerWidth,
+      scrollX: 0,
+      scrollY: 0,
     });
 
     // Restore page state
@@ -167,6 +169,8 @@ export async function handleDesignReview(state: DevBarState): Promise<void> {
       scale: 1, // Full quality for design review
       width: window.innerWidth,
       windowWidth: window.innerWidth,
+      scrollX: 0,
+      scrollY: 0,
     });
 
     // Restore page state

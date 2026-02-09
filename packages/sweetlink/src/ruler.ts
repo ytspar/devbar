@@ -250,19 +250,6 @@ export const measureElementsScript = `
 })
 `;
 
-/**
- * Remove the pixel ruler overlay from the page
- */
-export const removeRulerScript = `
-(function() {
-  const overlay = document.getElementById('pixel-ruler-overlay');
-  if (overlay) {
-    overlay.remove();
-    return { success: true, message: 'Overlay removed' };
-  }
-  return { success: false, message: 'No overlay found' };
-})()
-`;
 
 /**
  * Measure elements and inject visual overlay using Playwright

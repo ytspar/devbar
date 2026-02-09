@@ -327,7 +327,7 @@ export interface OutlineNode {
 /**
  * A single microdata item extracted from the page
  */
-export interface MicrodataItem {
+interface MicrodataItem {
   type?: string;
   properties?: Record<string, unknown>;
 }

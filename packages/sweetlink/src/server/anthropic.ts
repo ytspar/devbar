@@ -24,7 +24,7 @@ export interface TextBlock {
 }
 
 /** Claude Messages API response shape */
-export interface MessageResponse {
+interface MessageResponse {
   id: string;
   type: 'message';
   role: 'assistant';
@@ -38,7 +38,7 @@ export interface MessageResponse {
 }
 
 /** Content block sent to the API */
-export type ContentBlock =
+type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 

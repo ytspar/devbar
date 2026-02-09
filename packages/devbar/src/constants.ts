@@ -279,7 +279,7 @@ export const DEVBAR_THEME_LIGHT = {
   transitions: DEVBAR_THEME.transitions,
 } as const;
 
-export type DevBarThemeLight = typeof DEVBAR_THEME_LIGHT;
+type DevBarThemeLight = typeof DEVBAR_THEME_LIGHT;
 
 // ============================================================================
 // Shorthand Exports (for cleaner imports)

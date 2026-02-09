@@ -181,7 +181,7 @@ export function positionTooltip(tooltip: HTMLElement, anchor: HTMLElement): void
 }
 
 /** Options for composing additional hover behavior with tooltips */
-export type TooltipHoverOptions = {
+type TooltipHoverOptions = {
   onEnter?: () => void;
   onLeave?: () => void;
 };

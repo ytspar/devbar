@@ -4,7 +4,6 @@
  * Handles screenshot-related commands from the server.
  */
 
-import html2canvas from 'html2canvas-pro';
 import type {
   RequestScreenshotCommand,
   ScreenshotCommand,
@@ -34,10 +33,13 @@ export async function handleScreenshot(command: ScreenshotCommand): Promise<Swee
       };
     }
 
+    const { default: html2canvas } = await import('html2canvas-pro');
     const canvas = await html2canvas(element as HTMLElement, {
       logging: false,
       useCORS: true,
       allowTaint: true,
+      scrollX: 0,
+      scrollY: 0,
       ...command.options,
     });
 
@@ -104,12 +106,15 @@ export async function handleRequestScreenshot(
 
     let originalCanvas: HTMLCanvasElement;
     try {
+      const { default: html2canvas } = await import('html2canvas-pro');
       originalCanvas = await html2canvas(element as HTMLElement, {
         logging: false,
         useCORS: true,
         allowTaint: true,
         width: window.innerWidth,
         windowWidth: window.innerWidth,
+        scrollX: 0,
+        scrollY: 0,
         ...command.options,
       });
     } finally {

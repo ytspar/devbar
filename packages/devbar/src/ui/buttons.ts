@@ -41,6 +41,37 @@ function applyButtonHoverEffects(
 }
 
 /**
+ * Create a close/dismiss button (×) with subtle border-on-hover style.
+ * Used for modal close buttons and cancel actions.
+ */
+export function createCloseButton(onClick: () => void, text = '\u00D7'): HTMLButtonElement {
+  const color = '#6b7280';
+  const btn = document.createElement('button');
+  Object.assign(btn.style, {
+    padding: '2px 6px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    border: '1px solid transparent',
+    borderRadius: '6px',
+    color,
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 150ms',
+  });
+  btn.textContent = text;
+  btn.onmouseenter = () => {
+    btn.style.borderColor = `${color}60`;
+  };
+  btn.onmouseleave = () => {
+    btn.style.borderColor = 'transparent';
+  };
+  btn.onclick = onClick;
+  return btn;
+}
+
+/**
  * Create a styled button with common properties
  */
 export function createStyledButton(options: {

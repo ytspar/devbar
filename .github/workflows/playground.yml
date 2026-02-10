@@ -51,6 +51,24 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Generate coverage data
+        run: |
+          pnpm test:coverage
+          node -e "
+            const s = require('./coverage/coverage-summary.json');
+            const t = s.total;
+            const data = {
+              statements: +t.statements.pct,
+              branches: +t.branches.pct,
+              functions: +t.functions.pct,
+              lines: +t.lines.pct,
+            };
+            require('fs').writeFileSync(
+              'packages/playground/public/coverage.json',
+              JSON.stringify(data)
+            );
+          "
+
       - name: Build playground for GitHub Pages
         run: pnpm --filter playground build
         env:

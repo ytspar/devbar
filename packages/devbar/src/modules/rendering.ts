@@ -24,6 +24,7 @@ import {
   createModalContent,
   createModalHeader,
   createModalOverlay,
+  createCloseButton,
   createStyledButton,
   createSvgIcon,
   getButtonStyles,
@@ -65,6 +66,41 @@ function captureDotPosition(state: DevBarState, element: Element): void {
     top: rect.top + rect.height / 2,
     bottom: window.innerHeight - (rect.top + rect.height / 2),
   };
+}
+
+/**
+ * Create the connection indicator (outer wrapper + inner colored dot).
+ * The caller is responsible for attaching tooltip and click handlers, since
+ * those differ between compact and expanded modes.
+ */
+function createConnectionIndicator(state: DevBarState): HTMLSpanElement {
+  const connIndicator = document.createElement('span');
+  connIndicator.className = 'devbar-clickable';
+  Object.assign(connIndicator.style, {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    backgroundColor: 'transparent',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    flexShrink: '0',
+  });
+
+  const connDot = document.createElement('span');
+  connDot.className = 'devbar-conn-dot';
+  Object.assign(connDot.style, {
+    width: '6px',
+    height: '6px',
+    borderRadius: '50%',
+    backgroundColor: state.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
+    boxShadow: state.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
+    transition: 'all 300ms',
+  });
+  connIndicator.appendChild(connDot);
+
+  return connIndicator;
 }
 
 /**
@@ -124,28 +160,26 @@ function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapt
     state.overlayElement = null;
   }
 
-  // Render console popup if filter is active
+  // Safety: only one overlay at a time. First match wins; close the rest.
   if (state.consoleFilter) {
+    state.showOutlineModal = false;
+    state.showSchemaModal = false;
+    state.showDesignReviewConfirm = false;
+    state.showSettingsPopover = false;
     renderConsolePopup(state, consoleCaptureSingleton);
-  }
-
-  // Render outline modal
-  if (state.showOutlineModal) {
+  } else if (state.showOutlineModal) {
+    state.showSchemaModal = false;
+    state.showDesignReviewConfirm = false;
+    state.showSettingsPopover = false;
     renderOutlineModal(state);
-  }
-
-  // Render schema modal
-  if (state.showSchemaModal) {
+  } else if (state.showSchemaModal) {
+    state.showDesignReviewConfirm = false;
+    state.showSettingsPopover = false;
     renderSchemaModal(state);
-  }
-
-  // Render design review confirmation modal
-  if (state.showDesignReviewConfirm) {
+  } else if (state.showDesignReviewConfirm) {
+    state.showSettingsPopover = false;
     renderDesignReviewConfirmModal(state);
-  }
-
-  // Render settings popover
-  if (state.showSettingsPopover) {
+  } else if (state.showSettingsPopover) {
     renderSettingsPopover(state);
   }
 }
@@ -173,6 +207,8 @@ function renderCollapsed(state: DevBarState): void {
           bottom: `${state.lastDotPosition.bottom - 13}px`,
           left: `${state.lastDotPosition.left - 13}px`,
         };
+    // Clear after use so expand doesn't re-use stale values
+    state.lastDotPosition = null;
   } else {
     // Fallback preset positions for when no dot position was captured
     const collapsedPositions: Record<string, PositionStyle> = {
@@ -342,17 +378,8 @@ function renderCompact(state: DevBarState): void {
   });
 
   // Connection indicator
-  const connIndicator = document.createElement('span');
-  connIndicator.className = 'devbar-clickable';
-  Object.assign(connIndicator.style, {
-    width: '12px',
-    height: '12px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-  });
+  const connIndicator = createConnectionIndicator(state);
+  const connDot = connIndicator.querySelector('.devbar-conn-dot') as HTMLSpanElement;
   attachTextTooltip(state, connIndicator, () =>
     state.sweetlinkConnected ? 'Sweetlink connected' : 'Sweetlink disconnected'
   );
@@ -363,16 +390,6 @@ function renderCompact(state: DevBarState): void {
     state.debug.state('Collapsed DevBar from compact mode');
     state.render();
   };
-
-  const connDot = document.createElement('span');
-  Object.assign(connDot.style, {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: state.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
-    boxShadow: state.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
-  });
-  connIndicator.appendChild(connDot);
   wrapper.appendChild(connIndicator);
 
   // Error badge
@@ -552,19 +569,7 @@ function renderExpanded(
   });
 
   // Connection indicator (click to collapse)
-  const connIndicator = document.createElement('span');
-  connIndicator.className = 'devbar-clickable';
-  Object.assign(connIndicator.style, {
-    width: '12px',
-    height: '12px',
-    borderRadius: '50%',
-    backgroundColor: 'transparent',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    flexShrink: '0',
-  });
+  const connIndicator = createConnectionIndicator(state);
   attachTextTooltip(state, connIndicator, () =>
     state.sweetlinkConnected
       ? 'Sweetlink connected (click to minimize)'
@@ -577,17 +582,6 @@ function renderExpanded(
     state.debug.state('Collapsed DevBar (connection dot click)');
     state.render();
   };
-
-  const connDot = document.createElement('span');
-  Object.assign(connDot.style, {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    backgroundColor: state.sweetlinkConnected ? CSS_COLORS.primary : CSS_COLORS.textMuted,
-    boxShadow: state.sweetlinkConnected ? `0 0 6px ${CSS_COLORS.primary}` : 'none',
-    transition: 'all 300ms',
-  });
-  connIndicator.appendChild(connDot);
 
   // Status row wrapper - keeps connection dot, info, and badges together
   const statusRow = document.createElement('div');
@@ -912,6 +906,7 @@ function createConsoleBadge(
     state.consoleFilter = state.consoleFilter === type ? null : type;
     state.showOutlineModal = false;
     state.showSchemaModal = false;
+    state.showSettingsPopover = false;
     state.render();
   };
 
@@ -1789,15 +1784,7 @@ function renderDesignReviewConfirmModal(state: DevBarState): void {
   title.textContent = 'AI Design Review';
   header.appendChild(title);
 
-  const closeBtn = createStyledButton({
-    color: CSS_COLORS.textMuted,
-    text: '\u00D7',
-    padding: '0',
-    fontSize: '1.25rem',
-  });
-  closeBtn.style.border = 'none';
-  closeBtn.onclick = closeModal;
-  header.appendChild(closeBtn);
+  header.appendChild(createCloseButton(closeModal));
   modal.appendChild(header);
 
   // Content
@@ -1829,13 +1816,7 @@ function renderDesignReviewConfirmModal(state: DevBarState): void {
     borderTop: `1px solid ${CSS_COLORS.border}`,
   });
 
-  const cancelBtn = createStyledButton({
-    color: CSS_COLORS.textMuted,
-    text: 'Cancel',
-    padding: '8px 16px',
-  });
-  cancelBtn.onclick = closeModal;
-  footer.appendChild(cancelBtn);
+  footer.appendChild(createCloseButton(closeModal, 'Cancel'));
 
   if (state.apiKeyStatus?.configured) {
     const proceedBtn = createStyledButton({ color, text: 'Run Review', padding: '8px 16px' });
@@ -1846,6 +1827,8 @@ function renderDesignReviewConfirmModal(state: DevBarState): void {
 
   modal.appendChild(footer);
   overlay.appendChild(modal);
+
+  state.overlayElement = overlay;
   document.body.appendChild(overlay);
 }
 
@@ -1955,19 +1938,29 @@ function renderApiKeyConfiguredContent(state: DevBarState): HTMLElement {
 
 function renderSettingsPopover(state: DevBarState): void {
   const { position, accentColor } = state.options;
-  const color = CSS_COLORS.textSecondary;
 
   const popover = document.createElement('div');
   popover.setAttribute('data-devbar', 'true');
+  popover.setAttribute('data-devbar-overlay', 'true');
 
-  // Position based on devbar position
+  // Position: centered over the devbar on desktop, centered on screen on mobile
   const isTop = position.startsWith('top');
-  const isRight = position.includes('right');
+  const popoverWidth = 480;
+  const edgePad = 16;
+
+  let leftPx: number;
+  if (state.container && window.innerWidth > 640) {
+    const barRect = state.container.getBoundingClientRect();
+    const barCenter = barRect.left + barRect.width / 2;
+    leftPx = Math.max(edgePad, Math.min(barCenter - popoverWidth / 2, window.innerWidth - popoverWidth - edgePad));
+  } else {
+    leftPx = Math.max(edgePad, (window.innerWidth - popoverWidth) / 2);
+  }
 
   Object.assign(popover.style, {
     position: 'fixed',
     [isTop ? 'top' : 'bottom']: '70px',
-    [isRight ? 'right' : 'left']: isRight ? '16px' : '80px',
+    left: `${leftPx}px`,
     zIndex: '10003',
     backgroundColor: 'var(--devbar-color-bg-elevated)',
     border: `1px solid ${accentColor}`,
@@ -1975,14 +1968,51 @@ function renderSettingsPopover(state: DevBarState): void {
     boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${accentColor}33`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
-    minWidth: '240px',
-    maxWidth: '280px',
+    width: `${popoverWidth}px`,
+    maxWidth: 'calc(100vw - 32px)',
     maxHeight: 'calc(100vh - 100px)',
     overflowY: 'auto',
     fontFamily: FONT_MONO,
   });
 
-  // Header
+  popover.appendChild(createSettingsHeader(state));
+
+  // Two-column grid for settings sections (collapses to 1 column on mobile via CSS)
+  const grid = document.createElement('div');
+  grid.className = 'devbar-settings-grid';
+  Object.assign(grid.style, {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+  });
+
+  // Left column: Theme + Display
+  const color = CSS_COLORS.textSecondary;
+  const leftCol = document.createElement('div');
+  Object.assign(leftCol.style, { borderRight: `1px solid ${color}20` });
+  leftCol.appendChild(createThemeSection(state));
+  leftCol.appendChild(createDisplaySection(state));
+  grid.appendChild(leftCol);
+
+  // Right column: Features + Metrics
+  const rightCol = document.createElement('div');
+  rightCol.appendChild(createFeaturesSection(state));
+  rightCol.appendChild(createMetricsSection(state));
+  grid.appendChild(rightCol);
+
+  popover.appendChild(grid);
+  popover.appendChild(createResetSection(state));
+
+  state.overlayElement = popover;
+  document.body.appendChild(popover);
+}
+
+// ============================================================================
+// Settings Popover Section Builders
+// ============================================================================
+
+function createSettingsHeader(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+
   const header = document.createElement('div');
   Object.assign(header.style, {
     display: 'flex',
@@ -2001,21 +2031,18 @@ function renderSettingsPopover(state: DevBarState): void {
   title.textContent = 'Settings';
   header.appendChild(title);
 
-  const closeBtn = createStyledButton({
-    color: CSS_COLORS.textMuted,
-    text: '\u00D7',
-    padding: '2px 6px',
-    fontSize: '0.875rem',
-  });
-  closeBtn.style.border = 'none';
-  closeBtn.onclick = () => {
+  header.appendChild(createCloseButton(() => {
     state.showSettingsPopover = false;
     state.render();
-  };
-  header.appendChild(closeBtn);
-  popover.appendChild(header);
+  }));
 
-  // ========== THEME SECTION ==========
+  return header;
+}
+
+function createThemeSection(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+  const color = CSS_COLORS.textSecondary;
+
   const themeSection = createSettingsSection('Theme');
 
   const themeOptions = document.createElement('div');
@@ -2043,9 +2070,16 @@ function renderSettingsPopover(state: DevBarState): void {
     themeOptions.appendChild(btn);
   });
   themeSection.appendChild(themeOptions);
-  popover.appendChild(themeSection);
 
-  // ========== DISPLAY SECTION ==========
+  return themeSection;
+}
+
+type SettingsPositionValue = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
+
+function createDisplaySection(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+  const color = CSS_COLORS.textSecondary;
+
   const displaySection = createSettingsSection('Display');
 
   // Position mini-map selector
@@ -2073,9 +2107,8 @@ function renderSettingsPopover(state: DevBarState): void {
   });
 
   // Position indicator styles - rectangular bars representing DevBar
-  type PositionValue = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
   const positionConfigs: Array<{
-    value: PositionValue;
+    value: SettingsPositionValue;
     style: Partial<CSSStyleDeclaration>;
     title: string;
   }> = [
@@ -2204,9 +2237,13 @@ function renderSettingsPopover(state: DevBarState): void {
   accentRow.appendChild(colorSwatches);
   displaySection.appendChild(accentRow);
 
-  popover.appendChild(displaySection);
+  return displaySection;
+}
 
-  // ========== FEATURES SECTION ==========
+function createFeaturesSection(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+  const color = CSS_COLORS.textSecondary;
+
   const featuresSection = createSettingsSection('Features');
 
   featuresSection.appendChild(
@@ -2287,13 +2324,17 @@ function renderSettingsPopover(state: DevBarState): void {
   saveLocRow.appendChild(saveLocOptions);
   featuresSection.appendChild(saveLocRow);
 
-  popover.appendChild(featuresSection);
+  return featuresSection;
+}
 
-  // ========== METRICS SECTION ==========
+type SettingsMetricKey = 'breakpoint' | 'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize';
+
+function createMetricsSection(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+
   const metricsSection = createSettingsSection('Metrics');
 
-  type MetricKey = 'breakpoint' | 'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize';
-  const metricsToggles: Array<{ key: MetricKey; label: string }> = [
+  const metricsToggles: Array<{ key: SettingsMetricKey; label: string }> = [
     { key: 'breakpoint', label: 'Breakpoint' },
     { key: 'fcp', label: 'FCP' },
     { key: 'lcp', label: 'LCP' },
@@ -2322,9 +2363,12 @@ function renderSettingsPopover(state: DevBarState): void {
     );
   });
 
-  popover.appendChild(metricsSection);
+  return metricsSection;
+}
 
-  // ========== RESET SECTION ==========
+function createResetSection(state: DevBarState): HTMLDivElement {
+  const color = CSS_COLORS.textSecondary;
+
   const resetSection = document.createElement('div');
   Object.assign(resetSection.style, {
     padding: '10px 14px',
@@ -2347,10 +2391,8 @@ function renderSettingsPopover(state: DevBarState): void {
     state.applySettings(defaults);
   };
   resetSection.appendChild(resetBtn);
-  popover.appendChild(resetSection);
 
-  state.overlayElement = popover;
-  document.body.appendChild(popover);
+  return resetSection;
 }
 
 // ============================================================================

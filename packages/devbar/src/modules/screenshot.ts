@@ -25,18 +25,92 @@ import {
 } from '../utils.js';
 import type { DevBarState } from './types.js';
 
-/** Build html2canvas options shared by screenshot and design review capture */
-function baseCaptureOptions(scale: number): Record<string, unknown> {
+/**
+ * Generic save-or-download helper that encapsulates the shared pattern used by
+ * handleSaveOutline, handleSaveSchema, and handleSaveConsoleLogs.
+ *
+ * When connected locally via WebSocket, sends JSON to the server.
+ * Otherwise falls back to a browser download.
+ */
+function saveOrDownload(
+  state: DevBarState,
+  opts: {
+    type: string;
+    data: Record<string, unknown>;
+    savingFlag: 'savingOutline' | 'savingSchema' | 'savingConsoleLogs';
+    downloadFilename: string;
+    downloadContent: string;
+    downloadMimeType: string;
+    notificationKey: 'outline' | 'schema' | 'consoleLogs';
+    notificationMessage: string;
+  }
+): void {
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
+    state[opts.savingFlag] = true;
+    state.render();
+
+    state.ws.send(
+      JSON.stringify({
+        type: opts.type,
+        data: opts.data,
+      })
+    );
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadFile(`${opts.downloadFilename}-${timestamp}.md`, opts.downloadContent, opts.downloadMimeType);
+    state.handleNotification(opts.notificationKey, opts.notificationMessage, SCREENSHOT_NOTIFICATION_MS);
+  }
+}
+
+/** Build html2canvas options for full-page or viewport capture */
+function captureOptions(scale: number, viewportOnly: boolean): Record<string, unknown> {
   return {
     logging: false,
     useCORS: true,
     allowTaint: true,
     scale,
-    width: window.innerWidth,
     windowWidth: window.innerWidth,
-    scrollX: 0,
-    scrollY: 0,
+    windowHeight: window.innerHeight,
+    // Full-page: render from document top; viewport: offset for scroll position
+    scrollX: viewportOnly ? -window.scrollX : 0,
+    scrollY: viewportOnly ? -window.scrollY : 0,
+    ignoreElements: (el: Element) => el.hasAttribute('data-devbar'),
+    onclone: (_doc: Document, clone: HTMLElement) => {
+      // Fix html2canvas rendering issues in the cloned document:
+      // 1. CSS animations with fill-mode:both leave elements at opacity:0
+      //    in the clone (animations don't replay). Disabling animations
+      //    reverts elements to their natural computed styles (opacity:1).
+      // 2. mix-blend-mode (CRT overlays, etc.) renders incorrectly.
+      const style = document.createElement('style');
+      style.textContent = [
+        '*, *::before, *::after {',
+        '  animation: none !important;',
+        '  mix-blend-mode: normal !important;',
+        '}',
+      ].join('\n');
+      clone.ownerDocument.head.appendChild(style);
+    },
   };
+}
+
+/** Crop a full-page canvas down to the visible viewport at the given scale */
+function cropToViewport(source: HTMLCanvasElement, scale: number): HTMLCanvasElement {
+  const vw = window.innerWidth * scale;
+  const vh = window.innerHeight * scale;
+  const sx = window.scrollX * scale;
+  const sy = window.scrollY * scale;
+
+  // If the source already matches viewport size, skip cropping
+  if (source.width <= vw && source.height <= vh) return source;
+
+  const cropped = document.createElement('canvas');
+  cropped.width = vw;
+  cropped.height = vh;
+  const ctx = cropped.getContext('2d');
+  if (!ctx) return source;
+  ctx.drawImage(source, sx, sy, vw, vh, 0, 0, vw, vh);
+  return cropped;
 }
 
 /**
@@ -79,11 +153,14 @@ export async function handleScreenshot(
     await delay(SCREENSHOT_BLUR_DELAY_MS);
 
     const html2canvas = await getHtml2Canvas();
-    const canvas = await html2canvas(document.body, baseCaptureOptions(SCREENSHOT_SCALE));
+    const fullCanvas = await html2canvas(document.body, captureOptions(SCREENSHOT_SCALE, copyToClipboard));
 
     // Restore page state
     cleanup();
     cleanup = null;
+
+    // Clipboard copies use viewport crop (for quick paste); saves capture full page
+    const canvas = copyToClipboard ? cropToViewport(fullCanvas, SCREENSHOT_SCALE) : fullCanvas;
 
     if (copyToClipboard) {
       try {
@@ -178,7 +255,7 @@ export async function handleDesignReview(state: DevBarState): Promise<void> {
     await delay(SCREENSHOT_BLUR_DELAY_MS);
 
     const html2canvas = await getHtml2Canvas();
-    const canvas = await html2canvas(document.body, baseCaptureOptions(1)); // Full quality for design review
+    const canvas = await html2canvas(document.body, captureOptions(1, false)); // Full quality, full page for design review
 
     // Restore page state
     cleanup();
@@ -223,6 +300,7 @@ export function showDesignReviewConfirmation(state: DevBarState): void {
   state.showDesignReviewConfirm = true;
   state.showOutlineModal = false;
   state.showSchemaModal = false;
+  state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
 }
@@ -282,6 +360,7 @@ export function proceedWithDesignReview(state: DevBarState): void {
 export function handleDocumentOutline(state: DevBarState): void {
   state.showOutlineModal = !state.showOutlineModal;
   state.showSchemaModal = false;
+  state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
 }
@@ -292,6 +371,7 @@ export function handleDocumentOutline(state: DevBarState): void {
 export function handlePageSchema(state: DevBarState): void {
   state.showSchemaModal = !state.showSchemaModal;
   state.showOutlineModal = false;
+  state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
 }
@@ -305,28 +385,16 @@ export function handleSaveOutline(state: DevBarState): void {
   const outline = extractDocumentOutline();
   const markdown = outlineToMarkdown(outline);
 
-  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
-  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
-    state.savingOutline = true;
-    state.render();
-
-    state.ws.send(
-      JSON.stringify({
-        type: 'save-outline',
-        data: {
-          outline,
-          markdown,
-          url: window.location.href,
-          title: document.title,
-          timestamp: Date.now(),
-        },
-      })
-    );
-  } else {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadFile(`outline-${timestamp}.md`, markdown, 'text/markdown');
-    state.handleNotification('outline', 'outline downloaded', SCREENSHOT_NOTIFICATION_MS);
-  }
+  saveOrDownload(state, {
+    type: 'save-outline',
+    data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    savingFlag: 'savingOutline',
+    downloadFilename: 'outline',
+    downloadContent: markdown,
+    downloadMimeType: 'text/markdown',
+    notificationKey: 'outline',
+    notificationMessage: 'outline downloaded',
+  });
 }
 
 /**
@@ -345,28 +413,16 @@ export function handleSaveConsoleLogs(
   });
   const markdown = lines.length > 0 ? lines.join('\n') : '_No logs_';
 
-  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
-  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
-    state.savingConsoleLogs = true;
-    state.render();
-
-    state.ws.send(
-      JSON.stringify({
-        type: 'save-console-logs',
-        data: {
-          logs: filteredLogs,
-          markdown,
-          url: window.location.href,
-          title: document.title,
-          timestamp: Date.now(),
-        },
-      })
-    );
-  } else {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadFile(`console-logs-${timestamp}.md`, markdown, 'text/markdown');
-    state.handleNotification('consoleLogs', 'console logs downloaded', SCREENSHOT_NOTIFICATION_MS);
-  }
+  saveOrDownload(state, {
+    type: 'save-console-logs',
+    data: { logs: filteredLogs, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    savingFlag: 'savingConsoleLogs',
+    downloadFilename: 'console-logs',
+    downloadContent: markdown,
+    downloadMimeType: 'text/markdown',
+    notificationKey: 'consoleLogs',
+    notificationMessage: 'console logs downloaded',
+  });
 }
 
 /**
@@ -378,26 +434,14 @@ export function handleSaveSchema(state: DevBarState): void {
   const schema = extractPageSchema();
   const markdown = schemaToMarkdown(schema);
 
-  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
-  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
-    state.savingSchema = true;
-    state.render();
-
-    state.ws.send(
-      JSON.stringify({
-        type: 'save-schema',
-        data: {
-          schema,
-          markdown,
-          url: window.location.href,
-          title: document.title,
-          timestamp: Date.now(),
-        },
-      })
-    );
-  } else {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadFile(`schema-${timestamp}.md`, markdown, 'text/markdown');
-    state.handleNotification('schema', 'schema downloaded', SCREENSHOT_NOTIFICATION_MS);
-  }
+  saveOrDownload(state, {
+    type: 'save-schema',
+    data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    savingFlag: 'savingSchema',
+    downloadFilename: 'schema',
+    downloadContent: markdown,
+    downloadMimeType: 'text/markdown',
+    notificationKey: 'schema',
+    notificationMessage: 'schema downloaded',
+  });
 }

@@ -6,7 +6,7 @@
 
 import { MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
-import { createStyledButton } from './buttons.js';
+import { createCloseButton, createStyledButton } from './buttons.js';
 
 /**
  * Configuration for creating a modal
@@ -32,6 +32,7 @@ export interface ModalConfig {
 export function createModalOverlay(onClose: () => void): HTMLDivElement {
   const overlay = document.createElement('div');
   overlay.setAttribute('data-devbar', 'true');
+  overlay.setAttribute('data-devbar-overlay', 'true');
   Object.assign(overlay.style, MODAL_OVERLAY_STYLES);
   overlay.onclick = (e) => {
     if (e.target === overlay) onClose();
@@ -126,15 +127,8 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     headerButtons.appendChild(saveBtn);
   }
 
-  // Close button - use same padding as other buttons for consistent height
-  const closeBtn = createStyledButton({
-    color,
-    text: '×',
-    padding: '6px 10px',
-    fontSize: '0.875rem',
-  });
-  closeBtn.onclick = onClose;
-  headerButtons.appendChild(closeBtn);
+  // Close button
+  headerButtons.appendChild(createCloseButton(onClose));
 
   header.appendChild(headerButtons);
 

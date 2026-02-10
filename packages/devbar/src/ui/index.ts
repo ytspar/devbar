@@ -4,7 +4,7 @@
  * Re-exports all UI utilities.
  */
 
-export { createStyledButton, getButtonStyles } from './buttons.js';
+export { createCloseButton, createStyledButton, getButtonStyles } from './buttons.js';
 export { type CardConfig, createCard, getCardContent, setCardEmpty } from './cards.js';
 export { createSvgIcon } from './icons.js';
 export {

@@ -594,18 +594,19 @@ export const MODAL_OVERLAY_STYLES: Record<string, string> = {
   left: '0',
   right: '0',
   bottom: '0',
-  backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  backgroundColor: 'rgba(0, 0, 0, 0.3)',
   zIndex: '10002',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
+  paddingBottom: '60px',
 };
 
 /** Common modal box styles (uses CSS variables for theming) */
 export const MODAL_BOX_BASE_STYLES: Record<string, string> = {
   backgroundColor: 'var(--devbar-color-bg-elevated)',
   borderRadius: '12px',
-  width: '90%',
+  width: 'calc(100% - 32px)',
   maxWidth: '700px',
   maxHeight: '80vh',
   display: 'flex',
@@ -662,6 +663,24 @@ export const DEVBAR_STYLES = `
   0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(16, 185, 129, 0.1); }
   50% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px rgba(16, 185, 129, 0.4); }
 }
+/* Modal scrollbars */
+[data-devbar-overlay] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--devbar-color-primary-glow) transparent;
+}
+[data-devbar-overlay] *::-webkit-scrollbar {
+  width: 6px;
+}
+[data-devbar-overlay] *::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-devbar-overlay] *::-webkit-scrollbar-thumb {
+  background: var(--devbar-color-primary-glow);
+  border-radius: 3px;
+}
+[data-devbar-overlay] *::-webkit-scrollbar-thumb:hover {
+  background: var(--devbar-color-primary);
+}
 /* Main row - single row by default (SM, MD, LG, XL) */
 .devbar-main {
   flex-wrap: nowrap;
@@ -683,8 +702,8 @@ export const DEVBAR_STYLES = `
 }
 /* BASE only (< 640px): fit content, centered horizontally */
 @media (max-width: 639px) {
-  /* Expanded state: center and constrain width */
-  [data-devbar]:not(.devbar-collapse) {
+  /* Expanded state: center and constrain width (exclude overlays and tooltips) */
+  [data-devbar]:not(.devbar-collapse):not([data-devbar-overlay]):not([data-devbar-tooltip]) {
     width: auto !important;
     min-width: auto !important;
     max-width: calc(100vw - 32px) !important;
@@ -712,6 +731,12 @@ export const DEVBAR_STYLES = `
     margin-top: 0.25rem;
     flex-wrap: nowrap;
     width: 100%;
+  }
+  .devbar-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .devbar-settings-grid > div {
+    border-right: none !important;
   }
 }
 `;

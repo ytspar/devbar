@@ -12,6 +12,7 @@ export {
 export { type HmrScreenshotResult, handleHmrScreenshot } from './hmr.js';
 export { handleSaveConsoleLogs, type ConsoleLogsSaveResult } from './consoleLogs.js';
 export { handleSaveOutline, type OutlineSaveResult } from './outline.js';
+export { saveMarkdownArtifact } from './saveMarkdown.js';
 export { handleSaveSchema, type SchemaSaveResult } from './schema.js';
 export { handleSaveScreenshot } from './screenshot.js';
 export {

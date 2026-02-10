@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/devbar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "private": false,
   "description": "Development toolbar and utilities with Sweetlink integration - pure vanilla JS, no framework dependencies",

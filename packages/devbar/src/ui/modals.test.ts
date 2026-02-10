@@ -66,7 +66,7 @@ describe('createModalBox', () => {
     expect(modal.style.border).toBe('1px solid #10b981');
     expect(modal.style.borderRadius).toBe('12px');
     expect(modal.style.maxWidth).toBe('700px');
-    expect(modal.style.width).toBe('90%');
+    expect(modal.style.width).toBe('calc(100% - 32px)');
     expect(modal.style.maxHeight).toBe('80vh');
     expect(modal.style.display).toBe('flex');
     expect(modal.style.flexDirection).toBe('column');

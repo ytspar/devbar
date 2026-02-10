@@ -9,8 +9,22 @@ import { WebSocket, WebSocketServer } from 'ws';
 
 // Import types and type guards
 import type {
+  ChannelSubscribeCommand,
+  ChannelUnsubscribeCommand,
   ConsoleLog,
+  DesignReviewScreenshotCommand,
+  HmrScreenshotCommand,
   HmrScreenshotData,
+  LogEventCommand,
+  LogSubscribeCommand,
+  LogUnsubscribeCommand,
+  RequestScreenshotCommand,
+  SaveConsoleLogsCommand,
+  SaveOutlineCommand,
+  SaveSchemaCommand,
+  SaveScreenshotCommand,
+  SaveSettingsCommand,
+  ScreenshotResponseCommand,
   SweetlinkCommand,
   SweetlinkResponse,
 } from '../types.js';
@@ -244,6 +258,508 @@ export function getAssociatedAppPort(): number | null {
   return associatedAppPort;
 }
 
+// ============================================================================
+// Message Handler Types & Context
+// ============================================================================
+
+/** Shared context passed to every message handler */
+interface MessageHandlerContext {
+  /** The WebSocket that sent the message */
+  ws: WebSocket;
+  /** The raw message buffer (needed for forwarding) */
+  rawMessage: Buffer;
+  /** The client ID string */
+  clientId: string;
+  /** Client info from the clients map */
+  clientInfo: { type: 'browser' | 'cli'; id: string; origin?: string } | undefined;
+  /** Whether this client is a browser client */
+  isBrowserClient: boolean;
+}
+
+/**
+ * A message handler function. Return `true` to indicate the message was handled,
+ * or `false`/`undefined` to fall through to the default forwarder.
+ */
+type MessageHandler = (
+  command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+) => Promise<boolean | void> | boolean | void;
+
+// ============================================================================
+// Individual Message Handlers
+// ============================================================================
+
+/** Handle browser client identification */
+function handleBrowserClientReady(
+  _command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+): boolean {
+  const clientInfo = clients.get(ctx.ws);
+  clients.set(ctx.ws, { type: 'browser', id: ctx.clientId, origin: clientInfo?.origin });
+  console.log(`[Sweetlink] Browser client identified: ${ctx.clientId}`);
+
+  // Send server info back to the browser so it can verify connection
+  // Security: Don't expose projectDir to prevent path disclosure
+  ctx.ws.send(
+    JSON.stringify({
+      type: 'server-info',
+      appPort: associatedAppPort,
+      wsPort: activePort,
+      timestamp: Date.now(),
+    })
+  );
+  return true;
+}
+
+/** Handle API key check request from browser */
+function handleCheckApiKey(_command: SweetlinkCommand, ctx: MessageHandlerContext): boolean {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const hasKey = Boolean(apiKey && apiKey.length > 0);
+
+  // Security: Only return boolean, don't expose any key info
+  ctx.ws.send(
+    JSON.stringify({
+      type: 'api-key-status',
+      configured: hasKey,
+      model: CLAUDE_MODEL,
+      pricing: CLAUDE_PRICING,
+      timestamp: Date.now(),
+    })
+  );
+  return true;
+}
+
+/** Handle save-screenshot from browser */
+async function handleSaveScreenshotMsg(
+  command: SaveScreenshotCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveScreenshotData(command.data)) {
+    sendError(ctx.ws, 'screenshot-error', 'Invalid screenshot data');
+    return true;
+  }
+  try {
+    const savedPath = await handleSaveScreenshot(command.data);
+    console.log(`[Sweetlink] Screenshot saved to ${savedPath}`);
+    sendSuccess(ctx.ws, 'screenshot-saved', { path: savedPath });
+  } catch (error) {
+    console.error('[Sweetlink] Screenshot save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'screenshot-error', error);
+  }
+  return true;
+}
+
+/** Handle design-review-screenshot from browser */
+async function handleDesignReviewMsg(
+  command: DesignReviewScreenshotCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isDesignReviewScreenshotData(command.data)) {
+    sendError(ctx.ws, 'design-review-error', 'Invalid design review data');
+    return true;
+  }
+  try {
+    const result = await handleDesignReviewScreenshot(command.data);
+    console.log(`[Sweetlink] Design review saved to ${result.reviewPath}`);
+    sendSuccess(ctx.ws, 'design-review-saved', {
+      screenshotPath: result.screenshotPath,
+      reviewPath: result.reviewPath,
+    });
+  } catch (error) {
+    console.error('[Sweetlink] Design review failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'design-review-error', error);
+  }
+  return true;
+}
+
+/** Handle save-outline from browser */
+async function handleSaveOutlineMsg(
+  command: SaveOutlineCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveOutlineData(command.data)) {
+    sendError(ctx.ws, 'outline-error', 'Invalid outline data');
+    return true;
+  }
+  try {
+    const result = await handleSaveOutline(command.data);
+    console.log(`[Sweetlink] Outline saved to ${result.outlinePath}`);
+    sendSuccess(ctx.ws, 'outline-saved', { outlinePath: result.outlinePath });
+  } catch (error) {
+    console.error('[Sweetlink] Outline save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'outline-error', error);
+  }
+  return true;
+}
+
+/** Handle save-schema from browser */
+async function handleSaveSchemaMsg(
+  command: SaveSchemaCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveSchemaData(command.data)) {
+    sendError(ctx.ws, 'schema-error', 'Invalid schema data');
+    return true;
+  }
+  try {
+    const result = await handleSaveSchema(command.data);
+    console.log(`[Sweetlink] Schema saved to ${result.schemaPath}`);
+    sendSuccess(ctx.ws, 'schema-saved', { schemaPath: result.schemaPath });
+  } catch (error) {
+    console.error('[Sweetlink] Schema save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'schema-error', error);
+  }
+  return true;
+}
+
+/** Handle save-console-logs from browser */
+async function handleSaveConsoleLogsMsg(
+  command: SaveConsoleLogsCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveConsoleLogsData(command.data)) {
+    sendError(ctx.ws, 'console-logs-error', 'Invalid console logs data');
+    return true;
+  }
+  try {
+    const result = await handleSaveConsoleLogs(command.data);
+    console.log(`[Sweetlink] Console logs saved to ${result.consoleLogsPath}`);
+    sendSuccess(ctx.ws, 'console-logs-saved', { consoleLogsPath: result.consoleLogsPath });
+  } catch (error) {
+    console.error('[Sweetlink] Console logs save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'console-logs-error', error);
+  }
+  return true;
+}
+
+/** Handle save-settings from browser */
+async function handleSaveSettingsMsg(
+  command: SaveSettingsCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveSettingsData(command.data)) {
+    sendError(ctx.ws, 'settings-error', 'Invalid settings data');
+    return true;
+  }
+  try {
+    // Type assertion after validation - handler expects DevBarSettings
+    // Cast through unknown as the runtime validation ensures structure
+    const result = await handleSaveSettings(
+      command.data as unknown as Parameters<typeof handleSaveSettings>[0]
+    );
+    console.log(`[Sweetlink] Settings saved to ${result.settingsPath}`);
+    sendSuccess(ctx.ws, 'settings-saved', { settingsPath: result.settingsPath });
+  } catch (error) {
+    console.error('[Sweetlink] Settings save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'settings-error', error);
+  }
+  return true;
+}
+
+/** Handle load-settings from browser */
+async function handleLoadSettingsMsg(
+  _command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (ctx.clientInfo?.type !== 'browser') return false;
+  try {
+    const settings = await handleLoadSettings();
+    sendSuccess(ctx.ws, 'settings-loaded', { settings });
+  } catch (error) {
+    console.error(
+      '[Sweetlink] Settings load failed:',
+      error instanceof Error ? error.message : error
+    );
+    sendError(ctx.ws, 'settings-error', error);
+  }
+  return true;
+}
+
+/** Handle request-screenshot from CLI/Agent */
+function handleRequestScreenshot(
+  command: RequestScreenshotCommand,
+  ctx: MessageHandlerContext
+): boolean {
+  if (ctx.clientInfo?.type !== 'cli') return false;
+
+  const requestId = command.requestId || `req-${Date.now()}`;
+  console.log(`[Sweetlink] Screenshot request ${requestId} from CLI`);
+
+  const browserClients = Array.from(clients.entries())
+    .filter(([, info]) => info.type === 'browser')
+    .map(([client]) => client);
+
+  if (browserClients.length === 0) {
+    ctx.ws.send(
+      JSON.stringify({
+        type: 'screenshot-response',
+        requestId,
+        success: false,
+        error: 'No browser client connected',
+        timestamp: Date.now(),
+      })
+    );
+    return true;
+  }
+
+  const timeout = setTimeout(() => {
+    const pending = pendingScreenshotRequests.get(requestId);
+    if (pending) {
+      pendingScreenshotRequests.delete(requestId);
+      pending.clientWs.send(
+        JSON.stringify({
+          type: 'screenshot-response',
+          requestId,
+          success: false,
+          error: 'Screenshot request timed out',
+          timestamp: Date.now(),
+        })
+      );
+    }
+  }, SCREENSHOT_REQUEST_TIMEOUT_MS);
+
+  pendingScreenshotRequests.set(requestId, { requestId, clientWs: ctx.ws, timeout });
+
+  browserClients[0].send(
+    JSON.stringify({
+      type: 'request-screenshot',
+      requestId,
+      selector: command.selector,
+      format: command.format || 'jpeg',
+      quality: command.quality || 0.7,
+      scale: command.scale || 0.25,
+      includeMetadata: command.includeMetadata !== false,
+    })
+  );
+  return true;
+}
+
+/** Handle screenshot-response from browser */
+function handleScreenshotResponse(
+  command: ScreenshotResponseCommand,
+  ctx: MessageHandlerContext
+): boolean {
+  if (ctx.clientInfo?.type !== 'browser' || !command.requestId) return false;
+
+  const pending = pendingScreenshotRequests.get(command.requestId);
+  if (pending) {
+    clearTimeout(pending.timeout);
+    pendingScreenshotRequests.delete(command.requestId);
+    if (pending.clientWs.readyState === WebSocket.OPEN) {
+      pending.clientWs.send(ctx.rawMessage.toString());
+    }
+  }
+  return true;
+}
+
+/** Handle channel subscription (e.g., 'hmr-screenshots') */
+function handleSubscribe(command: ChannelSubscribeCommand, ctx: MessageHandlerContext): boolean {
+  const channel = command.channel;
+  if (channel) {
+    console.log(`[Sweetlink] Client subscribing to channel: ${channel}`);
+    if (!channelSubscriptions.has(channel)) {
+      channelSubscriptions.set(channel, []);
+    }
+    channelSubscriptions.get(channel)!.push({ channel, clientWs: ctx.ws });
+    sendSuccess(ctx.ws, 'subscribed', { channel });
+    return true;
+  }
+  return false;
+}
+
+/** Handle channel unsubscription */
+function handleUnsubscribe(command: ChannelUnsubscribeCommand, ctx: MessageHandlerContext): boolean {
+  const channel = command.channel;
+  if (channel && channelSubscriptions.has(channel)) {
+    const subs = channelSubscriptions.get(channel)!;
+    const idx = subs.findIndex((s) => s.clientWs === ctx.ws);
+    if (idx !== -1) {
+      subs.splice(idx, 1);
+      console.log(`[Sweetlink] Client unsubscribed from channel: ${channel}`);
+    }
+    sendSuccess(ctx.ws, 'unsubscribed', { channel });
+    return true;
+  }
+  return false;
+}
+
+/** Handle log subscription */
+function handleLogSubscribe(command: LogSubscribeCommand, ctx: MessageHandlerContext): boolean {
+  const subscriptionId = command.subscriptionId || `log-${Date.now()}`;
+  console.log(`[Sweetlink] Log subscription created: ${subscriptionId}`);
+  logSubscriptions.set(subscriptionId, {
+    subscriptionId,
+    clientWs: ctx.ws,
+    filters: command.filters,
+  });
+  sendSuccess(ctx.ws, 'log-subscribed', { subscriptionId });
+  return true;
+}
+
+/** Handle log unsubscription */
+function handleLogUnsubscribe(command: LogUnsubscribeCommand, ctx: MessageHandlerContext): boolean {
+  if (command.subscriptionId && logSubscriptions.has(command.subscriptionId)) {
+    logSubscriptions.delete(command.subscriptionId);
+    console.log(`[Sweetlink] Log subscription removed: ${command.subscriptionId}`);
+    sendSuccess(ctx.ws, 'log-unsubscribed', { subscriptionId: command.subscriptionId });
+  }
+  return true;
+}
+
+/** Handle HMR screenshot from browser */
+async function handleHmrScreenshotMsg(
+  command: HmrScreenshotCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (ctx.clientInfo?.type !== 'browser' || !command.data) return false;
+
+  const hmrData = command.data as HmrScreenshotData;
+  hmrSequenceNumber++;
+
+  console.log(`[Sweetlink] HMR screenshot received (${hmrData.trigger})`);
+  if (hmrData.changedFile) {
+    console.log(`[Sweetlink] Changed file: ${hmrData.changedFile}`);
+  }
+
+  const result = await handleHmrScreenshot(hmrData);
+
+  const notificationData = {
+    screenshotPath: result.screenshotPath,
+    logsPath: result.logsPath,
+    trigger: hmrData.trigger,
+    changedFile: hmrData.changedFile,
+    timestamp: hmrData.timestamp,
+    sequenceNumber: hmrSequenceNumber,
+    logSummary: result.logSummary,
+  };
+
+  const subscribers = channelSubscriptions.get('hmr-screenshots') || [];
+  for (const sub of subscribers) {
+    if (sub.clientWs.readyState === WebSocket.OPEN) {
+      sendSuccess(sub.clientWs, 'hmr-screenshot-saved', notificationData);
+    }
+  }
+
+  sendSuccess(ctx.ws, 'hmr-screenshot-saved', {
+    screenshotPath: result.screenshotPath,
+    logsPath: result.logsPath,
+    sequenceNumber: hmrSequenceNumber,
+  });
+  return true;
+}
+
+/** Handle log-event from browser (for streaming to subscribers) */
+function handleLogEvent(command: LogEventCommand, ctx: MessageHandlerContext): boolean {
+  if (ctx.clientInfo?.type !== 'browser' || !command.data) return false;
+
+  const log = command.data as ConsoleLog;
+  for (const [, sub] of logSubscriptions) {
+    if (sub.clientWs.readyState !== WebSocket.OPEN) continue;
+
+    if (sub.filters) {
+      if (sub.filters.levels && !sub.filters.levels.includes(log.level)) continue;
+      if (sub.filters.pattern) {
+        try {
+          const regex = safeRegex(sub.filters.pattern);
+          if (!regex.test(log.message)) continue;
+        } catch {
+          console.warn(
+            `[Sweetlink] Skipping invalid regex pattern: ${sub.filters.pattern}`
+          );
+        }
+      }
+      if (sub.filters.source && log.source !== sub.filters.source) continue;
+    }
+
+    sub.clientWs.send(
+      JSON.stringify({
+        type: 'log-event',
+        subscriptionId: sub.subscriptionId,
+        log,
+        timestamp: Date.now(),
+      })
+    );
+  }
+  return true;
+}
+
+// ============================================================================
+// Dispatch Map
+// ============================================================================
+
+/**
+ * Map of message type to handler function.
+ *
+ * Each handler is typed with its specific command variant for type safety
+ * within the handler body. The dispatch map casts to MessageHandler since
+ * we look up by the command.type field, guaranteeing the correct variant
+ * is passed to the matching handler at runtime.
+ */
+const messageHandlers: Record<string, MessageHandler> = {
+  'browser-client-ready': handleBrowserClientReady,
+  'check-api-key': handleCheckApiKey,
+  'save-screenshot': handleSaveScreenshotMsg as MessageHandler,
+  'design-review-screenshot': handleDesignReviewMsg as MessageHandler,
+  'save-outline': handleSaveOutlineMsg as MessageHandler,
+  'save-schema': handleSaveSchemaMsg as MessageHandler,
+  'save-console-logs': handleSaveConsoleLogsMsg as MessageHandler,
+  'save-settings': handleSaveSettingsMsg as MessageHandler,
+  'load-settings': handleLoadSettingsMsg,
+  'request-screenshot': handleRequestScreenshot as MessageHandler,
+  'screenshot-response': handleScreenshotResponse as MessageHandler,
+  'subscribe': handleSubscribe as MessageHandler,
+  'unsubscribe': handleUnsubscribe as MessageHandler,
+  'log-subscribe': handleLogSubscribe as MessageHandler,
+  'log-unsubscribe': handleLogUnsubscribe as MessageHandler,
+  'hmr-screenshot': handleHmrScreenshotMsg as MessageHandler,
+  'log-event': handleLogEvent as MessageHandler,
+};
+
+/**
+ * Forward unhandled messages between CLI and browser clients.
+ * CLI commands are forwarded to the browser; browser responses are forwarded to the CLI.
+ */
+function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): void {
+  if (ctx.clientInfo?.type === 'cli') {
+    console.log(`[Sweetlink] Received command from CLI: ${command.type}`);
+
+    const browserClients = Array.from(clients.entries())
+      .filter(([, info]) => info.type === 'browser')
+      .map(([client]) => client);
+
+    if (browserClients.length === 0) {
+      ctx.ws.send(
+        JSON.stringify({
+          success: false,
+          error: 'No browser client connected. Is the dev server running with the page open?',
+          timestamp: Date.now(),
+        } as SweetlinkResponse)
+      );
+      return;
+    }
+
+    const browserWs = browserClients[0];
+    cliClientMap.set(browserWs, ctx.ws);
+    browserWs.send(ctx.rawMessage.toString());
+  } else if (ctx.clientInfo?.type === 'browser') {
+    const cliWs = cliClientMap.get(ctx.ws);
+    if (cliWs && cliWs.readyState === WebSocket.OPEN) {
+      cliWs.send(ctx.rawMessage.toString());
+      cliClientMap.delete(ctx.ws);
+    }
+  }
+}
+
+// ============================================================================
+// Server Setup
+// ============================================================================
+
 function setupServerHandlers(server: WebSocketServer) {
   server.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
@@ -290,392 +806,24 @@ function setupServerHandlers(server: WebSocketServer) {
           console.log('[Sweetlink] Received message type:', command.type);
         }
 
-        // Handle browser client identification
-        if (command.type === 'browser-client-ready') {
-          const clientInfo = clients.get(ws);
-          clients.set(ws, { type: 'browser', id: clientId, origin: clientInfo?.origin });
-          console.log(`[Sweetlink] Browser client identified: ${clientId}`);
-
-          // Send server info back to the browser so it can verify connection
-          // Security: Don't expose projectDir to prevent path disclosure
-          ws.send(
-            JSON.stringify({
-              type: 'server-info',
-              appPort: associatedAppPort,
-              wsPort: activePort,
-              timestamp: Date.now(),
-            })
-          );
-          return;
-        }
-
-        // Handle API key check request from browser
-        if (command.type === 'check-api-key') {
-          const apiKey = process.env.ANTHROPIC_API_KEY;
-          const hasKey = Boolean(apiKey && apiKey.length > 0);
-
-          // Security: Only return boolean, don't expose any key info
-          ws.send(
-            JSON.stringify({
-              type: 'api-key-status',
-              configured: hasKey,
-              model: CLAUDE_MODEL,
-              pricing: CLAUDE_PRICING,
-              timestamp: Date.now(),
-            })
-          );
-          return;
-        }
-
-        // Handle browser-originated save commands
         const clientInfo = clients.get(ws);
-        const isBrowserClient = clientInfo?.type === 'browser';
+        const ctx: MessageHandlerContext = {
+          ws,
+          rawMessage: message,
+          clientId,
+          clientInfo,
+          isBrowserClient: clientInfo?.type === 'browser',
+        };
 
-        if (command.type === 'save-screenshot' && isBrowserClient) {
-          if (!isSaveScreenshotData(command.data)) {
-            sendError(ws, 'screenshot-error', 'Invalid screenshot data');
-            return;
-          }
-          try {
-            const savedPath = await handleSaveScreenshot(command.data);
-            console.log(`[Sweetlink] Screenshot saved to ${savedPath}`);
-            sendSuccess(ws, 'screenshot-saved', { path: savedPath });
-          } catch (error) {
-            console.error('[Sweetlink] Screenshot save failed:', getErrorMessage(error));
-            sendError(ws, 'screenshot-error', error);
-          }
-          return;
+        // Look up handler in dispatch map
+        const handler = messageHandlers[command.type];
+        if (handler) {
+          const handled = await handler(command, ctx);
+          if (handled !== false) return;
         }
 
-        if (command.type === 'design-review-screenshot' && isBrowserClient) {
-          if (!isDesignReviewScreenshotData(command.data)) {
-            sendError(ws, 'design-review-error', 'Invalid design review data');
-            return;
-          }
-          try {
-            const result = await handleDesignReviewScreenshot(command.data);
-            console.log(`[Sweetlink] Design review saved to ${result.reviewPath}`);
-            sendSuccess(ws, 'design-review-saved', {
-              screenshotPath: result.screenshotPath,
-              reviewPath: result.reviewPath,
-            });
-          } catch (error) {
-            console.error('[Sweetlink] Design review failed:', getErrorMessage(error));
-            sendError(ws, 'design-review-error', error);
-          }
-          return;
-        }
-
-        if (command.type === 'save-outline' && isBrowserClient) {
-          if (!isSaveOutlineData(command.data)) {
-            sendError(ws, 'outline-error', 'Invalid outline data');
-            return;
-          }
-          try {
-            const result = await handleSaveOutline(command.data);
-            console.log(`[Sweetlink] Outline saved to ${result.outlinePath}`);
-            sendSuccess(ws, 'outline-saved', { outlinePath: result.outlinePath });
-          } catch (error) {
-            console.error('[Sweetlink] Outline save failed:', getErrorMessage(error));
-            sendError(ws, 'outline-error', error);
-          }
-          return;
-        }
-
-        if (command.type === 'save-schema' && isBrowserClient) {
-          if (!isSaveSchemaData(command.data)) {
-            sendError(ws, 'schema-error', 'Invalid schema data');
-            return;
-          }
-          try {
-            const result = await handleSaveSchema(command.data);
-            console.log(`[Sweetlink] Schema saved to ${result.schemaPath}`);
-            sendSuccess(ws, 'schema-saved', { schemaPath: result.schemaPath });
-          } catch (error) {
-            console.error('[Sweetlink] Schema save failed:', getErrorMessage(error));
-            sendError(ws, 'schema-error', error);
-          }
-          return;
-        }
-
-        if (command.type === 'save-console-logs' && isBrowserClient) {
-          if (!isSaveConsoleLogsData(command.data)) {
-            sendError(ws, 'console-logs-error', 'Invalid console logs data');
-            return;
-          }
-          try {
-            const result = await handleSaveConsoleLogs(command.data);
-            console.log(`[Sweetlink] Console logs saved to ${result.consoleLogsPath}`);
-            sendSuccess(ws, 'console-logs-saved', { consoleLogsPath: result.consoleLogsPath });
-          } catch (error) {
-            console.error('[Sweetlink] Console logs save failed:', getErrorMessage(error));
-            sendError(ws, 'console-logs-error', error);
-          }
-          return;
-        }
-
-        // Handle save-settings from browser
-        if (command.type === 'save-settings' && isBrowserClient) {
-          if (!isSaveSettingsData(command.data)) {
-            sendError(ws, 'settings-error', 'Invalid settings data');
-            return;
-          }
-          try {
-            // Type assertion after validation - handler expects DevBarSettings
-            // Cast through unknown as the runtime validation ensures structure
-            const result = await handleSaveSettings(
-              command.data as unknown as Parameters<typeof handleSaveSettings>[0]
-            );
-            console.log(`[Sweetlink] Settings saved to ${result.settingsPath}`);
-            sendSuccess(ws, 'settings-saved', { settingsPath: result.settingsPath });
-          } catch (error) {
-            console.error('[Sweetlink] Settings save failed:', getErrorMessage(error));
-            sendError(ws, 'settings-error', error);
-          }
-          return;
-        }
-
-        // Handle load-settings from browser
-        if (command.type === 'load-settings' && clientInfo?.type === 'browser') {
-          try {
-            const settings = await handleLoadSettings();
-            sendSuccess(ws, 'settings-loaded', { settings });
-          } catch (error) {
-            console.error(
-              '[Sweetlink] Settings load failed:',
-              error instanceof Error ? error.message : error
-            );
-            sendError(ws, 'settings-error', error);
-          }
-          return;
-        }
-
-        // ============================================================================
-        // v1.4.0: New message handlers
-        // ============================================================================
-
-        // Handle request-screenshot from CLI/Agent
-        if (command.type === 'request-screenshot' && clientInfo?.type === 'cli') {
-          const requestId = command.requestId || `req-${Date.now()}`;
-          console.log(`[Sweetlink] Screenshot request ${requestId} from CLI`);
-
-          const browserClients = Array.from(clients.entries())
-            .filter(([, info]) => info.type === 'browser')
-            .map(([client]) => client);
-
-          if (browserClients.length === 0) {
-            ws.send(
-              JSON.stringify({
-                type: 'screenshot-response',
-                requestId,
-                success: false,
-                error: 'No browser client connected',
-                timestamp: Date.now(),
-              })
-            );
-            return;
-          }
-
-          const timeout = setTimeout(() => {
-            const pending = pendingScreenshotRequests.get(requestId);
-            if (pending) {
-              pendingScreenshotRequests.delete(requestId);
-              pending.clientWs.send(
-                JSON.stringify({
-                  type: 'screenshot-response',
-                  requestId,
-                  success: false,
-                  error: 'Screenshot request timed out',
-                  timestamp: Date.now(),
-                })
-              );
-            }
-          }, SCREENSHOT_REQUEST_TIMEOUT_MS);
-
-          pendingScreenshotRequests.set(requestId, { requestId, clientWs: ws, timeout });
-
-          browserClients[0].send(
-            JSON.stringify({
-              type: 'request-screenshot',
-              requestId,
-              selector: command.selector,
-              format: command.format || 'jpeg',
-              quality: command.quality || 0.7,
-              scale: command.scale || 0.25,
-              includeMetadata: command.includeMetadata !== false,
-            })
-          );
-          return;
-        }
-
-        // Handle screenshot-response from browser
-        if (
-          command.type === 'screenshot-response' &&
-          clientInfo?.type === 'browser' &&
-          command.requestId
-        ) {
-          const pending = pendingScreenshotRequests.get(command.requestId);
-          if (pending) {
-            clearTimeout(pending.timeout);
-            pendingScreenshotRequests.delete(command.requestId);
-            if (pending.clientWs.readyState === WebSocket.OPEN) {
-              pending.clientWs.send(message.toString());
-            }
-          }
-          return;
-        }
-
-        // Handle channel subscription (e.g., 'hmr-screenshots')
-        if (command.type === 'subscribe') {
-          const channel = command.channel;
-          if (channel) {
-            console.log(`[Sweetlink] Client subscribing to channel: ${channel}`);
-            if (!channelSubscriptions.has(channel)) {
-              channelSubscriptions.set(channel, []);
-            }
-            channelSubscriptions.get(channel)!.push({ channel, clientWs: ws });
-            sendSuccess(ws, 'subscribed', { channel });
-            return;
-          }
-        }
-
-        // Handle channel unsubscription
-        if (command.type === 'unsubscribe') {
-          const channel = command.channel;
-          if (channel && channelSubscriptions.has(channel)) {
-            const subs = channelSubscriptions.get(channel)!;
-            const idx = subs.findIndex((s) => s.clientWs === ws);
-            if (idx !== -1) {
-              subs.splice(idx, 1);
-              console.log(`[Sweetlink] Client unsubscribed from channel: ${channel}`);
-            }
-            sendSuccess(ws, 'unsubscribed', { channel });
-            return;
-          }
-        }
-
-        // Handle log subscription
-        if (command.type === 'log-subscribe') {
-          const subscriptionId = command.subscriptionId || `log-${Date.now()}`;
-          console.log(`[Sweetlink] Log subscription created: ${subscriptionId}`);
-          logSubscriptions.set(subscriptionId, {
-            subscriptionId,
-            clientWs: ws,
-            filters: command.filters,
-          });
-          sendSuccess(ws, 'log-subscribed', { subscriptionId });
-          return;
-        }
-
-        // Handle log unsubscription
-        if (command.type === 'log-unsubscribe') {
-          if (command.subscriptionId && logSubscriptions.has(command.subscriptionId)) {
-            logSubscriptions.delete(command.subscriptionId);
-            console.log(`[Sweetlink] Log subscription removed: ${command.subscriptionId}`);
-            sendSuccess(ws, 'log-unsubscribed', { subscriptionId: command.subscriptionId });
-          }
-          return;
-        }
-
-        // Handle HMR screenshot from browser
-        if (command.type === 'hmr-screenshot' && clientInfo?.type === 'browser' && command.data) {
-          const hmrData = command.data as HmrScreenshotData;
-          hmrSequenceNumber++;
-
-          console.log(`[Sweetlink] HMR screenshot received (${hmrData.trigger})`);
-          if (hmrData.changedFile) {
-            console.log(`[Sweetlink] Changed file: ${hmrData.changedFile}`);
-          }
-
-          const result = await handleHmrScreenshot(hmrData);
-
-          const notificationData = {
-            screenshotPath: result.screenshotPath,
-            logsPath: result.logsPath,
-            trigger: hmrData.trigger,
-            changedFile: hmrData.changedFile,
-            timestamp: hmrData.timestamp,
-            sequenceNumber: hmrSequenceNumber,
-            logSummary: result.logSummary,
-          };
-
-          const subscribers = channelSubscriptions.get('hmr-screenshots') || [];
-          for (const sub of subscribers) {
-            if (sub.clientWs.readyState === WebSocket.OPEN) {
-              sendSuccess(sub.clientWs, 'hmr-screenshot-saved', notificationData);
-            }
-          }
-
-          sendSuccess(ws, 'hmr-screenshot-saved', {
-            screenshotPath: result.screenshotPath,
-            logsPath: result.logsPath,
-            sequenceNumber: hmrSequenceNumber,
-          });
-          return;
-        }
-
-        // Handle log-event from browser (for streaming to subscribers)
-        if (command.type === 'log-event' && clientInfo?.type === 'browser' && command.data) {
-          const log = command.data as ConsoleLog;
-          for (const [, sub] of logSubscriptions) {
-            if (sub.clientWs.readyState !== WebSocket.OPEN) continue;
-
-            if (sub.filters) {
-              if (sub.filters.levels && !sub.filters.levels.includes(log.level)) continue;
-              if (sub.filters.pattern) {
-                try {
-                  const regex = safeRegex(sub.filters.pattern);
-                  if (!regex.test(log.message)) continue;
-                } catch {
-                  console.warn(
-                    `[Sweetlink] Skipping invalid regex pattern: ${sub.filters.pattern}`
-                  );
-                }
-              }
-              if (sub.filters.source && log.source !== sub.filters.source) continue;
-            }
-
-            sub.clientWs.send(
-              JSON.stringify({
-                type: 'log-event',
-                subscriptionId: sub.subscriptionId,
-                log,
-                timestamp: Date.now(),
-              })
-            );
-          }
-          return;
-        }
-
-        // Forward CLI commands to browser, browser responses to CLI
-        if (clientInfo?.type === 'cli') {
-          console.log(`[Sweetlink] Received command from CLI: ${command.type}`);
-
-          const browserClients = Array.from(clients.entries())
-            .filter(([, info]) => info.type === 'browser')
-            .map(([client]) => client);
-
-          if (browserClients.length === 0) {
-            ws.send(
-              JSON.stringify({
-                success: false,
-                error: 'No browser client connected. Is the dev server running with the page open?',
-                timestamp: Date.now(),
-              } as SweetlinkResponse)
-            );
-            return;
-          }
-
-          const browserWs = browserClients[0];
-          cliClientMap.set(browserWs, ws);
-          browserWs.send(message.toString());
-        } else if (clientInfo?.type === 'browser') {
-          const cliWs = cliClientMap.get(ws);
-          if (cliWs && cliWs.readyState === WebSocket.OPEN) {
-            cliWs.send(message.toString());
-            cliClientMap.delete(ws);
-          }
-        }
+        // No handler matched (or handler returned false) — forward between CLI/browser
+        forwardMessage(ctx, command);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('[Sweetlink] Error processing message:', errorMessage);

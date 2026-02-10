@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Development playground for testing devbar and sweetlink",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ytspar/devbar.git",
+    "directory": "packages/playground"
+  },
   "engines": {
     "node": ">=20.0.0"
   },

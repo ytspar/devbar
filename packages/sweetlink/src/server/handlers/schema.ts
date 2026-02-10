@@ -4,10 +4,7 @@
  * Handles saving page schemas to the file system.
  */
 
-import { promises as fs } from 'fs';
-import { join } from 'path';
-import { generateBaseFilename, generateSlugFromUrl, SCREENSHOT_DIR } from '../../urlUtils.js';
-import { getProjectRoot } from '../index.js';
+import { saveMarkdownArtifact } from './saveMarkdown.js';
 
 export interface SchemaSaveResult {
   schemaPath: string;
@@ -23,43 +20,24 @@ export async function handleSaveSchema(data: {
   title: string;
   timestamp: number;
 }): Promise<SchemaSaveResult> {
-  const { schema, markdown, url, title, timestamp } = data;
-
-  // Create directory if it doesn't exist (relative to project root captured at server start)
-  const dir = join(getProjectRoot(), SCREENSHOT_DIR);
-  await fs.mkdir(dir, { recursive: true });
-
-  // Generate a slug from URL path or title and create filename with shared utility
-  const slug = generateSlugFromUrl(url, title);
-  const baseFilename = generateBaseFilename('schema', timestamp, slug);
-
-  // Build the schema markdown file with frontmatter
-  const schemaMarkdown = `---
-title: ${title || 'Page Schema'}
-url: ${url}
-timestamp: ${new Date(timestamp).toISOString()}
----
-
-# Page Schema
-
-> Page: ${title || url}
-> Generated: ${new Date(timestamp).toLocaleString()}
-
-${markdown || '_No structured data found on this page_'}
+  // Schema includes extra raw JSON section after the main markdown
+  const body = `${data.markdown || '_No structured data found on this page_'}
 
 ---
 
 ## Raw JSON
 
 \`\`\`json
-${JSON.stringify(schema, null, 2)}
-\`\`\`
-`;
+${JSON.stringify(data.schema, null, 2)}
+\`\`\``;
 
-  // Save the schema markdown
-  const schemaPath = join(dir, `${baseFilename}.md`);
-  await fs.writeFile(schemaPath, schemaMarkdown, 'utf-8');
-  console.log(`[Sweetlink] Page schema saved: ${schemaPath}`);
+  const schemaPath = await saveMarkdownArtifact({
+    type: 'schema',
+    markdown: body,
+    url: data.url,
+    title: data.title,
+    timestamp: data.timestamp,
+  });
 
   return { schemaPath };
 }

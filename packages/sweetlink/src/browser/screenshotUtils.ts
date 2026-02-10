@@ -15,11 +15,8 @@ export const DEFAULT_SCREENSHOT_SCALE = 0.25;
 /** Default JPEG quality */
 export const DEFAULT_SCREENSHOT_QUALITY = 0.7;
 
-/** Higher quality scale for design review */
-export const DESIGN_REVIEW_SCALE = 0.75;
-
-/** Higher quality JPEG for devbar screenshots */
-export const DEVBAR_SCREENSHOT_QUALITY = 0.8;
+/** JPEG quality for devbar screenshots (balances clarity vs file size ~100KB) */
+export const DEVBAR_SCREENSHOT_QUALITY = 0.65;
 
 // ============================================================================
 // Canvas Scaling

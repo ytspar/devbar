@@ -669,6 +669,7 @@ body {
 
   .landing-hero {
     padding: 2rem 2rem 1.5rem;
+    margin-bottom: 1.5rem;
   }
 
   .landing-logo-img {
@@ -854,22 +855,57 @@ body.theme-light {
 .landing-badges {
   display: flex;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-bottom: 2rem;
   flex-wrap: wrap;
 }
 
-.landing-badges a {
-  display: inline-block;
+.landing-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  font-family: var(--devbar-font-mono);
+  font-size: 0.7rem;
+  line-height: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  text-decoration: none;
   transition: transform var(--devbar-transition-fast);
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
-.landing-badges a:hover {
+.landing-badge:hover {
   transform: translateY(-2px);
+  border-color: rgba(16, 185, 129, 0.5);
 }
 
-.landing-badges img {
-  height: 24px;
+.landing-badge-label {
+  padding: 4px 7px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--devbar-color-text-secondary);
+}
+
+.landing-badge-value {
+  padding: 4px 7px;
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--devbar-color-primary);
+}
+
+.landing-badge-blocks {
+  padding: 4px 6px;
+  background: rgba(16, 185, 129, 0.06);
+  letter-spacing: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.landing-badge-blocks .block-filled {
+  color: var(--devbar-color-primary);
+}
+
+.landing-badge-blocks .block-empty {
+  color: rgba(16, 185, 129, 0.15);
 }
 
 .landing-install {

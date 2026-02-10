@@ -60,23 +60,128 @@ function createNotchedCard(
 /**
  * Helper to create an anchor element
  */
-function createLink(href: string, child: HTMLElement): HTMLAnchorElement {
+/**
+ * Helper to create a custom badge element with label + value
+ */
+function createBadge(
+  href: string,
+  label: string,
+  value: string,
+  valueId?: string
+): HTMLAnchorElement {
   const a = document.createElement('a');
   a.href = href;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
-  a.appendChild(child);
+  a.className = 'landing-badge';
+
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'landing-badge-label';
+  labelSpan.textContent = label;
+
+  const valueSpan = document.createElement('span');
+  valueSpan.className = 'landing-badge-value';
+  valueSpan.textContent = value;
+  if (valueId) valueSpan.id = valueId;
+
+  a.appendChild(labelSpan);
+  a.appendChild(valueSpan);
   return a;
 }
 
 /**
- * Helper to create an image element
+ * Create a coverage badge with block characters (each block = 10%)
  */
-function createImage(src: string, alt: string): HTMLImageElement {
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = alt;
-  return img;
+function createCoverageBadge(): HTMLElement {
+  const badge = document.createElement('span');
+  badge.className = 'landing-badge';
+
+  const label = document.createElement('span');
+  label.className = 'landing-badge-label';
+  label.textContent = 'coverage';
+
+  const blocks = document.createElement('span');
+  blocks.className = 'landing-badge-blocks';
+  blocks.id = 'coverage-blocks';
+  // Start with all empty blocks
+  for (let i = 0; i < 10; i++) {
+    const b = document.createElement('span');
+    b.className = 'block-empty';
+    b.textContent = '\u2588';
+    blocks.appendChild(b);
+  }
+
+  badge.appendChild(label);
+  badge.appendChild(blocks);
+  return badge;
+}
+
+/**
+ * Update coverage blocks to reflect a percentage
+ */
+function setCoverageBlocks(pct: number): void {
+  const container = document.getElementById('coverage-blocks');
+  if (!container) return;
+  const filled = Math.round(pct / 10);
+  const children = container.children;
+  for (let i = 0; i < children.length; i++) {
+    children[i].className = i < filled ? 'block-filled' : 'block-empty';
+  }
+}
+
+/**
+ * Fetch live badge data from npm and GitHub APIs
+ */
+function fetchBadgeData(): void {
+  fetch('https://registry.npmjs.org/@ytspar/devbar/latest')
+    .then((r) => r.json())
+    .then((d) => {
+      const el = document.getElementById('badge-devbar-version');
+      if (el) el.textContent = `v${d.version}`;
+    })
+    .catch(() => {});
+
+  fetch('https://registry.npmjs.org/@ytspar/sweetlink/latest')
+    .then((r) => r.json())
+    .then((d) => {
+      const el = document.getElementById('badge-sweetlink-version');
+      if (el) el.textContent = `v${d.version}`;
+    })
+    .catch(() => {});
+
+  fetch('https://api.github.com/repos/ytspar/devbar')
+    .then((r) => r.json())
+    .then((d) => {
+      const el = document.getElementById('badge-stars');
+      if (el && typeof d.stargazers_count === 'number') {
+        el.textContent = String(d.stargazers_count);
+      }
+    })
+    .catch(() => {});
+
+  fetch(
+    'https://api.github.com/repos/ytspar/devbar/actions/workflows/canary.yml/runs?per_page=1&status=completed'
+  )
+    .then((r) => r.json())
+    .then((d) => {
+      const el = document.getElementById('badge-build');
+      if (el && d.workflow_runs?.[0]) {
+        const conclusion = d.workflow_runs[0].conclusion;
+        el.textContent = conclusion === 'success' ? 'passing' : conclusion;
+      }
+    })
+    .catch(() => {});
+
+  // Coverage data (generated during CI build)
+  fetch(`${import.meta.env.BASE_URL}coverage.json`)
+    .then((r) => {
+      if (!r.ok) throw new Error();
+      return r.json();
+    })
+    .then((d: { statements: number }) => {
+      setCoverageBlocks(d.statements);
+    })
+    .catch(() => {});
 }
 
 /**
@@ -105,33 +210,40 @@ export function createLandingHero(): HTMLElement {
   const badges = document.createElement('div');
   badges.className = 'landing-badges';
   badges.appendChild(
-    createLink(
+    createBadge(
       'https://www.npmjs.com/package/@ytspar/devbar',
-      createImage(
-        'https://img.shields.io/npm/v/@ytspar/devbar?style=flat-square&color=10b981',
-        'devbar npm'
-      )
+      'devbar', '...', 'badge-devbar-version'
     )
   );
   badges.appendChild(
-    createLink(
+    createBadge(
       'https://www.npmjs.com/package/@ytspar/sweetlink',
-      createImage(
-        'https://img.shields.io/npm/v/@ytspar/sweetlink?style=flat-square&color=10b981',
-        'sweetlink npm'
-      )
+      'sweetlink', '...', 'badge-sweetlink-version'
     )
   );
   badges.appendChild(
-    createLink(
-      'https://github.com/ytspar/devbar',
-      createImage(
-        'https://img.shields.io/github/stars/ytspar/devbar?style=flat-square&color=10b981',
-        'GitHub stars'
-      )
+    createBadge(
+      'https://github.com/ytspar/devbar/actions/workflows/canary.yml',
+      'build', '...', 'badge-build'
     )
   );
+  badges.appendChild(
+    createBadge(
+      'https://github.com/ytspar/devbar',
+      'stars', '...', 'badge-stars'
+    )
+  );
+  badges.appendChild(
+    createBadge(
+      'https://github.com/ytspar/devbar/blob/main/LICENSE',
+      'license', 'MIT'
+    )
+  );
+  badges.appendChild(createCoverageBadge());
   hero.appendChild(badges);
+
+  // Fetch live data for badges and coverage
+  fetchBadgeData();
 
   // Quick install — entire card is clickable to copy
   const install = document.createElement('div');

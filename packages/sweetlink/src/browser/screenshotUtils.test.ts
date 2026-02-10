@@ -3,7 +3,6 @@ import {
   canvasToDataUrl,
   DEFAULT_SCREENSHOT_QUALITY,
   DEFAULT_SCREENSHOT_SCALE,
-  DESIGN_REVIEW_SCALE,
   DEVBAR_SCREENSHOT_QUALITY,
   delay,
   extractBase64FromDataUrl,
@@ -24,12 +23,9 @@ describe('Constants', () => {
     expect(DEFAULT_SCREENSHOT_QUALITY).toBeLessThanOrEqual(1);
   });
 
-  it('has higher quality for design review', () => {
-    expect(DESIGN_REVIEW_SCALE).toBeGreaterThan(DEFAULT_SCREENSHOT_SCALE);
-  });
-
-  it('has higher quality for devbar screenshots', () => {
-    expect(DEVBAR_SCREENSHOT_QUALITY).toBeGreaterThanOrEqual(DEFAULT_SCREENSHOT_QUALITY);
+  it('has reasonable quality for devbar screenshots', () => {
+    expect(DEVBAR_SCREENSHOT_QUALITY).toBeGreaterThanOrEqual(0.5);
+    expect(DEVBAR_SCREENSHOT_QUALITY).toBeLessThanOrEqual(1);
   });
 });
 

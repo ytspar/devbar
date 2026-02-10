@@ -171,6 +171,44 @@ describe('createModalHeader', () => {
     expect(onSave).toHaveBeenCalled();
   });
 
+  it('shows Save button when auto and connected', () => {
+    const onSave = vi.fn();
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockResolvedValue(undefined),
+      onSave,
+      sweetlinkConnected: true,
+      saveLocation: 'auto',
+    });
+
+    const buttons = header.querySelectorAll('button');
+    const saveBtn = Array.from(buttons).find((btn) => btn.textContent === 'Save');
+    expect(saveBtn).toBeTruthy();
+    saveBtn!.click();
+    expect(onSave).toHaveBeenCalled();
+  });
+
+  it('shows Download button when auto and not connected', () => {
+    const onSave = vi.fn();
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockResolvedValue(undefined),
+      onSave,
+      sweetlinkConnected: false,
+      saveLocation: 'auto',
+    });
+
+    const buttons = header.querySelectorAll('button');
+    const downloadBtn = Array.from(buttons).find((btn) => btn.textContent === 'Download');
+    expect(downloadBtn).toBeTruthy();
+    downloadBtn!.click();
+    expect(onSave).toHaveBeenCalled();
+  });
+
   it('disables Save button when saveLocation is local and not connected', () => {
     const header = createModalHeader({
       color: '#10b981',

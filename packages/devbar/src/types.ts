@@ -64,8 +64,8 @@ export interface GlobalDevBarOptions {
   showConsoleBadges?: boolean;
   /** Whether to show tooltips on hover. Default: true */
   showTooltips?: boolean;
-  /** Where to save files: 'local' (via Sweetlink) or 'download' (browser download). Default: 'download' */
-  saveLocation?: 'local' | 'download';
+  /** Where to save files: 'auto' (detect), 'local' (via Sweetlink), or 'download' (browser). Default: 'auto' */
+  saveLocation?: 'auto' | 'local' | 'download';
   /** Size overrides for special layouts (e.g., when other dev bars are present) */
   sizeOverrides?: {
     /** Custom width (CSS value). Default: calc(100vw - 140px) for centered, fit-content otherwise */

@@ -14,6 +14,7 @@ import {
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
 import { extractPageSchema, schemaToMarkdown } from '../schema.js';
+import { resolveSaveLocation } from '../settings.js';
 import {
   canvasToDataUrl,
   copyCanvasToClipboard,
@@ -64,11 +65,9 @@ export async function handleScreenshot(
   copyToClipboard = false
 ): Promise<void> {
   if (state.capturing) return;
-  // When saving (not clipboard), check if save method is available
-  if (!copyToClipboard) {
-    const saveLocal = state.options.saveLocation === 'local';
-    if (saveLocal && !state.sweetlinkConnected) return;
-  }
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  // When saving (not clipboard) with 'local' mode, require connection
+  if (!copyToClipboard && effectiveSave === 'local' && !state.sweetlinkConnected) return;
 
   let cleanup: (() => void) | null = null;
 
@@ -104,7 +103,7 @@ export async function handleScreenshot(
         format: 'jpeg',
         quality: DEVBAR_SCREENSHOT_QUALITY,
       });
-      if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
+      if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
         // Include web vitals metrics
         const webVitals: Record<string, number> = {};
         if (state.lcpValue !== null) webVitals.lcp = Math.round(state.lcpValue);
@@ -306,7 +305,8 @@ export function handleSaveOutline(state: DevBarState): void {
   const outline = extractDocumentOutline();
   const markdown = outlineToMarkdown(outline);
 
-  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingOutline = true;
     state.render();
 
@@ -345,7 +345,8 @@ export function handleSaveConsoleLogs(
   });
   const markdown = lines.length > 0 ? lines.join('\n') : '_No logs_';
 
-  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingConsoleLogs = true;
     state.render();
 
@@ -377,7 +378,8 @@ export function handleSaveSchema(state: DevBarState): void {
   const schema = extractPageSchema();
   const markdown = schemaToMarkdown(schema);
 
-  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingSchema = true;
     state.render();
 

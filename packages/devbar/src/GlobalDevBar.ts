@@ -225,7 +225,7 @@ export class GlobalDevBar {
       showScreenshot: options.showScreenshot ?? true,
       showConsoleBadges: options.showConsoleBadges ?? true,
       showTooltips: options.showTooltips ?? true,
-      saveLocation: options.saveLocation ?? 'download',
+      saveLocation: options.saveLocation ?? 'auto',
       sizeOverrides: options.sizeOverrides,
     };
 

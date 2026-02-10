@@ -5,6 +5,7 @@
  */
 
 import { MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';
+import { resolveSaveLocation } from '../settings.js';
 import { createStyledButton } from './buttons.js';
 
 /**
@@ -17,8 +18,8 @@ export interface ModalConfig {
   onCopyMd: () => Promise<void>;
   onSave?: () => void;
   sweetlinkConnected: boolean;
-  /** Save location preference: 'local' (via sweetlink) or 'download' (browser) */
-  saveLocation?: 'local' | 'download';
+  /** Save location preference: 'auto', 'local' (via sweetlink), or 'download' (browser) */
+  saveLocation?: 'auto' | 'local' | 'download';
   /** Whether a save operation is in progress */
   isSaving?: boolean;
   /** Path where data was saved or download confirmation message */
@@ -55,8 +56,9 @@ export function createModalBox(color: string): HTMLDivElement {
  * Create modal header with title, copy/save/close buttons
  */
 export function createModalHeader(config: ModalConfig): HTMLDivElement {
-  const { color, title, onClose, onCopyMd, onSave, sweetlinkConnected, saveLocation = 'download', isSaving, savedPath } =
+  const { color, title, onClose, onCopyMd, onSave, sweetlinkConnected, saveLocation = 'auto', isSaving, savedPath } =
     config;
+  const effectiveSave = resolveSaveLocation(saveLocation, sweetlinkConnected);
 
   const header = document.createElement('div');
   Object.assign(header.style, {
@@ -99,14 +101,14 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
 
   // Save/Download button
   if (onSave) {
-    const isLocalSave = saveLocation === 'local';
-    const canSave = !isLocalSave || sweetlinkConnected;
+    // 'local' requires connection; 'auto' and 'download' always have a working method
+    const canSave = effectiveSave === 'download' || sweetlinkConnected;
 
     let buttonText: string;
     if (isSaving) {
-      buttonText = isLocalSave ? 'Saving...' : 'Downloading...';
+      buttonText = effectiveSave === 'local' ? 'Saving...' : 'Downloading...';
     } else {
-      buttonText = isLocalSave ? 'Save' : 'Download';
+      buttonText = effectiveSave === 'local' ? 'Save' : 'Download';
     }
 
     const saveBtn = createStyledButton({ color, text: buttonText });
@@ -115,7 +117,7 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
       saveBtn.style.opacity = '0.6';
       saveBtn.style.cursor = 'not-allowed';
       if (!canSave) {
-        saveBtn.title = 'Sweetlink not connected. Switch to Download in settings.';
+        saveBtn.title = 'Sweetlink not connected. Switch save method to Auto or Download.';
       }
     } else {
       saveBtn.onclick = onSave;

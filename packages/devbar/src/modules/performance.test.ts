@@ -9,7 +9,7 @@ import type { DevBarState } from './types.js';
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
     options: {
-      showTooltips: true, saveLocation: 'download',
+      showTooltips: true, saveLocation: 'auto',
       showScreenshot: true,
       showConsoleBadges: true,
       position: 'bottom-left',
@@ -36,7 +36,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
         showScreenshot: true,
         showConsoleBadges: true,
-        showTooltips: true, saveLocation: 'download',
+        showTooltips: true, saveLocation: 'auto',
       })),
     } as any,
     render: vi.fn(),

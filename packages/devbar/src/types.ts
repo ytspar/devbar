@@ -66,6 +66,8 @@ export interface GlobalDevBarOptions {
   showTooltips?: boolean;
   /** Where to save files: 'auto' (detect), 'local' (via Sweetlink), or 'download' (browser). Default: 'auto' */
   saveLocation?: 'auto' | 'local' | 'download';
+  /** JPEG quality for screenshots (0–1). Default: 0.65 */
+  screenshotQuality?: number;
   /** Size overrides for special layouts (e.g., when other dev bars are present) */
   sizeOverrides?: {
     /** Custom width (CSS value). Default: calc(100vw - 140px) for centered, fit-content otherwise */

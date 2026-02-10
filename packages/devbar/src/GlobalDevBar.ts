@@ -226,6 +226,7 @@ export class GlobalDevBar {
       showConsoleBadges: options.showConsoleBadges ?? true,
       showTooltips: options.showTooltips ?? true,
       saveLocation: options.saveLocation ?? 'auto',
+      screenshotQuality: options.screenshotQuality ?? 0.65,
       sizeOverrides: options.sizeOverrides,
     };
 
@@ -473,6 +474,7 @@ export class GlobalDevBar {
     this.options.showConsoleBadges = settings.showConsoleBadges;
     this.options.showTooltips = settings.showTooltips;
     this.options.saveLocation = settings.saveLocation;
+    this.options.screenshotQuality = settings.screenshotQuality ?? 0.65;
     this.options.showMetrics = { ...settings.showMetrics };
 
     // Re-render with new settings

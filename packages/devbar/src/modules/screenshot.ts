@@ -6,7 +6,6 @@
 
 import {
   CLIPBOARD_NOTIFICATION_MS,
-  DEVBAR_SCREENSHOT_QUALITY,
   SCREENSHOT_BLUR_DELAY_MS,
   SCREENSHOT_NOTIFICATION_MS,
   SCREENSHOT_SCALE,
@@ -178,7 +177,7 @@ export async function handleScreenshot(
     } else {
       const dataUrl = canvasToDataUrl(canvas, {
         format: 'jpeg',
-        quality: DEVBAR_SCREENSHOT_QUALITY,
+        quality: state.options.screenshotQuality,
       });
       if (effectiveSave === 'local' && state.ws?.readyState === WebSocket.OPEN) {
         // Include web vitals metrics

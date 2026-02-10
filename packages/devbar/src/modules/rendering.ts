@@ -135,32 +135,34 @@ export function render(
     state.container.remove();
   }
 
-  // Create new container
+  // Create new container and append immediately so the devbar stays visible
+  // even if content or overlay rendering throws
   state.container = document.createElement('div');
   state.container.setAttribute('data-devbar', 'true');
-
-  if (state.collapsed) {
-    renderCollapsed(state);
-  } else if (state.compactMode) {
-    renderCompact(state);
-  } else {
-    renderExpanded(state, customControls);
-  }
-
   document.body.appendChild(state.container);
 
-  // Render overlays/modals
-  renderOverlays(state, consoleCaptureSingleton);
+  try {
+    if (state.collapsed) {
+      renderCollapsed(state);
+    } else if (state.compactMode) {
+      renderCompact(state);
+    } else {
+      renderExpanded(state, customControls);
+    }
+  } catch (e) {
+    console.error('[GlobalDevBar] Render failed:', e);
+  }
+
+  try {
+    renderOverlays(state, consoleCaptureSingleton);
+  } catch (e) {
+    console.error('[GlobalDevBar] Overlay render failed:', e);
+  }
 }
 
 function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapture): void {
-  // Remove existing overlay
-  if (state.overlayElement) {
-    state.overlayElement.remove();
-    state.overlayElement = null;
-  }
-
   // Safety: only one overlay at a time. First match wins; close the rest.
+  // (Overlay cleanup already performed by render() before calling this.)
   if (state.consoleFilter) {
     state.showOutlineModal = false;
     state.showSchemaModal = false;
@@ -541,7 +543,12 @@ function renderExpanded(
     cursor: 'default',
   });
 
-  wrapper.ondblclick = () => {
+  wrapper.ondblclick = (e) => {
+    // Ignore double-clicks on interactive elements (buttons, inputs, selects)
+    // to prevent rapid settings-button clicks from collapsing the devbar
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, input, select, a')) return;
+
     const dotEl = wrapper.querySelector('.devbar-status span span');
     if (dotEl) {
       captureDotPosition(state, dotEl);
@@ -2237,6 +2244,129 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
   accentRow.appendChild(colorSwatches);
   displaySection.appendChild(accentRow);
 
+  // Screenshot quality slider
+  const qualityRow = document.createElement('div');
+  Object.assign(qualityRow.style, { marginTop: '8px' });
+
+  const qualityHeader = document.createElement('div');
+  Object.assign(qualityHeader.style, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '6px',
+  });
+
+  const qualityLabel = document.createElement('span');
+  Object.assign(qualityLabel.style, {
+    color: CSS_COLORS.text,
+    fontSize: '0.6875rem',
+  });
+  qualityLabel.textContent = 'Screenshot Quality';
+  qualityHeader.appendChild(qualityLabel);
+
+  const qualityValue = document.createElement('span');
+  Object.assign(qualityValue.style, {
+    color: accentColor,
+    fontSize: '0.6875rem',
+    fontFamily: 'monospace',
+    minWidth: '28px',
+    textAlign: 'right',
+  });
+  const quality = state.options.screenshotQuality;
+  qualityValue.textContent = quality.toFixed(2);
+  qualityHeader.appendChild(qualityValue);
+  qualityRow.appendChild(qualityHeader);
+
+  // Wrapper: positions the visible track line behind the transparent range input
+  const sliderWrap = document.createElement('div');
+  Object.assign(sliderWrap.style, { position: 'relative', height: '20px' });
+
+  // Visible track rail (a real div, always renders)
+  const track = document.createElement('div');
+  Object.assign(track.style, {
+    position: 'absolute',
+    top: '50%',
+    left: '0',
+    right: '0',
+    height: '2px',
+    transform: 'translateY(-50%)',
+    borderRadius: '1px',
+    background: `${color}40`,
+    pointerEvents: 'none',
+  });
+
+  // Filled portion of the track
+  const trackFill = document.createElement('div');
+  Object.assign(trackFill.style, {
+    height: '100%',
+    width: `${quality * 100}%`,
+    borderRadius: '1px',
+    background: accentColor,
+  });
+  track.appendChild(trackFill);
+  sliderWrap.appendChild(track);
+
+  const qualitySlider = document.createElement('input');
+  qualitySlider.type = 'range';
+  qualitySlider.min = '0';
+  qualitySlider.max = '1';
+  qualitySlider.step = '0.01';
+  qualitySlider.value = String(quality);
+  Object.assign(qualitySlider.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    background: 'transparent',
+    outline: 'none',
+    cursor: 'pointer',
+    margin: '0',
+  });
+
+  // Style the thumb via a scoped style element
+  const sliderId = `devbar-quality-${Date.now()}`;
+  qualitySlider.id = sliderId;
+  const sliderStyle = document.createElement('style');
+  sliderStyle.textContent = [
+    `#${sliderId}::-webkit-slider-thumb {`,
+    `  -webkit-appearance: none;`,
+    `  width: 12px; height: 12px;`,
+    `  border-radius: 50%;`,
+    `  background: ${accentColor};`,
+    `  border: 2px solid ${CSS_COLORS.bg};`,
+    `  box-shadow: 0 0 4px ${accentColor}80;`,
+    `  cursor: grab;`,
+    `}`,
+    `#${sliderId}::-webkit-slider-thumb:active { cursor: grabbing; }`,
+    `#${sliderId}::-moz-range-thumb {`,
+    `  width: 12px; height: 12px;`,
+    `  border-radius: 50%;`,
+    `  background: ${accentColor};`,
+    `  border: 2px solid ${CSS_COLORS.bg};`,
+    `  box-shadow: 0 0 4px ${accentColor}80;`,
+    `  cursor: grab;`,
+    `}`,
+    `#${sliderId}::-webkit-slider-runnable-track { background: transparent; }`,
+    `#${sliderId}::-moz-range-track { background: transparent; }`,
+  ].join('\n');
+  sliderWrap.appendChild(sliderStyle);
+
+  qualitySlider.oninput = () => {
+    const val = parseFloat(qualitySlider.value);
+    qualityValue.textContent = val.toFixed(2);
+    trackFill.style.width = `${val * 100}%`;
+    state.options.screenshotQuality = val;
+  };
+  qualitySlider.onchange = () => {
+    state.settingsManager.saveSettings({ screenshotQuality: state.options.screenshotQuality });
+  };
+  sliderWrap.appendChild(qualitySlider);
+  qualityRow.appendChild(sliderWrap);
+  displaySection.appendChild(qualityRow);
+
   return displaySection;
 }
 
@@ -2384,7 +2514,17 @@ function createResetSection(state: DevBarState): HTMLDivElement {
   Object.assign(resetBtn.style, {
     width: '100%',
     justifyContent: 'center',
+    border: `1px solid transparent`,
   });
+  const resetColor = CSS_COLORS.textMuted;
+  resetBtn.onmouseenter = () => {
+    resetBtn.style.border = `1px solid ${resetColor}`;
+    resetBtn.style.backgroundColor = `${resetColor}10`;
+  };
+  resetBtn.onmouseleave = () => {
+    resetBtn.style.border = '1px solid transparent';
+    resetBtn.style.backgroundColor = 'transparent';
+  };
   resetBtn.onclick = () => {
     state.settingsManager.resetToDefaults();
     const defaults = DEFAULT_SETTINGS;

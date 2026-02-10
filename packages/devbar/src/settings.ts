@@ -78,6 +78,9 @@ export interface DevBarSettings {
   // Save behavior
   saveLocation: SaveLocation;
 
+  // Screenshot
+  screenshotQuality: number;
+
   // Metrics visibility
   showMetrics: MetricsVisibility;
 
@@ -121,6 +124,9 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
 
   // Save behavior
   saveLocation: 'auto',
+
+  // Screenshot
+  screenshotQuality: 0.65,
 
   // Metrics visibility
   showMetrics: {

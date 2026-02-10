@@ -34,6 +34,13 @@ export interface MetricsVisibility {
 }
 
 /**
+ * Where to save screenshots and other file outputs.
+ * - 'local': Save to filesystem via Sweetlink (requires connection)
+ * - 'download': Browser file download (always works)
+ */
+export type SaveLocation = 'local' | 'download';
+
+/**
  * Complete devbar settings schema
  */
 export interface DevBarSettings {
@@ -50,6 +57,9 @@ export interface DevBarSettings {
   showScreenshot: boolean;
   showConsoleBadges: boolean;
   showTooltips: boolean;
+
+  // Save behavior
+  saveLocation: SaveLocation;
 
   // Metrics visibility
   showMetrics: MetricsVisibility;
@@ -91,6 +101,9 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
   showScreenshot: true,
   showConsoleBadges: true,
   showTooltips: true,
+
+  // Save behavior
+  saveLocation: 'download',
 
   // Metrics visibility
   showMetrics: {

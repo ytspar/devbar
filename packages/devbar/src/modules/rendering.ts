@@ -924,8 +924,8 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
 
   const hasSuccessState = state.copiedToClipboard || state.copiedPath || state.lastScreenshot;
   const isDisabled = state.capturing;
-  // Grey out when not connected (save won't work, but clipboard still does)
-  const isGreyedOut = !state.sweetlinkConnected && !hasSuccessState;
+  // Grey out only when save location is 'local' and sweetlink not connected
+  const isGreyedOut = state.options.saveLocation === 'local' && !state.sweetlinkConnected && !hasSuccessState;
 
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, accentColor, (tooltip, h) => {
@@ -939,52 +939,58 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
     }
     if (state.lastScreenshot) {
       const screenshotPath = state.lastScreenshot;
-      h.addSuccess('Screenshot saved!', screenshotPath);
+      const isDownloaded = screenshotPath.endsWith('downloaded');
 
-      const copyLink = document.createElement('div');
-      Object.assign(copyLink.style, {
-        color: accentColor,
-        cursor: 'pointer',
-        fontSize: '0.625rem',
-        marginTop: '6px',
-        opacity: '0.8',
-        transition: 'opacity 150ms',
-      });
-      copyLink.textContent = 'copy path';
-      copyLink.onmouseenter = () => {
-        copyLink.style.opacity = '1';
-      };
-      copyLink.onmouseleave = () => {
-        copyLink.style.opacity = '0.8';
-      };
-      copyLink.onclick = async (e) => {
-        e.stopPropagation();
-        try {
-          await navigator.clipboard.writeText(screenshotPath);
-          copyLink.textContent = '\u2713 copied!';
-          copyLink.style.cursor = 'default';
-          copyLink.onclick = null;
-        } catch {
-          copyLink.textContent = '\u00d7 failed to copy';
-          copyLink.style.color = CSS_COLORS.error;
-        }
-      };
-      tooltip.appendChild(copyLink);
+      if (isDownloaded) {
+        h.addSuccess('Screenshot downloaded!');
+      } else {
+        h.addSuccess('Screenshot saved!', screenshotPath);
+
+        const copyLink = document.createElement('div');
+        Object.assign(copyLink.style, {
+          color: accentColor,
+          cursor: 'pointer',
+          fontSize: '0.625rem',
+          marginTop: '6px',
+          opacity: '0.8',
+          transition: 'opacity 150ms',
+        });
+        copyLink.textContent = 'copy path';
+        copyLink.onmouseenter = () => {
+          copyLink.style.opacity = '1';
+        };
+        copyLink.onmouseleave = () => {
+          copyLink.style.opacity = '0.8';
+        };
+        copyLink.onclick = async (e) => {
+          e.stopPropagation();
+          try {
+            await navigator.clipboard.writeText(screenshotPath);
+            copyLink.textContent = '\u2713 copied!';
+            copyLink.style.cursor = 'default';
+            copyLink.onclick = null;
+          } catch {
+            copyLink.textContent = '\u00d7 failed to copy';
+            copyLink.style.color = CSS_COLORS.error;
+          }
+        };
+        tooltip.appendChild(copyLink);
+      }
       return;
     }
 
     h.addTitle('Screenshot');
+    h.addSectionHeader('Actions');
 
-    if (!state.sweetlinkConnected) {
-      h.addSectionHeader('Actions');
+    if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
       h.addShortcut('Shift+Click', 'Copy to clipboard');
-      h.addWarning('Sweetlink not connected. Save to file unavailable.');
+      h.addWarning('Sweetlink not connected. Switch to Download in settings, or start Sweetlink.');
     } else {
-      h.addSectionHeader('Actions');
-      h.addShortcut('Click', 'Save to file');
+      const saveLabel = state.options.saveLocation === 'local' ? 'Save to file' : 'Download';
+      h.addShortcut('Click', saveLabel);
       h.addShortcut('Shift+Click', 'Copy to clipboard');
       h.addSectionHeader('Keyboard');
-      h.addShortcut('Cmd or Ctrl+Shift+S', 'Save');
+      h.addShortcut('Cmd or Ctrl+Shift+S', saveLabel);
       h.addShortcut('Cmd or Ctrl+Shift+C', 'Copy');
     }
   });
@@ -1134,15 +1140,16 @@ function createOutlineButton(state: DevBarState): HTMLButtonElement {
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, BUTTON_COLORS.outline, (_tooltip, h) => {
     if (state.lastOutline) {
-      h.addSuccess('Outline saved!', state.lastOutline);
+      const isDownloaded = state.lastOutline.endsWith('downloaded');
+      h.addSuccess(isDownloaded ? 'Outline downloaded!' : 'Outline saved!', isDownloaded ? undefined : state.lastOutline);
       return;
     }
 
     h.addTitle('Document Outline');
     h.addDescription('View page heading structure and save as markdown.');
 
-    if (!state.sweetlinkConnected) {
-      h.addWarning('Sweetlink not connected. Save to file unavailable.');
+    if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
+      h.addWarning('Sweetlink not connected. Switch to Download in settings.');
     }
   });
 
@@ -1168,15 +1175,16 @@ function createSchemaButton(state: DevBarState): HTMLButtonElement {
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, BUTTON_COLORS.schema, (_tooltip, h) => {
     if (state.lastSchema) {
-      h.addSuccess('Schema saved!', state.lastSchema);
+      const isDownloaded = state.lastSchema.endsWith('downloaded');
+      h.addSuccess(isDownloaded ? 'Schema downloaded!' : 'Schema saved!', isDownloaded ? undefined : state.lastSchema);
       return;
     }
 
     h.addTitle('Page Schema');
     h.addDescription('View JSON-LD, Open Graph, and other structured data.');
 
-    if (!state.sweetlinkConnected) {
-      h.addWarning('Sweetlink not connected. Save to file unavailable.');
+    if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
+      h.addWarning('Sweetlink not connected. Switch to Download in settings.');
     }
   });
 
@@ -1377,6 +1385,7 @@ function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: Console
     },
     onSave: () => handleSaveConsoleLogs(state, logs),
     sweetlinkConnected: state.sweetlinkConnected,
+    saveLocation: state.options.saveLocation,
     isSaving: state.savingConsoleLogs,
     savedPath: state.lastConsoleLogs,
   });
@@ -1454,6 +1463,7 @@ function renderOutlineModal(state: DevBarState): void {
     },
     onSave: () => handleSaveOutline(state),
     sweetlinkConnected: state.sweetlinkConnected,
+    saveLocation: state.options.saveLocation,
     isSaving: state.savingOutline,
     savedPath: state.lastOutline,
   });
@@ -1553,6 +1563,7 @@ function renderSchemaModal(state: DevBarState): void {
     },
     onSave: () => handleSaveSchema(state),
     sweetlinkConnected: state.sweetlinkConnected,
+    saveLocation: state.options.saveLocation,
     isSaving: state.savingSchema,
     savedPath: state.lastSchema,
   });
@@ -2220,6 +2231,59 @@ function renderSettingsPopover(state: DevBarState): void {
       state.render();
     })
   );
+
+  // Save location selector
+  const saveLocRow = document.createElement('div');
+  Object.assign(saveLocRow.style, { marginBottom: '6px' });
+
+  const saveLocLabel = document.createElement('div');
+  Object.assign(saveLocLabel.style, {
+    color: CSS_COLORS.text,
+    fontSize: '0.6875rem',
+    marginBottom: '6px',
+  });
+  saveLocLabel.textContent = 'Save Method';
+  saveLocRow.appendChild(saveLocLabel);
+
+  const saveLocOptions = document.createElement('div');
+  Object.assign(saveLocOptions.style, { display: 'flex', gap: '6px' });
+
+  const saveLocChoices: Array<{ value: 'local' | 'download'; label: string }> = [
+    { value: 'download', label: 'Download' },
+    { value: 'local', label: 'Local' },
+  ];
+
+  saveLocChoices.forEach(({ value, label }) => {
+    const btn = document.createElement('button');
+    const isActive = state.options.saveLocation === value;
+    const isLocalDisabled = value === 'local' && !state.sweetlinkConnected;
+
+    Object.assign(btn.style, {
+      padding: '4px 10px',
+      backgroundColor: isActive ? `${accentColor}20` : 'transparent',
+      border: `1px solid ${isActive ? accentColor : `${color}40`}`,
+      borderRadius: '4px',
+      color: isActive ? accentColor : color,
+      fontSize: '0.625rem',
+      cursor: isLocalDisabled ? 'not-allowed' : 'pointer',
+      transition: 'all 150ms',
+      opacity: isLocalDisabled ? '0.5' : '1',
+    });
+    btn.textContent = label;
+    if (isLocalDisabled) {
+      btn.title = 'Sweetlink not connected';
+    }
+    btn.onclick = () => {
+      if (isLocalDisabled) return;
+      state.options.saveLocation = value;
+      state.settingsManager.saveSettings({ saveLocation: value });
+      state.render();
+    };
+    saveLocOptions.appendChild(btn);
+  });
+
+  saveLocRow.appendChild(saveLocOptions);
+  featuresSection.appendChild(saveLocRow);
 
   popover.appendChild(featuresSection);
 

@@ -24,6 +24,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
       showTooltips: true,
       showScreenshot: true,
       showConsoleBadges: true,
+      saveLocation: 'download',
       position: 'bottom-left',
       wsPort: 24680,
     },
@@ -95,6 +96,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         showScreenshot: true,
         showConsoleBadges: true,
         showTooltips: true,
+        saveLocation: 'download',
       })),
       saveSettings: vi.fn(),
       saveSettingsNow: vi.fn(),
@@ -195,8 +197,9 @@ describe('handleScreenshot', () => {
     expect(state.render).not.toHaveBeenCalled();
   });
 
-  it('does nothing if not copying and not connected', async () => {
+  it('does nothing if not copying and save is local but not connected', async () => {
     const state = createMockState({ sweetlinkConnected: false });
+    state.options.saveLocation = 'local';
     await handleScreenshot(state, false);
     expect(state.render).not.toHaveBeenCalled();
   });
@@ -206,8 +209,9 @@ describe('handleScreenshot', () => {
     // handleScreenshot requires html2canvas which is hard to mock completely,
     // so we test the early-exit paths and state transitions
     const state = createMockState({ capturing: false, sweetlinkConnected: false });
+    state.options.saveLocation = 'local';
     await handleScreenshot(state, false);
-    // Since not connected and not copyToClipboard, it exits early
+    // Since save is local and not connected, it exits early
     expect(state.capturing).toBe(false);
   });
 });
@@ -412,12 +416,13 @@ describe('handleSaveOutline', () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it('sends outline via WebSocket when connected', () => {
+  it('sends outline via WebSocket when connected and saveLocation is local', () => {
     const sendMock = vi.fn();
     const state = createMockState({
       savingOutline: false,
       ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
     });
+    state.options.saveLocation = 'local';
 
     handleSaveOutline(state);
 
@@ -433,13 +438,14 @@ describe('handleSaveOutline', () => {
     expect(state.render).toHaveBeenCalled();
   });
 
-  it('does nothing without WebSocket connection', () => {
+  it('triggers download when saveLocation is download', () => {
     const state = createMockState({
       savingOutline: false,
       ws: null,
     });
+    state.options.saveLocation = 'download';
     handleSaveOutline(state);
-    expect(state.savingOutline).toBe(false);
+    expect(state.handleNotification).toHaveBeenCalledWith('outline', 'outline downloaded', expect.any(Number));
   });
 });
 
@@ -454,12 +460,13 @@ describe('handleSaveSchema', () => {
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it('sends schema via WebSocket when connected', () => {
+  it('sends schema via WebSocket when connected and saveLocation is local', () => {
     const sendMock = vi.fn();
     const state = createMockState({
       savingSchema: false,
       ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
     });
+    state.options.saveLocation = 'local';
 
     handleSaveSchema(state);
 
@@ -475,12 +482,13 @@ describe('handleSaveSchema', () => {
     expect(state.render).toHaveBeenCalled();
   });
 
-  it('does nothing without WebSocket connection', () => {
+  it('triggers download when saveLocation is download', () => {
     const state = createMockState({
       savingSchema: false,
       ws: null,
     });
+    state.options.saveLocation = 'download';
     handleSaveSchema(state);
-    expect(state.savingSchema).toBe(false);
+    expect(state.handleNotification).toHaveBeenCalledWith('schema', 'schema downloaded', expect.any(Number));
   });
 });

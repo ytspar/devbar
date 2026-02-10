@@ -88,6 +88,7 @@ export {
   type DevBarSettings,
   getSettingsManager,
   type MetricsVisibility,
+  type SaveLocation,
   type SettingsChangeCallback,
 } from './settings.js';
 

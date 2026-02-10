@@ -133,7 +133,7 @@ describe('createModalHeader', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('shows Save button when sweetlinkConnected and onSave provided', () => {
+  it('shows Save button when sweetlinkConnected and saveLocation is local', () => {
     const onSave = vi.fn();
     const header = createModalHeader({
       color: '#10b981',
@@ -142,6 +142,7 @@ describe('createModalHeader', () => {
       onCopyMd: vi.fn().mockResolvedValue(undefined),
       onSave,
       sweetlinkConnected: true,
+      saveLocation: 'local',
     });
 
     const buttons = header.querySelectorAll('button');
@@ -151,7 +152,26 @@ describe('createModalHeader', () => {
     expect(onSave).toHaveBeenCalled();
   });
 
-  it('does not show Save button when not connected', () => {
+  it('shows Download button when saveLocation is download', () => {
+    const onSave = vi.fn();
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockResolvedValue(undefined),
+      onSave,
+      sweetlinkConnected: false,
+      saveLocation: 'download',
+    });
+
+    const buttons = header.querySelectorAll('button');
+    const downloadBtn = Array.from(buttons).find((btn) => btn.textContent === 'Download');
+    expect(downloadBtn).toBeTruthy();
+    downloadBtn!.click();
+    expect(onSave).toHaveBeenCalled();
+  });
+
+  it('disables Save button when saveLocation is local and not connected', () => {
     const header = createModalHeader({
       color: '#10b981',
       title: 'Title',
@@ -159,14 +179,17 @@ describe('createModalHeader', () => {
       onCopyMd: vi.fn().mockResolvedValue(undefined),
       onSave: vi.fn(),
       sweetlinkConnected: false,
+      saveLocation: 'local',
     });
 
     const buttons = header.querySelectorAll('button');
     const saveBtn = Array.from(buttons).find((btn) => btn.textContent === 'Save');
-    expect(saveBtn).toBeUndefined();
+    expect(saveBtn).toBeTruthy();
+    expect(saveBtn!.style.opacity).toBe('0.6');
+    expect(saveBtn!.style.cursor).toBe('not-allowed');
   });
 
-  it('shows "Saving..." text and disables button when isSaving', () => {
+  it('shows "Saving..." text and disables button when isSaving with local', () => {
     const header = createModalHeader({
       color: '#10b981',
       title: 'Title',
@@ -174,6 +197,7 @@ describe('createModalHeader', () => {
       onCopyMd: vi.fn().mockResolvedValue(undefined),
       onSave: vi.fn(),
       sweetlinkConnected: true,
+      saveLocation: 'local',
       isSaving: true,
     });
 
@@ -182,6 +206,23 @@ describe('createModalHeader', () => {
     expect(savingBtn).toBeTruthy();
     expect(savingBtn!.style.opacity).toBe('0.6');
     expect(savingBtn!.style.cursor).toBe('not-allowed');
+  });
+
+  it('shows "Downloading..." text when isSaving with download', () => {
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockResolvedValue(undefined),
+      onSave: vi.fn(),
+      sweetlinkConnected: false,
+      saveLocation: 'download',
+      isSaving: true,
+    });
+
+    const buttons = header.querySelectorAll('button');
+    const downloadingBtn = Array.from(buttons).find((btn) => btn.textContent === 'Downloading...');
+    expect(downloadingBtn).toBeTruthy();
   });
 
   it('shows saved path confirmation when savedPath is provided', () => {
@@ -195,6 +236,20 @@ describe('createModalHeader', () => {
     });
 
     expect(header.textContent).toContain('Saved to /project/outline.md');
+  });
+
+  it('shows Downloaded confirmation when savedPath ends with "downloaded"', () => {
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockResolvedValue(undefined),
+      sweetlinkConnected: false,
+      savedPath: 'outline downloaded',
+    });
+
+    expect(header.textContent).toContain('Downloaded');
+    expect(header.textContent).not.toContain('Saved to');
   });
 
   it('does not show saved confirmation when no savedPath', () => {

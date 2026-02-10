@@ -8,6 +8,7 @@ import {
   CLIPBOARD_NOTIFICATION_MS,
   DEVBAR_SCREENSHOT_QUALITY,
   SCREENSHOT_BLUR_DELAY_MS,
+  SCREENSHOT_NOTIFICATION_MS,
   SCREENSHOT_SCALE,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
@@ -17,6 +18,8 @@ import {
   canvasToDataUrl,
   copyCanvasToClipboard,
   delay,
+  downloadDataUrl,
+  downloadFile,
   prepareForCapture,
 } from '../utils.js';
 import type { DevBarState } from './types.js';
@@ -61,7 +64,11 @@ export async function handleScreenshot(
   copyToClipboard = false
 ): Promise<void> {
   if (state.capturing) return;
-  if (!copyToClipboard && !state.sweetlinkConnected) return;
+  // When saving (not clipboard), check if save method is available
+  if (!copyToClipboard) {
+    const saveLocal = state.options.saveLocation === 'local';
+    if (saveLocal && !state.sweetlinkConnected) return;
+  }
 
   let cleanup: (() => void) | null = null;
 
@@ -97,7 +104,7 @@ export async function handleScreenshot(
         format: 'jpeg',
         quality: DEVBAR_SCREENSHOT_QUALITY,
       });
-      if (state.ws?.readyState === WebSocket.OPEN) {
+      if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
         // Include web vitals metrics
         const webVitals: Record<string, number> = {};
         if (state.lcpValue !== null) webVitals.lcp = Math.round(state.lcpValue);
@@ -135,6 +142,11 @@ export async function handleScreenshot(
             },
           })
         );
+      } else {
+        // Browser download fallback
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        downloadDataUrl(`devbar-screenshot-${timestamp}.jpg`, dataUrl);
+        state.handleNotification('screenshot', 'screenshot downloaded', SCREENSHOT_NOTIFICATION_MS);
       }
     }
   } catch (e) {
@@ -294,7 +306,7 @@ export function handleSaveOutline(state: DevBarState): void {
   const outline = extractDocumentOutline();
   const markdown = outlineToMarkdown(outline);
 
-  if (state.ws?.readyState === WebSocket.OPEN) {
+  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingOutline = true;
     state.render();
 
@@ -310,6 +322,10 @@ export function handleSaveOutline(state: DevBarState): void {
         },
       })
     );
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadFile(`outline-${timestamp}.md`, markdown, 'text/markdown');
+    state.handleNotification('outline', 'outline downloaded', SCREENSHOT_NOTIFICATION_MS);
   }
 }
 
@@ -329,7 +345,7 @@ export function handleSaveConsoleLogs(
   });
   const markdown = lines.length > 0 ? lines.join('\n') : '_No logs_';
 
-  if (state.ws?.readyState === WebSocket.OPEN) {
+  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingConsoleLogs = true;
     state.render();
 
@@ -345,6 +361,10 @@ export function handleSaveConsoleLogs(
         },
       })
     );
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadFile(`console-logs-${timestamp}.md`, markdown, 'text/markdown');
+    state.handleNotification('consoleLogs', 'console logs downloaded', SCREENSHOT_NOTIFICATION_MS);
   }
 }
 
@@ -357,7 +377,7 @@ export function handleSaveSchema(state: DevBarState): void {
   const schema = extractPageSchema();
   const markdown = schemaToMarkdown(schema);
 
-  if (state.ws?.readyState === WebSocket.OPEN) {
+  if (state.options.saveLocation === 'local' && state.ws?.readyState === WebSocket.OPEN) {
     state.savingSchema = true;
     state.render();
 
@@ -373,5 +393,9 @@ export function handleSaveSchema(state: DevBarState): void {
         },
       })
     );
+  } else {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadFile(`schema-${timestamp}.md`, markdown, 'text/markdown');
+    state.handleNotification('schema', 'schema downloaded', SCREENSHOT_NOTIFICATION_MS);
   }
 }

@@ -35,10 +35,27 @@ export interface MetricsVisibility {
 
 /**
  * Where to save screenshots and other file outputs.
+ * - 'auto': Use Sweetlink when connected, browser download when not (default)
  * - 'local': Save to filesystem via Sweetlink (requires connection)
  * - 'download': Browser file download (always works)
  */
-export type SaveLocation = 'local' | 'download';
+export type SaveLocation = 'auto' | 'local' | 'download';
+
+/**
+ * Resolve the effective save method based on the setting and connection status.
+ * - 'auto' → 'local' when connected, 'download' when not
+ * - 'local' → 'local' (caller must handle disconnected state)
+ * - 'download' → 'download'
+ */
+export function resolveSaveLocation(
+  saveLocation: SaveLocation,
+  sweetlinkConnected: boolean
+): 'local' | 'download' {
+  if (saveLocation === 'auto') {
+    return sweetlinkConnected ? 'local' : 'download';
+  }
+  return saveLocation;
+}
 
 /**
  * Complete devbar settings schema
@@ -103,7 +120,7 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
   showTooltips: true,
 
   // Save behavior
-  saveLocation: 'download',
+  saveLocation: 'auto',
 
   // Metrics visibility
   showMetrics: {

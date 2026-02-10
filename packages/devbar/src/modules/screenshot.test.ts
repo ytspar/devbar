@@ -24,7 +24,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
       showTooltips: true,
       showScreenshot: true,
       showConsoleBadges: true,
-      saveLocation: 'download',
+      saveLocation: 'auto',
       position: 'bottom-left',
       wsPort: 24680,
     },
@@ -96,7 +96,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         showScreenshot: true,
         showConsoleBadges: true,
         showTooltips: true,
-        saveLocation: 'download',
+        saveLocation: 'auto',
       })),
       saveSettings: vi.fn(),
       saveSettingsNow: vi.fn(),
@@ -444,6 +444,16 @@ describe('handleSaveOutline', () => {
       ws: null,
     });
     state.options.saveLocation = 'download';
+    handleSaveOutline(state);
+    expect(state.handleNotification).toHaveBeenCalledWith('outline', 'outline downloaded', expect.any(Number));
+  });
+
+  it('triggers download when saveLocation is auto and not connected', () => {
+    const state = createMockState({
+      savingOutline: false,
+      sweetlinkConnected: false,
+      ws: null,
+    });
     handleSaveOutline(state);
     expect(state.handleNotification).toHaveBeenCalledWith('outline', 'outline downloaded', expect.any(Number));
   });

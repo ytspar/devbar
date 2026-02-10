@@ -15,7 +15,7 @@ import {
 } from '../constants.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
 import { extractPageSchema, schemaToMarkdown } from '../schema.js';
-import { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS } from '../settings.js';
+import { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, resolveSaveLocation } from '../settings.js';
 import type { ConsoleLog, OutlineNode, ThemeMode } from '../types.js';
 import {
   createEmptyMessage,
@@ -924,8 +924,9 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
 
   const hasSuccessState = state.copiedToClipboard || state.copiedPath || state.lastScreenshot;
   const isDisabled = state.capturing;
-  // Grey out only when save location is 'local' and sweetlink not connected
-  const isGreyedOut = state.options.saveLocation === 'local' && !state.sweetlinkConnected && !hasSuccessState;
+  const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
+  // Grey out only when effective save is 'local' but sweetlink not connected (explicit 'local' setting)
+  const isGreyedOut = effectiveSave === 'local' && !state.sweetlinkConnected && !hasSuccessState;
 
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, accentColor, (tooltip, h) => {
@@ -982,11 +983,11 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
     h.addTitle('Screenshot');
     h.addSectionHeader('Actions');
 
-    if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
+    if (effectiveSave === 'local' && !state.sweetlinkConnected) {
       h.addShortcut('Shift+Click', 'Copy to clipboard');
-      h.addWarning('Sweetlink not connected. Switch to Download in settings, or start Sweetlink.');
+      h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     } else {
-      const saveLabel = state.options.saveLocation === 'local' ? 'Save to file' : 'Download';
+      const saveLabel = effectiveSave === 'local' ? 'Save to file' : 'Download';
       h.addShortcut('Click', saveLabel);
       h.addShortcut('Shift+Click', 'Copy to clipboard');
       h.addSectionHeader('Keyboard');
@@ -1149,7 +1150,7 @@ function createOutlineButton(state: DevBarState): HTMLButtonElement {
     h.addDescription('View page heading structure and save as markdown.');
 
     if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
-      h.addWarning('Sweetlink not connected. Switch to Download in settings.');
+      h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     }
   });
 
@@ -1184,7 +1185,7 @@ function createSchemaButton(state: DevBarState): HTMLButtonElement {
     h.addDescription('View JSON-LD, Open Graph, and other structured data.');
 
     if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
-      h.addWarning('Sweetlink not connected. Switch to Download in settings.');
+      h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     }
   });
 
@@ -2248,7 +2249,8 @@ function renderSettingsPopover(state: DevBarState): void {
   const saveLocOptions = document.createElement('div');
   Object.assign(saveLocOptions.style, { display: 'flex', gap: '6px' });
 
-  const saveLocChoices: Array<{ value: 'local' | 'download'; label: string }> = [
+  const saveLocChoices: Array<{ value: 'auto' | 'local' | 'download'; label: string }> = [
+    { value: 'auto', label: 'Auto' },
     { value: 'download', label: 'Download' },
     { value: 'local', label: 'Local' },
   ];

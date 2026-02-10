@@ -90,7 +90,7 @@ export function createLandingHero(): HTMLElement {
   const logoContainer = document.createElement('div');
   logoContainer.className = 'landing-logo';
   const logo = document.createElement('img');
-  logo.src = '/logo/devbar-logo.svg';
+  logo.src = `${import.meta.env.BASE_URL}logo/devbar-logo.svg`;
   logo.alt = 'devbar';
   logo.className = 'landing-logo-img';
   logoContainer.appendChild(logo);

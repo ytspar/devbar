@@ -37,6 +37,14 @@
       "types": "./dist/browser.d.ts",
       "import": "./dist/browser.js"
     },
+    "./browser/commands/schema": {
+      "types": "./dist/browser/commands/schema.d.ts",
+      "import": "./dist/browser/commands/schema.js"
+    },
+    "./browser/commands/outline": {
+      "types": "./dist/browser/commands/outline.d.ts",
+      "import": "./dist/browser/commands/outline.js"
+    },
     "./browser/consoleCapture": {
       "types": "./dist/browser/consoleCapture.d.ts",
       "import": "./dist/browser/consoleCapture.js"
@@ -52,6 +60,14 @@
     "./urlUtils": {
       "types": "./dist/urlUtils.d.ts",
       "import": "./dist/urlUtils.js"
+    },
+    "./ruler": {
+      "types": "./dist/ruler.d.ts",
+      "import": "./dist/ruler.js"
+    },
+    "./playwright": {
+      "types": "./dist/playwright.d.ts",
+      "import": "./dist/playwright.js"
     },
     "./cdp": {
       "types": "./dist/cdp.d.ts",
@@ -100,14 +116,15 @@
     }
   },
   "dependencies": {
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.2.4",
     "html2canvas-pro": "^1.5.13",
-    "puppeteer-core": "^24.26.1",
+    "puppeteer-core": "^24.37.2",
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^25.2.3",
     "@types/ws": "^8.18.1",
+    "axe-core": "^4.10.2",
     "playwright": "^1.58.0",
     "typescript": "^5.0.0",
     "vite": "^7.0.0"

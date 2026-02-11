@@ -1,19 +1,26 @@
 # Publish production releases to NPM and create GitHub releases
 #
 # Triggers:
-# - Manual workflow dispatch with required version input
+# - Manual workflow dispatch with optional per-package version inputs
 #
-# Example: version "1.1.0" publishes @ytspar/sweetlink@1.1.0 and @ytspar/devbar@1.1.0
-# with the "latest" dist-tag, creates a git tag v1.1.0, and a GitHub release.
+# Provide a version for each package you want to release (leave blank to skip).
+# Examples:
+#   sweetlink_version="1.2.0"                    → publishes @ytspar/sweetlink@1.2.0
+#   devbar_version="1.3.0"                       → publishes @ytspar/devbar@1.3.0
+#   sweetlink_version="1.2.0" devbar_version="1.3.0" → publishes both
 
 name: Production Release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version (e.g. 1.1.0)'
-        required: true
+      sweetlink_version:
+        description: 'Sweetlink version (e.g. 1.2.0) — leave blank to skip'
+        required: false
+        type: string
+      devbar_version:
+        description: 'Devbar version (e.g. 1.3.0) — leave blank to skip'
+        required: false
         type: string
 
 # Permissions for OIDC trusted publishing to npm + creating releases
@@ -25,14 +32,21 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate version format
+      - name: Validate inputs
         env:
-          VERSION: ${{ inputs.version }}
+          SL_VERSION: ${{ inputs.sweetlink_version }}
+          DB_VERSION: ${{ inputs.devbar_version }}
         run: |
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Error: Version must be in semver format (e.g. 1.1.0)"
+          if [ -z "$SL_VERSION" ] && [ -z "$DB_VERSION" ]; then
+            echo "Error: At least one package version must be provided"
             exit 1
           fi
+          for v in "$SL_VERSION" "$DB_VERSION"; do
+            if [ -n "$v" ] && ! echo "$v" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "Error: '$v' is not valid semver (e.g. 1.1.0)"
+              exit 1
+            fi
+          done
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,57 +73,65 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      - name: Set sweetlink version
+      # ── Sweetlink ──────────────────────────────────────────────
+      - name: Publish sweetlink
+        if: inputs.sweetlink_version != ''
         env:
-          VERSION: ${{ inputs.version }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.sweetlink_version }}
         run: |
           cd packages/sweetlink
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/sweetlink@$VERSION"
+          npm publish --tag latest --access public --provenance
 
-      - name: Set devbar version
+      - name: Create sweetlink GitHub release
+        if: inputs.sweetlink_version != ''
         env:
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.sweetlink_version }}
+        run: |
+          git tag "sweetlink-v${VERSION}"
+          git push origin "sweetlink-v${VERSION}"
+          gh release create "sweetlink-v${VERSION}" \
+            --title "sweetlink v${VERSION}" \
+            --generate-notes
+
+      # ── Devbar ─────────────────────────────────────────────────
+      - name: Publish devbar
+        if: inputs.devbar_version != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.devbar_version }}
         run: |
           cd packages/devbar
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/devbar@$VERSION"
-
-      - name: Publish sweetlink
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd packages/sweetlink
           npm publish --tag latest --access public --provenance
 
-      - name: Publish devbar
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          cd packages/devbar
-          npm publish --tag latest --access public --provenance
-
-      - name: Create git tag and GitHub release
+      - name: Create devbar GitHub release
+        if: inputs.devbar_version != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ inputs.devbar_version }}
         run: |
-          git tag "v${VERSION}"
-          git push origin "v${VERSION}"
-          gh release create "v${VERSION}" \
-            --title "v${VERSION}" \
+          git tag "devbar-v${VERSION}"
+          git push origin "devbar-v${VERSION}"
+          gh release create "devbar-v${VERSION}" \
+            --title "devbar v${VERSION}" \
             --generate-notes
 
+      # ── Summary ────────────────────────────────────────────────
       - name: Summary
         env:
-          VERSION: ${{ inputs.version }}
+          SL_VERSION: ${{ inputs.sweetlink_version }}
+          DB_VERSION: ${{ inputs.devbar_version }}
         run: |
           echo "## Production Release Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Version: \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Install with:" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
-          echo "npm i @ytspar/sweetlink@${VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "npm i @ytspar/devbar@${VERSION}" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$SL_VERSION" ]; then
+            echo "- \`@ytspar/sweetlink@${SL_VERSION}\` → [sweetlink-v${SL_VERSION}](https://github.com/ytspar/devbar/releases/tag/sweetlink-v${SL_VERSION})" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$DB_VERSION" ]; then
+            echo "- \`@ytspar/devbar@${DB_VERSION}\` → [devbar-v${DB_VERSION}](https://github.com/ytspar/devbar/releases/tag/devbar-v${DB_VERSION})" >> "$GITHUB_STEP_SUMMARY"
+          fi

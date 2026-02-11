@@ -19,6 +19,7 @@ import type {
   LogSubscribeCommand,
   LogUnsubscribeCommand,
   RequestScreenshotCommand,
+  SaveA11yCommand,
   SaveConsoleLogsCommand,
   SaveOutlineCommand,
   SaveSchemaCommand,
@@ -31,6 +32,7 @@ import type {
 import {
   getErrorMessage,
   isDesignReviewScreenshotData,
+  isSaveA11yData,
   isSaveConsoleLogsData,
   isSaveOutlineData,
   isSaveSchemaData,
@@ -46,6 +48,7 @@ import {
   handleDesignReviewScreenshot,
   handleHmrScreenshot,
   handleLoadSettings,
+  handleSaveA11y,
   handleSaveConsoleLogs,
   handleSaveOutline,
   handleSaveSchema,
@@ -437,6 +440,27 @@ async function handleSaveConsoleLogsMsg(
   return true;
 }
 
+/** Handle save-a11y from browser */
+async function handleSaveA11yMsg(
+  command: SaveA11yCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+  if (!isSaveA11yData(command.data)) {
+    sendError(ctx.ws, 'a11y-error', 'Invalid a11y data');
+    return true;
+  }
+  try {
+    const result = await handleSaveA11y(command.data);
+    console.log(`[Sweetlink] A11y report saved to ${result.a11yPath}`);
+    sendSuccess(ctx.ws, 'a11y-saved', { a11yPath: result.a11yPath });
+  } catch (error) {
+    console.error('[Sweetlink] A11y save failed:', getErrorMessage(error));
+    sendError(ctx.ws, 'a11y-error', error);
+  }
+  return true;
+}
+
 /** Handle save-settings from browser */
 async function handleSaveSettingsMsg(
   command: SaveSettingsCommand,
@@ -709,6 +733,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   'save-outline': handleSaveOutlineMsg as MessageHandler,
   'save-schema': handleSaveSchemaMsg as MessageHandler,
   'save-console-logs': handleSaveConsoleLogsMsg as MessageHandler,
+  'save-a11y': handleSaveA11yMsg as MessageHandler,
   'save-settings': handleSaveSettingsMsg as MessageHandler,
   'load-settings': handleLoadSettingsMsg,
   'request-screenshot': handleRequestScreenshot as MessageHandler,

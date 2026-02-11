@@ -26,11 +26,13 @@ export function setupKeyboardShortcuts(state: DevBarState): void {
         state.consoleFilter ||
         state.showOutlineModal ||
         state.showSchemaModal ||
+        state.showA11yModal ||
         state.showDesignReviewConfirm
       ) {
         state.consoleFilter = null;
         state.showOutlineModal = false;
         state.showSchemaModal = false;
+        state.showA11yModal = false;
         state.showDesignReviewConfirm = false;
         state.render();
         return;

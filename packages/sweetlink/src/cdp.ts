@@ -53,8 +53,8 @@ export async function getCDPBrowser(): Promise<Browser> {
       defaultViewport: null,
     });
     return browser;
-  } catch (_error) {
-    const errorMessage = _error instanceof Error ? _error.message : 'Failed to connect to Chrome';
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to connect to Chrome';
     throw new Error(
       `CDP connection failed: ${errorMessage}\n\nMake sure Chrome is running with:\n/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222`
     );
@@ -165,9 +165,9 @@ export async function screenshotViaCDP(options: {
             height: boundingBox.height,
           };
         }
-      } catch (_error) {
+      } catch (error) {
         throw new Error(
-          `Failed to find element "${options.selector}": ${_error instanceof Error ? _error.message : _error}`
+          `Failed to find element "${options.selector}": ${error instanceof Error ? error.message : error}`
         );
       }
     }
@@ -463,10 +463,10 @@ export async function testCDPConnection(): Promise<{
       browserVersion: versionInfo.Browser,
       pages: pageInfo,
     };
-  } catch (_error) {
+  } catch (error) {
     return {
       connected: false,
-      error: _error instanceof Error ? _error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }

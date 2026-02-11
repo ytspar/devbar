@@ -15,7 +15,10 @@ import {
   SCREENSHOT_NOTIFICATION_MS,
   DESIGN_REVIEW_NOTIFICATION_MS,
 } from '../constants.js';
+import { runA11yAudit } from '../accessibility.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
+import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
+import { extractPageSchema, schemaToMarkdown } from '../schema.js';
 import type { DevBarSettings } from '../settings.js';
 import type { SweetlinkCommand } from '../types.js';
 import type { DevBarState } from './types.js';
@@ -210,6 +213,162 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
       }
       break;
     }
+    case 'get-a11y': {
+      try {
+        const result = await runA11yAudit(command.forceRefresh);
+        const violationsByImpact: Record<string, number> = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+        for (const v of result.violations) {
+          violationsByImpact[v.impact] = (violationsByImpact[v.impact] || 0) + 1;
+        }
+        ws.send(JSON.stringify({
+          success: true,
+          data: {
+            result,
+            summary: {
+              totalViolations: result.violations.length,
+              totalPasses: result.passes.length,
+              totalIncomplete: result.incomplete.length,
+              byImpact: violationsByImpact,
+            },
+            url: window.location.href,
+            title: document.title,
+            timestamp: Date.now(),
+          },
+          timestamp: Date.now(),
+        }));
+      } catch (e) {
+        ws.send(JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Accessibility audit failed',
+          timestamp: Date.now(),
+        }));
+      }
+      break;
+    }
+    case 'get-outline': {
+      try {
+        const outline = extractDocumentOutline();
+        const markdown = outlineToMarkdown(outline);
+        ws.send(JSON.stringify({
+          success: true,
+          data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+          timestamp: Date.now(),
+        }));
+      } catch (e) {
+        ws.send(JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Outline extraction failed',
+          timestamp: Date.now(),
+        }));
+      }
+      break;
+    }
+    case 'get-schema': {
+      try {
+        const schema = extractPageSchema();
+        const markdown = schemaToMarkdown(schema);
+        ws.send(JSON.stringify({
+          success: true,
+          data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+          timestamp: Date.now(),
+        }));
+      } catch (e) {
+        ws.send(JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Schema extraction failed',
+          timestamp: Date.now(),
+        }));
+      }
+      break;
+    }
+    case 'get-vitals': {
+      try {
+        const paintEntries = performance.getEntriesByType('paint');
+        const fcpEntry = paintEntries.find((e) => e.name === 'first-contentful-paint');
+        const fcp = fcpEntry ? Math.round(fcpEntry.startTime) : null;
+
+        // Collect LCP, CLS from buffered observers
+        const collectEntries = (entryType: string): Promise<PerformanceEntry[]> =>
+          new Promise((resolve) => {
+            try {
+              const entries: PerformanceEntry[] = [];
+              const observer = new PerformanceObserver((list) => { entries.push(...list.getEntries()); });
+              observer.observe({ type: entryType, buffered: true });
+              setTimeout(() => { observer.disconnect(); resolve(entries); }, 0);
+            } catch { resolve([]); }
+          });
+
+        const [lcpEntries, layoutShiftEntries, eventEntries] = await Promise.all([
+          collectEntries('largest-contentful-paint'),
+          collectEntries('layout-shift'),
+          collectEntries('event'),
+        ]);
+
+        const lcp = lcpEntries.length > 0 ? Math.round((lcpEntries[lcpEntries.length - 1] as PerformanceEntry & { startTime: number }).startTime) : null;
+
+        let cls: number | null = null;
+        if (layoutShiftEntries.length > 0) {
+          let clsValue = 0;
+          for (const entry of layoutShiftEntries) {
+            const se = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
+            if (!se.hadRecentInput) clsValue += se.value;
+          }
+          cls = Math.round(clsValue * 1000) / 1000;
+        }
+
+        let inp: number | null = null;
+        if (eventEntries.length > 0) {
+          let worstDuration = 0;
+          for (const entry of eventEntries) {
+            const ee = entry as PerformanceEntry & { duration: number };
+            if (ee.duration > worstDuration) worstDuration = ee.duration;
+          }
+          inp = Math.round(worstDuration);
+        }
+
+        let pageSize: number | null = null;
+        const resourceEntries = performance.getEntriesByType('resource');
+        let totalSize = 0;
+        for (const entry of resourceEntries) {
+          totalSize += (entry as PerformanceResourceTiming).transferSize || 0;
+        }
+        if (totalSize > 0) pageSize = totalSize;
+
+        const vitals = { fcp, lcp, cls, inp, pageSize, url: window.location.href, title: document.title, timestamp: Date.now() };
+        const parts: string[] = [];
+        if (fcp !== null) parts.push(`FCP: ${fcp}ms`);
+        if (lcp !== null) parts.push(`LCP: ${lcp}ms`);
+        if (cls !== null) parts.push(`CLS: ${cls}`);
+        if (inp !== null) parts.push(`INP: ${inp}ms`);
+        if (pageSize !== null) parts.push(`Page size: ${Math.round(pageSize / 1024)}KB`);
+
+        ws.send(JSON.stringify({
+          success: true,
+          data: { vitals, summary: parts.join(', ') || 'No metrics available yet' },
+          timestamp: Date.now(),
+        }));
+      } catch (e) {
+        ws.send(JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Vitals collection failed',
+          timestamp: Date.now(),
+        }));
+      }
+      break;
+    }
+    case 'refresh': {
+      try {
+        window.location.reload();
+        ws.send(JSON.stringify({ success: true, timestamp: Date.now() }));
+      } catch (e) {
+        ws.send(JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Refresh failed',
+          timestamp: Date.now(),
+        }));
+      }
+      break;
+    }
     case 'screenshot-saved':
       handleNotification(state, 'screenshot', command.path, SCREENSHOT_NOTIFICATION_MS);
       break;
@@ -265,6 +424,14 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
       console.error('[GlobalDevBar] Console logs save failed:', command.error);
       state.render();
       break;
+    case 'a11y-saved':
+      handleNotification(state, 'a11y', command.a11yPath, SCREENSHOT_NOTIFICATION_MS);
+      break;
+    case 'a11y-error':
+      state.savingA11yAudit = false;
+      console.error('[GlobalDevBar] A11y save failed:', command.error);
+      state.render();
+      break;
     case 'settings-loaded':
       handleSettingsLoaded(state, command.settings as DevBarSettings | null);
       break;
@@ -282,7 +449,7 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
  */
 export function handleNotification(
   state: DevBarState,
-  type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
+  type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
   path: string | undefined,
   durationMs: number
 ): void {
@@ -330,6 +497,15 @@ export function handleNotification(
       if (state.consoleLogsTimeout) clearTimeout(state.consoleLogsTimeout);
       state.consoleLogsTimeout = setTimeout(() => {
         state.lastConsoleLogs = null;
+        state.render();
+      }, durationMs);
+      break;
+    case 'a11y':
+      state.savingA11yAudit = false;
+      state.lastA11yAudit = path;
+      if (state.a11yTimeout) clearTimeout(state.a11yTimeout);
+      state.a11yTimeout = setTimeout(() => {
+        state.lastA11yAudit = null;
         state.render();
       }, durationMs);
       break;

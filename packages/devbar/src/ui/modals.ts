@@ -17,6 +17,7 @@ export interface ModalConfig {
   onClose: () => void;
   onCopyMd: () => Promise<void>;
   onSave?: () => void;
+  onClear?: () => void;
   sweetlinkConnected: boolean;
   /** Save location preference: 'auto', 'local' (via sweetlink), or 'download' (browser) */
   saveLocation?: 'auto' | 'local' | 'download';
@@ -57,7 +58,7 @@ export function createModalBox(color: string): HTMLDivElement {
  * Create modal header with title, copy/save/close buttons
  */
 export function createModalHeader(config: ModalConfig): HTMLDivElement {
-  const { color, title, onClose, onCopyMd, onSave, sweetlinkConnected, saveLocation = 'auto', isSaving, savedPath } =
+  const { color, title, onClose, onCopyMd, onSave, onClear, sweetlinkConnected, saveLocation = 'auto', isSaving, savedPath } =
     config;
   const effectiveSave = resolveSaveLocation(saveLocation, sweetlinkConnected);
 
@@ -125,6 +126,13 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     }
 
     headerButtons.appendChild(saveBtn);
+  }
+
+  // Clear button
+  if (onClear) {
+    const clearBtn = createStyledButton({ color, text: 'Clear' });
+    clearBtn.onclick = onClear;
+    headerButtons.appendChild(clearBtn);
   }
 
   // Close button

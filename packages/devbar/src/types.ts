@@ -8,6 +8,8 @@
 
 // Re-export shared types from sweetlink's types module
 export type {
+  AxeResult,
+  AxeViolation,
   ConsoleLog,
   OutlineNode,
   PageSchema,

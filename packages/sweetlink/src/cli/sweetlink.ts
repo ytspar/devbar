@@ -116,14 +116,7 @@ function getRelativePath(absolutePath: string): string {
   return absolutePath;
 }
 
-interface SweetlinkCommand {
-  type: 'screenshot' | 'query-dom' | 'get-logs' | 'exec-js' | 'refresh';
-  selector?: string;
-  property?: string;
-  code?: string;
-  filter?: string;
-  options?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-}
+import type { SweetlinkCommand } from '../types.js';
 
 interface SweetlinkResponse {
   success: boolean;
@@ -470,6 +463,7 @@ async function getLogs(options: {
   filter?: string;
   format?: 'text' | 'json' | 'summary';
   dedupe?: boolean;
+  output?: string;
 }) {
   if (options.format === 'text') {
     console.log('[Sweetlink] Getting console logs...');
@@ -492,10 +486,17 @@ async function getLogs(options: {
 
     // JSON format - compact, parseable output
     if (options.format === 'json') {
-      const output = options.dedupe
+      const jsonData = options.dedupe
         ? { deduped: true, logs: deduplicateLogs(logs) }
         : { deduped: false, logs };
-      console.log(JSON.stringify(output, null, 2));
+      const jsonStr = JSON.stringify(jsonData, null, 2);
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, jsonStr);
+        console.log(`[Sweetlink] ✓ Logs saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(jsonStr);
+      }
       return;
     }
 
@@ -517,7 +518,14 @@ async function getLogs(options: {
           message: l.message.length > 500 ? `${l.message.substring(0, 500)}...` : l.message,
         })),
       };
-      console.log(JSON.stringify(summary, null, 2));
+      const summaryStr = JSON.stringify(summary, null, 2);
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, summaryStr);
+        console.log(`[Sweetlink] ✓ Logs saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(summaryStr);
+      }
       return;
     }
 
@@ -1073,6 +1081,200 @@ async function cleanup(options: { force?: boolean; verbose?: boolean }) {
   }
 }
 
+async function getSchema(options: { format?: 'text' | 'json'; output?: string }) {
+  console.log('[Sweetlink] Extracting page schema...');
+
+  try {
+    const response = await sendCommand({ type: 'get-schema' });
+
+    if (!response.success) {
+      console.error('[Sweetlink] Schema extraction failed:', response.error);
+      process.exit(1);
+    }
+
+    const { schema, markdown } = response.data;
+
+    if (options.format === 'json') {
+      const output = JSON.stringify(schema, null, 2);
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, output);
+        console.log(`[Sweetlink] ✓ Schema saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(output);
+      }
+    } else {
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, markdown);
+        console.log(`[Sweetlink] ✓ Schema saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(markdown);
+      }
+    }
+  } catch (error) {
+    console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }) {
+  console.log('[Sweetlink] Extracting document outline...');
+
+  try {
+    const response = await sendCommand({ type: 'get-outline' });
+
+    if (!response.success) {
+      console.error('[Sweetlink] Outline extraction failed:', response.error);
+      process.exit(1);
+    }
+
+    const { outline, markdown } = response.data;
+
+    if (options.format === 'json') {
+      const output = JSON.stringify(outline, null, 2);
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, output);
+        console.log(`[Sweetlink] ✓ Outline saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(output);
+      }
+    } else {
+      // Both 'text' and 'markdown' use the markdown format
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, markdown);
+        console.log(`[Sweetlink] ✓ Outline saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(markdown);
+      }
+    }
+  } catch (error) {
+    console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
+  console.log('[Sweetlink] Running accessibility audit...');
+
+  try {
+    const response = await sendCommand({ type: 'get-a11y' });
+
+    if (!response.success) {
+      console.error('[Sweetlink] Accessibility audit failed:', response.error);
+      process.exit(1);
+    }
+
+    const { result, summary } = response.data;
+
+    if (options.format === 'json') {
+      const output = JSON.stringify({ result, summary }, null, 2);
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, output);
+        console.log(`[Sweetlink] ✓ A11y report saved to: ${getRelativePath(options.output)}`);
+      } else {
+        console.log(output);
+      }
+    } else {
+      // Text format - human-readable output
+      console.log(`\n[Sweetlink] Accessibility Audit Results`);
+      console.log(`  URL: ${result.url}`);
+      console.log(`  Violations: ${summary.totalViolations}`);
+      console.log(`  Passes: ${summary.totalPasses}`);
+      console.log(`  Incomplete: ${summary.totalIncomplete}`);
+      console.log(`  By Impact: critical=${summary.byImpact.critical}, serious=${summary.byImpact.serious}, moderate=${summary.byImpact.moderate}, minor=${summary.byImpact.minor}`);
+
+      if (result.violations.length > 0) {
+        console.log('\n  Violations:');
+        const impactOrder = ['critical', 'serious', 'moderate', 'minor'];
+        const impactColors: Record<string, string> = {
+          critical: '\x1b[31m',
+          serious: '\x1b[33m',
+          moderate: '\x1b[33m',
+          minor: '\x1b[36m',
+        };
+        const reset = '\x1b[0m';
+
+        for (const impact of impactOrder) {
+          const violations = result.violations.filter(
+            (v: { impact: string }) => v.impact === impact
+          );
+          if (violations.length === 0) continue;
+
+          for (const v of violations) {
+            const color = impactColors[v.impact] || '';
+            console.log(`    ${color}[${v.impact.toUpperCase()}]${reset} ${v.help}`);
+            console.log(`      ${v.description}`);
+            console.log(`      ${v.nodes.length} element(s) affected`);
+          }
+        }
+      } else {
+        console.log('\n  ✓ No violations found');
+      }
+
+      if (options.output) {
+        ensureDir(options.output);
+        fs.writeFileSync(options.output, JSON.stringify({ result, summary }, null, 2));
+        console.log(`\n[Sweetlink] ✓ A11y report saved to: ${getRelativePath(options.output)}`);
+      }
+    }
+  } catch (error) {
+    console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+async function getVitals(options: { format?: 'text' | 'json' }) {
+  console.log('[Sweetlink] Collecting web vitals...');
+
+  try {
+    const response = await sendCommand({ type: 'get-vitals' });
+
+    if (!response.success) {
+      console.error('[Sweetlink] Vitals collection failed:', response.error);
+      process.exit(1);
+    }
+
+    const { vitals, summary } = response.data;
+
+    if (options.format === 'json') {
+      console.log(JSON.stringify(vitals, null, 2));
+    } else {
+      console.log(`\n[Sweetlink] Web Vitals`);
+      console.log(`  URL: ${vitals.url}`);
+      console.log(`  ${summary}`);
+
+      // Detailed breakdown
+      if (vitals.fcp !== null) {
+        const color = vitals.fcp <= 1800 ? '\x1b[32m' : vitals.fcp <= 3000 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  FCP: ${color}${vitals.fcp}ms\x1b[0m`);
+      }
+      if (vitals.lcp !== null) {
+        const color = vitals.lcp <= 2500 ? '\x1b[32m' : vitals.lcp <= 4000 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  LCP: ${color}${vitals.lcp}ms\x1b[0m`);
+      }
+      if (vitals.cls !== null) {
+        const color = vitals.cls <= 0.1 ? '\x1b[32m' : vitals.cls <= 0.25 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  CLS: ${color}${vitals.cls}\x1b[0m`);
+      }
+      if (vitals.inp !== null) {
+        const color = vitals.inp <= 200 ? '\x1b[32m' : vitals.inp <= 500 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  INP: ${color}${vitals.inp}ms\x1b[0m`);
+      }
+      if (vitals.pageSize !== null) {
+        const sizeKB = Math.round(vitals.pageSize / 1024);
+        console.log(`  Page size: ${sizeKB}KB`);
+      }
+    }
+  } catch (error) {
+    console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
 function showHelp() {
   console.log(`
 Sweetlink CLI - Autonomous Development Bridge
@@ -1128,6 +1330,7 @@ Commands:
     Options:
       --filter <text>             Filter logs by level or content
       --format <type>             Output format: text (default), json, or summary
+      --output <path>             Save output to file
       --dedupe                    Remove duplicate log entries
 
     Output Formats:
@@ -1190,6 +1393,52 @@ Commands:
     Examples:
       pnpm sweetlink refresh
       pnpm sweetlink refresh --hard
+
+  schema [options]
+    Extract page schema (JSON-LD, Open Graph, Twitter, meta tags, microdata)
+
+    Options:
+      --format <type>             Output format: text (default), json
+      --output <path>             Save output to file
+
+    Examples:
+      pnpm sweetlink schema
+      pnpm sweetlink schema --format json
+      pnpm sweetlink schema --output .tmp/schema.json --format json
+
+  outline [options]
+    Extract document outline (headings, sections, landmarks)
+
+    Options:
+      --format <type>             Output format: text (default), json, markdown
+      --output <path>             Save output to file
+
+    Examples:
+      pnpm sweetlink outline
+      pnpm sweetlink outline --format json
+      pnpm sweetlink outline --output .tmp/outline.md
+
+  a11y [options]
+    Run accessibility audit (requires axe-core via devbar)
+
+    Options:
+      --format <type>             Output format: text (default), json
+      --output <path>             Save report to file
+
+    Examples:
+      pnpm sweetlink a11y
+      pnpm sweetlink a11y --format json
+      pnpm sweetlink a11y --output .tmp/a11y-report.json --format json
+
+  vitals [options]
+    Collect Core Web Vitals (FCP, LCP, CLS, INP, page size)
+
+    Options:
+      --format <type>             Output format: text (default), json
+
+    Examples:
+      pnpm sweetlink vitals
+      pnpm sweetlink vitals --format json
 
   ruler [options]
     Measure elements and inject visual overlay for alignment verification.
@@ -1341,6 +1590,7 @@ function hasFlag(flag: string): boolean {
           filter: getArg('--filter'),
           format: format || 'text',
           dedupe: hasFlag('--dedupe'),
+          output: getArg('--output'),
         });
         break;
       }
@@ -1444,6 +1694,34 @@ function hasFlag(flag: string): boolean {
         }
         break;
       }
+
+      case 'schema':
+        await getSchema({
+          format: getArg('--format') as 'text' | 'json' | undefined,
+          output: getArg('--output'),
+        });
+        break;
+
+      case 'outline':
+        await getOutline({
+          format: getArg('--format') as 'text' | 'json' | 'markdown' | undefined,
+          output: getArg('--output'),
+        });
+        break;
+
+      case 'a11y':
+      case 'accessibility':
+        await getA11y({
+          format: getArg('--format') as 'text' | 'json' | undefined,
+          output: getArg('--output'),
+        });
+        break;
+
+      case 'vitals':
+        await getVitals({
+          format: getArg('--format') as 'text' | 'json' | undefined,
+        });
+        break;
 
       case 'cleanup':
         await cleanup({

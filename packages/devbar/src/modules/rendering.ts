@@ -14,7 +14,7 @@ import {
   TAILWIND_BREAKPOINTS,
 } from '../constants.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
-import { extractPageSchema, schemaToMarkdown } from '../schema.js';
+import { checkMissingTags, extractFavicons, extractPageSchema, isImageKey, schemaToMarkdown } from '../schema.js';
 import { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, resolveSaveLocation } from '../settings.js';
 import type { ConsoleLog, OutlineNode, ThemeMode } from '../types.js';
 import {
@@ -31,11 +31,21 @@ import {
 } from '../ui/index.js';
 import { getResponsiveMetricVisibility } from './performance.js';
 import {
+  runA11yAudit,
+  groupViolationsByImpact,
+  getImpactColor,
+  getViolationCounts,
+  preloadAxe,
+} from '../accessibility.js';
+import type { AxeResult, AxeViolation } from '../accessibility.js';
+import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
   copyPathToClipboard,
+  handleA11yAudit,
   handleDocumentOutline,
   handlePageSchema,
+  handleSaveA11yAudit,
   handleSaveConsoleLogs,
   handleSaveOutline,
   handleSaveSchema,
@@ -103,6 +113,9 @@ function createConnectionIndicator(state: DevBarState): HTMLSpanElement {
   return connIndicator;
 }
 
+/** Prevents re-entrant render calls during rapid clicks */
+let renderGuard = false;
+
 /**
  * Main render dispatch - creates container and delegates to appropriate renderer.
  */
@@ -120,6 +133,8 @@ export function render(
 ): void {
   if (state.destroyed) return;
   if (typeof document === 'undefined') return;
+  if (renderGuard) return;
+  renderGuard = true;
 
   // Clear any orphaned tooltips from previous render
   clearAllTooltips(state);
@@ -128,6 +143,7 @@ export function render(
   if (state.overlayElement) {
     state.overlayElement.remove();
     state.overlayElement = null;
+    document.body.style.overflow = '';
   }
 
   // Remove existing container if any
@@ -139,6 +155,8 @@ export function render(
   // even if content or overlay rendering throws
   state.container = document.createElement('div');
   state.container.setAttribute('data-devbar', 'true');
+  state.container.setAttribute('role', 'toolbar');
+  state.container.setAttribute('aria-label', 'DevBar');
   document.body.appendChild(state.container);
 
   try {
@@ -158,6 +176,13 @@ export function render(
   } catch (e) {
     console.error('[GlobalDevBar] Overlay render failed:', e);
   }
+
+  // Lock body scroll while a modal overlay is open
+  if (state.overlayElement) {
+    document.body.style.overflow = 'hidden';
+  }
+
+  renderGuard = false;
 }
 
 function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapture): void {
@@ -166,18 +191,25 @@ function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapt
   if (state.consoleFilter) {
     state.showOutlineModal = false;
     state.showSchemaModal = false;
+    state.showA11yModal = false;
     state.showDesignReviewConfirm = false;
     state.showSettingsPopover = false;
     renderConsolePopup(state, consoleCaptureSingleton);
   } else if (state.showOutlineModal) {
     state.showSchemaModal = false;
+    state.showA11yModal = false;
     state.showDesignReviewConfirm = false;
     state.showSettingsPopover = false;
     renderOutlineModal(state);
   } else if (state.showSchemaModal) {
+    state.showA11yModal = false;
     state.showDesignReviewConfirm = false;
     state.showSettingsPopover = false;
     renderSchemaModal(state);
+  } else if (state.showA11yModal) {
+    state.showDesignReviewConfirm = false;
+    state.showSettingsPopover = false;
+    renderA11yModal(state);
   } else if (state.showDesignReviewConfirm) {
     state.showSettingsPopover = false;
     renderDesignReviewConfirmModal(state);
@@ -806,6 +838,7 @@ function renderExpanded(
   actionsContainer.appendChild(createAIReviewButton(state));
   actionsContainer.appendChild(createOutlineButton(state));
   actionsContainer.appendChild(createSchemaButton(state));
+  actionsContainer.appendChild(createA11yButton(state));
   actionsContainer.appendChild(createSettingsButton(state));
   actionsContainer.appendChild(createCompactToggleButton(state));
   mainRow.appendChild(actionsContainer);
@@ -923,6 +956,7 @@ function createConsoleBadge(
 function createScreenshotButton(state: DevBarState, accentColor: string): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.setAttribute('aria-label', 'Screenshot');
 
   const hasSuccessState = state.copiedToClipboard || state.copiedPath || state.lastScreenshot;
   const isDisabled = state.capturing;
@@ -1071,6 +1105,7 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
 function createAIReviewButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.setAttribute('aria-label', 'AI Design Review');
 
   const hasError = !!state.designReviewError;
   const isActive = state.designReviewInProgress || !!state.lastDesignReview || hasError;
@@ -1137,6 +1172,7 @@ function createAIReviewButton(state: DevBarState): HTMLButtonElement {
 function createOutlineButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.setAttribute('aria-label', 'Document Outline');
 
   const isActive = state.showOutlineModal || !!state.lastOutline;
 
@@ -1172,6 +1208,7 @@ function createOutlineButton(state: DevBarState): HTMLButtonElement {
 function createSchemaButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.setAttribute('aria-label', 'Page Schema');
 
   const isActive = state.showSchemaModal || !!state.lastSchema;
 
@@ -1209,6 +1246,50 @@ function createSchemaButton(state: DevBarState): HTMLButtonElement {
   return btn;
 }
 
+function createA11yButton(state: DevBarState): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', 'Accessibility Audit');
+
+  const isActive = state.showA11yModal || !!state.lastA11yAudit;
+
+  attachButtonTooltip(state, btn, BUTTON_COLORS.a11y, (_tooltip, h) => {
+    if (state.lastA11yAudit) {
+      const isDownloaded = state.lastA11yAudit.endsWith('downloaded');
+      h.addSuccess(isDownloaded ? 'A11y report downloaded!' : 'A11y report saved!', isDownloaded ? undefined : state.lastA11yAudit);
+      return;
+    }
+
+    h.addTitle('Accessibility Audit');
+    h.addDescription('Run axe-core audit to check WCAG compliance.');
+
+    if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
+      h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
+    }
+  });
+
+  // Preload axe-core on hover
+  btn.addEventListener('mouseenter', () => preloadAxe(), { once: true });
+
+  Object.assign(btn.style, getButtonStyles(BUTTON_COLORS.a11y, isActive, false));
+  btn.onclick = () => handleA11yAudit(state);
+
+  if (state.lastA11yAudit) {
+    btn.textContent = 'v';
+    btn.style.fontSize = '0.5rem';
+  } else {
+    // Accessibility/shield icon
+    btn.appendChild(
+      createSvgIcon(
+        'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z',
+        { fill: true }
+      )
+    );
+  }
+
+  return btn;
+}
+
 /**
  * Create the settings gear button.
  */
@@ -1216,6 +1297,7 @@ function createSettingsButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.setAttribute('data-testid', 'devbar-settings-button');
+  btn.setAttribute('aria-label', 'Settings');
 
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, CSS_COLORS.textSecondary, (_tooltip, h) => {
@@ -1287,6 +1369,7 @@ function createSettingsButton(state: DevBarState): HTMLButtonElement {
 function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.setAttribute('aria-label', state.compactMode ? 'Switch to expanded mode' : 'Switch to compact mode');
 
   const isCompact = state.compactMode;
   const { accentColor } = state.options;
@@ -1387,6 +1470,7 @@ function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: Console
       await navigator.clipboard.writeText(lines.join('\n'));
     },
     onSave: () => handleSaveConsoleLogs(state, logs),
+    onClear: () => state.clearConsoleLogs(),
     sweetlinkConnected: state.sweetlinkConnected,
     saveLocation: state.options.saveLocation,
     isSaving: state.savingConsoleLogs,
@@ -1574,18 +1658,25 @@ function renderSchemaModal(state: DevBarState): void {
 
   const content = createModalContent();
 
+  const missingTags = checkMissingTags(schema);
+  const favicons = extractFavicons();
+
   const hasContent =
     schema.jsonLd.length > 0 ||
     Object.keys(schema.openGraph).length > 0 ||
     Object.keys(schema.twitter).length > 0 ||
-    Object.keys(schema.metaTags).length > 0;
+    Object.keys(schema.metaTags).length > 0 ||
+    favicons.length > 0 ||
+    missingTags.length > 0;
 
   if (!hasContent) {
     content.appendChild(createEmptyMessage('No structured data found on this page'));
   } else {
-    renderSchemaSection(content, 'JSON-LD', schema.jsonLd, color);
+    if (missingTags.length > 0) renderMissingTagsSection(content, missingTags);
     renderSchemaSection(content, 'Open Graph', schema.openGraph, CSS_COLORS.info);
     renderSchemaSection(content, 'Twitter Cards', schema.twitter, CSS_COLORS.cyan);
+    if (favicons.length > 0) renderFaviconsSection(content, favicons);
+    renderSchemaSection(content, 'JSON-LD', schema.jsonLd, color);
     renderSchemaSection(content, 'Meta Tags', schema.metaTags, CSS_COLORS.textMuted);
   }
 
@@ -1596,32 +1687,63 @@ function renderSchemaModal(state: DevBarState): void {
   document.body.appendChild(overlay);
 }
 
+function renderSchemaSectionHeader(
+  section: HTMLElement,
+  title: string,
+  color: string,
+  count: number
+): void {
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginBottom: '10px',
+    paddingBottom: '6px',
+    borderBottom: `1px solid ${color}30`,
+  });
+
+  const titleEl = document.createElement('h3');
+  Object.assign(titleEl.style, {
+    color,
+    fontSize: '0.8125rem',
+    fontWeight: '600',
+    margin: '0',
+  });
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+
+  const badge = document.createElement('span');
+  Object.assign(badge.style, {
+    color: `${color}cc`,
+    fontSize: '0.5625rem',
+    backgroundColor: `${color}18`,
+    padding: '1px 6px',
+    borderRadius: '8px',
+    letterSpacing: '0.03em',
+  });
+  badge.textContent = String(count);
+  header.appendChild(badge);
+
+  section.appendChild(header);
+}
+
 function renderSchemaSection(
   container: HTMLElement,
   title: string,
   items: Record<string, string> | unknown[],
   color: string
 ): void {
-  const isEmpty = Array.isArray(items) ? items.length === 0 : Object.keys(items).length === 0;
-  if (isEmpty) return;
+  const count = Array.isArray(items) ? items.length : Object.keys(items).length;
+  if (count === 0) return;
 
   const section = document.createElement('div');
   section.style.marginBottom = '20px';
 
-  const sectionTitle = document.createElement('h3');
-  Object.assign(sectionTitle.style, {
-    color,
-    fontSize: '0.8125rem',
-    fontWeight: '600',
-    marginBottom: '10px',
-    borderBottom: `1px solid ${color}40`,
-    paddingBottom: '6px',
-  });
-  sectionTitle.textContent = title;
-  section.appendChild(sectionTitle);
+  renderSchemaSectionHeader(section, title, color, count);
 
   if (Array.isArray(items)) {
-    renderJsonLdItems(section, items);
+    renderJsonLdItems(section, items, color);
   } else {
     renderKeyValueItems(section, items);
   }
@@ -1629,31 +1751,58 @@ function renderSchemaSection(
   container.appendChild(section);
 }
 
-function renderJsonLdItems(container: HTMLElement, items: unknown[]): void {
+function renderJsonLdItems(container: HTMLElement, items: unknown[], color: string): void {
   items.forEach((item, i) => {
     const itemEl = document.createElement('div');
     itemEl.style.marginBottom = '10px';
 
-    const itemTitle = document.createElement('div');
+    // Extract @type for a meaningful label
+    const typed = item as Record<string, unknown>;
+    const schemaType = typeof typed?.['@type'] === 'string' ? typed['@type'] : null;
+
+    const itemHeader = document.createElement('div');
+    Object.assign(itemHeader.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      marginBottom: '4px',
+    });
+
+    const itemTitle = document.createElement('span');
     Object.assign(itemTitle.style, {
       color: '#9ca3af',
       fontSize: '0.6875rem',
-      marginBottom: '4px',
     });
     itemTitle.textContent = `Schema ${i + 1}`;
-    itemEl.appendChild(itemTitle);
+    itemHeader.appendChild(itemTitle);
+
+    if (schemaType) {
+      const typeTag = document.createElement('span');
+      Object.assign(typeTag.style, {
+        color: `${color}cc`,
+        fontSize: '0.5625rem',
+        backgroundColor: `${color}15`,
+        border: `1px solid ${color}25`,
+        padding: '0 5px',
+        borderRadius: '3px',
+      });
+      typeTag.textContent = schemaType;
+      itemHeader.appendChild(typeTag);
+    }
+
+    itemEl.appendChild(itemHeader);
 
     const codeEl = document.createElement('pre');
     Object.assign(codeEl.style, {
-      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+      backgroundColor: 'rgba(0, 0, 0, 0.25)',
       borderRadius: '4px',
-      padding: '10px',
+      borderLeft: `2px solid ${color}50`,
+      padding: '10px 10px 10px 12px',
       overflow: 'auto',
       fontSize: '0.625rem',
       margin: '0',
       maxHeight: '300px',
     });
-    // Syntax highlight the JSON using DOM methods for safety
     appendHighlightedJson(codeEl, JSON.stringify(item, null, 2));
     itemEl.appendChild(codeEl);
 
@@ -1717,17 +1866,22 @@ function appendHighlightedJson(container: HTMLElement, json: string): void {
 }
 
 function renderKeyValueItems(container: HTMLElement, items: Record<string, string>): void {
-  for (const [key, value] of Object.entries(items)) {
+  const entries = Object.entries(items);
+  entries.forEach(([key, value], i) => {
+    const isImage = isImageKey(key);
+
     const row = document.createElement('div');
     Object.assign(row.style, {
       display: 'flex',
-      marginBottom: '4px',
+      padding: isImage ? '6px 8px' : '3px 8px',
       alignItems: 'flex-start',
+      borderRadius: '3px',
+      backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
     });
 
     const keyEl = document.createElement('span');
     Object.assign(keyEl.style, {
-      color: '#9ca3af',
+      color: CSS_COLORS.textSecondary,
       fontSize: '0.6875rem',
       width: '120px',
       minWidth: '120px',
@@ -1736,28 +1890,743 @@ function renderKeyValueItems(container: HTMLElement, items: Record<string, strin
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
+      paddingTop: isImage ? '2px' : '0',
     });
     keyEl.textContent = key;
-    // Show full key on hover if it might be truncated
-    if (key.length > 18) {
-      keyEl.title = key;
-    }
+    if (key.length > 18) keyEl.title = key;
     row.appendChild(keyEl);
 
-    const valueEl = document.createElement('span');
-    const strValue = String(value);
-    Object.assign(valueEl.style, {
-      color: '#d1d5db',
-      fontSize: '0.6875rem',
-      flex: '1',
-      wordBreak: 'break-word',
-      whiteSpace: 'pre-wrap',
-    });
-    valueEl.textContent = strValue;
-    row.appendChild(valueEl);
+    if (isImage && value) {
+      const valueCol = document.createElement('div');
+      Object.assign(valueCol.style, { flex: '1', minWidth: '0' });
+
+      // Image frame with subtle border — fixed height to prevent layout jitter
+      const frame = document.createElement('div');
+      Object.assign(frame.style, {
+        display: 'inline-block',
+        padding: '4px',
+        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+        border: '1px solid rgba(255, 255, 255, 0.06)',
+        borderRadius: '4px',
+        marginBottom: '4px',
+        minHeight: '60px',
+        minWidth: '80px',
+      });
+
+      const thumb = document.createElement('img');
+      Object.assign(thumb.style, {
+        width: '200px',
+        height: '120px',
+        objectFit: 'contain',
+        borderRadius: '2px',
+        display: 'block',
+      });
+      thumb.src = value;
+      thumb.alt = key;
+      thumb.onerror = () => { frame.style.display = 'none'; };
+      thumb.onload = () => {
+        if (thumb.naturalWidth) {
+          dimEl.textContent = `${thumb.naturalWidth}\u00d7${thumb.naturalHeight}`;
+        }
+      };
+      frame.appendChild(thumb);
+      valueCol.appendChild(frame);
+
+      // Reserve space for dimension text to avoid reflow
+      const dimEl = document.createElement('div');
+      Object.assign(dimEl.style, {
+        color: CSS_COLORS.textMuted,
+        fontSize: '0.5625rem',
+        minHeight: '0.75rem',
+        letterSpacing: '0.02em',
+      });
+      valueCol.appendChild(dimEl);
+
+      const urlEl = document.createElement('div');
+      Object.assign(urlEl.style, {
+        color: CSS_COLORS.textMuted,
+        fontSize: '0.5625rem',
+        wordBreak: 'break-all',
+        opacity: '0.7',
+      });
+      urlEl.textContent = value;
+      valueCol.appendChild(urlEl);
+
+      row.appendChild(valueCol);
+    } else {
+      const valueEl = document.createElement('span');
+      Object.assign(valueEl.style, {
+        color: CSS_COLORS.text,
+        fontSize: '0.6875rem',
+        flex: '1',
+        wordBreak: 'break-word',
+        whiteSpace: 'pre-wrap',
+        opacity: '0.85',
+      });
+      valueEl.textContent = String(value);
+      row.appendChild(valueEl);
+    }
 
     container.appendChild(row);
+  });
+}
+
+/** Derive intended device/purpose from favicon label and declared size */
+function faviconDevice(label: string, size?: string): { text: string; color: string } {
+  const s = parseInt(size || '', 10);
+  if (label.includes('apple'))
+    return { text: 'Apple home screen', color: CSS_COLORS.info };
+  if (size === 'any' || label.includes('svg'))
+    return { text: 'Scalable (any)', color: CSS_COLORS.cyan };
+  if (s >= 192)
+    return { text: 'Android / PWA', color: CSS_COLORS.primary };
+  if (s >= 48)
+    return { text: 'Taskbar / shortcut', color: CSS_COLORS.purple };
+  if (s > 0)
+    return { text: 'Browser tab', color: CSS_COLORS.textSecondary };
+  return { text: 'General', color: CSS_COLORS.textMuted };
+}
+
+function renderFaviconsSection(
+  container: HTMLElement,
+  icons: Array<{ label: string; url: string; size?: string }>
+): void {
+  const color = CSS_COLORS.purple;
+  const section = document.createElement('div');
+  section.style.marginBottom = '20px';
+
+  renderSchemaSectionHeader(section, 'Favicons', color, icons.length);
+
+  icons.forEach((icon, i) => {
+    const device = faviconDevice(icon.label, icon.size);
+
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex',
+      alignItems: 'center',
+      padding: '6px 8px',
+      gap: '10px',
+      borderRadius: '3px',
+      backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+    });
+
+    // Thumbnail frame
+    const frame = document.createElement('div');
+    Object.assign(frame.style, {
+      width: '32px',
+      height: '32px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.25)',
+      border: '1px solid rgba(255, 255, 255, 0.06)',
+      borderRadius: '4px',
+      flexShrink: '0',
+    });
+
+    const thumb = document.createElement('img');
+    Object.assign(thumb.style, {
+      width: '22px',
+      height: '22px',
+      objectFit: 'contain',
+    });
+    thumb.src = icon.url;
+    thumb.alt = icon.label;
+    thumb.onerror = () => { frame.style.opacity = '0.3'; };
+    frame.appendChild(thumb);
+    row.appendChild(frame);
+
+    // Info column: label, device, dimensions + URL
+    const infoCol = document.createElement('div');
+    Object.assign(infoCol.style, {
+      flex: '1',
+      minWidth: '0',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+    });
+
+    // Top row: label + device pill
+    const topRow = document.createElement('div');
+    Object.assign(topRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+    });
+
+    const labelEl = document.createElement('span');
+    Object.assign(labelEl.style, {
+      color: CSS_COLORS.text,
+      fontSize: '0.6875rem',
+      fontWeight: '500',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+    labelEl.textContent = icon.label;
+    if (icon.label.length > 24) labelEl.title = icon.label;
+    topRow.appendChild(labelEl);
+
+    const devicePill = document.createElement('span');
+    Object.assign(devicePill.style, {
+      color: device.color,
+      fontSize: '0.5rem',
+      backgroundColor: `${device.color}12`,
+      padding: '1px 6px',
+      borderRadius: '6px',
+      letterSpacing: '0.03em',
+      whiteSpace: 'nowrap',
+      flexShrink: '0',
+    });
+    devicePill.textContent = device.text;
+    topRow.appendChild(devicePill);
+
+    infoCol.appendChild(topRow);
+
+    // Bottom row: declared size + actual dimensions + URL
+    const bottomRow = document.createElement('div');
+    Object.assign(bottomRow.style, {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      fontSize: '0.5625rem',
+      color: CSS_COLORS.textMuted,
+    });
+
+    if (icon.size) {
+      const declaredEl = document.createElement('span');
+      declaredEl.textContent = icon.size;
+      declaredEl.style.opacity = '0.8';
+      bottomRow.appendChild(declaredEl);
+    }
+
+    // Actual dimensions (populated on load)
+    const dimEl = document.createElement('span');
+    dimEl.style.letterSpacing = '0.02em';
+    bottomRow.appendChild(dimEl);
+
+    thumb.onload = () => {
+      if (thumb.naturalWidth) {
+        const actual = `${thumb.naturalWidth}\u00d7${thumb.naturalHeight}`;
+        if (icon.size) {
+          dimEl.textContent = `\u2192 ${actual}`;
+        } else {
+          dimEl.textContent = actual;
+        }
+      }
+    };
+
+    const sep = document.createElement('span');
+    sep.textContent = '\u00b7';
+    sep.style.opacity = '0.4';
+    bottomRow.appendChild(sep);
+
+    const urlEl = document.createElement('span');
+    Object.assign(urlEl.style, {
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      opacity: '0.6',
+    });
+    urlEl.textContent = icon.url;
+    urlEl.title = icon.url;
+    bottomRow.appendChild(urlEl);
+
+    infoCol.appendChild(bottomRow);
+    row.appendChild(infoCol);
+
+    section.appendChild(row);
+  });
+
+  container.appendChild(section);
+}
+
+function renderMissingTagsSection(
+  container: HTMLElement,
+  tags: Array<{ tag: string; severity: 'error' | 'warning'; hint: string }>
+): void {
+  const section = document.createElement('div');
+  section.style.marginBottom = '20px';
+
+  const errorCount = tags.filter((t) => t.severity === 'error').length;
+  const warnCount = tags.length - errorCount;
+  const hasErrors = errorCount > 0;
+  const sectionColor = hasErrors ? CSS_COLORS.error : CSS_COLORS.warning;
+
+  renderSchemaSectionHeader(section, 'Missing Tags', sectionColor, tags.length);
+
+  // Summary pill row
+  if (errorCount > 0 || warnCount > 0) {
+    const summary = document.createElement('div');
+    Object.assign(summary.style, {
+      display: 'flex',
+      gap: '8px',
+      marginBottom: '8px',
+    });
+
+    if (errorCount > 0) {
+      const errPill = document.createElement('span');
+      Object.assign(errPill.style, {
+        color: CSS_COLORS.error,
+        fontSize: '0.5625rem',
+        backgroundColor: `${CSS_COLORS.error}15`,
+        padding: '2px 8px',
+        borderRadius: '8px',
+        letterSpacing: '0.03em',
+      });
+      errPill.textContent = `${errorCount} error${errorCount > 1 ? 's' : ''}`;
+      summary.appendChild(errPill);
+    }
+
+    if (warnCount > 0) {
+      const warnPill = document.createElement('span');
+      Object.assign(warnPill.style, {
+        color: CSS_COLORS.warning,
+        fontSize: '0.5625rem',
+        backgroundColor: `${CSS_COLORS.warning}15`,
+        padding: '2px 8px',
+        borderRadius: '8px',
+        letterSpacing: '0.03em',
+      });
+      warnPill.textContent = `${warnCount} warning${warnCount > 1 ? 's' : ''}`;
+      summary.appendChild(warnPill);
+    }
+
+    section.appendChild(summary);
   }
+
+  tags.forEach((tag, i) => {
+    const isError = tag.severity === 'error';
+    const tagColor = isError ? CSS_COLORS.error : CSS_COLORS.warning;
+
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex',
+      alignItems: 'center',
+      padding: '4px 8px',
+      gap: '8px',
+      borderRadius: '3px',
+      backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+      borderLeft: `2px solid ${tagColor}40`,
+    });
+
+    const icon = document.createElement('span');
+    Object.assign(icon.style, {
+      fontSize: '0.625rem',
+      flexShrink: '0',
+      width: '14px',
+      textAlign: 'center',
+      color: tagColor,
+    });
+    icon.textContent = isError ? '\u2718' : '\u26a0';
+    row.appendChild(icon);
+
+    const tagName = document.createElement('span');
+    Object.assign(tagName.style, {
+      color: CSS_COLORS.text,
+      fontSize: '0.6875rem',
+      width: '120px',
+      minWidth: '120px',
+      flexShrink: '0',
+      fontWeight: '500',
+    });
+    tagName.textContent = tag.tag;
+    row.appendChild(tagName);
+
+    const hint = document.createElement('span');
+    Object.assign(hint.style, {
+      color: CSS_COLORS.textMuted,
+      fontSize: '0.6875rem',
+      flex: '1',
+      opacity: '0.85',
+    });
+    hint.textContent = tag.hint;
+    row.appendChild(hint);
+
+    section.appendChild(row);
+  });
+
+  container.appendChild(section);
+}
+
+// ============================================================================
+// Accessibility Audit Modal
+// ============================================================================
+
+function formatA11yMarkdown(result: AxeResult): string {
+  const counts = getViolationCounts(result.violations);
+  const lines: string[] = [
+    '# Accessibility Audit Report',
+    '',
+    `**URL:** ${result.url}`,
+    `**Timestamp:** ${result.timestamp}`,
+    '',
+    '## Summary',
+    '',
+    `- **Total violations:** ${counts.total}`,
+    `- Critical: ${counts.critical}`,
+    `- Serious: ${counts.serious}`,
+    `- Moderate: ${counts.moderate}`,
+    `- Minor: ${counts.minor}`,
+    `- Passes: ${result.passes.length}`,
+    `- Incomplete: ${result.incomplete.length}`,
+    '',
+  ];
+
+  if (result.violations.length === 0) {
+    lines.push('No accessibility violations found.');
+    return lines.join('\n');
+  }
+
+  const grouped = groupViolationsByImpact(result.violations);
+  for (const [impact, violations] of grouped) {
+    if (violations.length === 0) continue;
+    lines.push(`## ${impact.charAt(0).toUpperCase() + impact.slice(1)} (${violations.length})`);
+    lines.push('');
+
+    for (const v of violations) {
+      lines.push(`### ${v.id}`);
+      lines.push('');
+      lines.push(`**${v.help}**`);
+      lines.push('');
+      lines.push(v.description);
+      lines.push('');
+      lines.push(`- Help: ${v.helpUrl}`);
+      lines.push(`- Elements affected: ${v.nodes.length}`);
+      lines.push('');
+
+      for (const node of v.nodes.slice(0, 10)) {
+        const html = node.html.length > 120 ? `${node.html.slice(0, 120)}...` : node.html;
+        lines.push(`  - \`${html}\``);
+        if (node.target.length > 0) {
+          lines.push(`    Selector: \`${node.target.join(', ')}\``);
+        }
+      }
+      if (v.nodes.length > 10) {
+        lines.push(`  - ... and ${v.nodes.length - 10} more`);
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function clearChildren(el: HTMLElement): void {
+  while (el.firstChild) {
+    el.removeChild(el.firstChild);
+  }
+}
+
+function renderA11yModal(state: DevBarState): void {
+  const color = BUTTON_COLORS.a11y;
+
+  const closeModal = () => {
+    state.showA11yModal = false;
+    state.render();
+  };
+
+  const overlay = createModalOverlay(closeModal);
+  const modal = createModalBox(color);
+
+  // Show loading state initially
+  const loadingContent = createModalContent();
+  const loadingMsg = document.createElement('div');
+  Object.assign(loadingMsg.style, {
+    textAlign: 'center',
+    padding: '40px',
+    color: CSS_COLORS.textSecondary,
+    fontSize: '0.875rem',
+  });
+  loadingMsg.textContent = 'Running accessibility audit...';
+  loadingMsg.style.animation = 'pulse 1.5s ease-in-out infinite';
+  loadingContent.appendChild(loadingMsg);
+
+  // Temporary header without save/copy (shown during loading)
+  const loadingHeader = createModalHeader({
+    color,
+    title: 'Accessibility Audit',
+    onClose: closeModal,
+    onCopyMd: async () => {},
+    sweetlinkConnected: state.sweetlinkConnected,
+    saveLocation: state.options.saveLocation,
+  });
+  modal.appendChild(loadingHeader);
+  modal.appendChild(loadingContent);
+  overlay.appendChild(modal);
+
+  state.overlayElement = overlay;
+  document.body.appendChild(overlay);
+
+  // Run the audit async and replace content when done
+  runA11yAudit().then((result) => {
+    // Check modal is still open
+    if (!state.showA11yModal) return;
+
+    const markdown = formatA11yMarkdown(result);
+
+    // Replace modal content
+    clearChildren(modal);
+
+    const violationCount = result.violations.length;
+    const titleText = violationCount === 0
+      ? 'Accessibility Audit \u2014 No Issues'
+      : `Accessibility Audit \u2014 ${violationCount} Violation${violationCount === 1 ? '' : 's'}`;
+
+    const header = createModalHeader({
+      color,
+      title: titleText,
+      onClose: closeModal,
+      onCopyMd: async () => {
+        await navigator.clipboard.writeText(markdown);
+      },
+      onSave: () => handleSaveA11yAudit(state, markdown),
+      sweetlinkConnected: state.sweetlinkConnected,
+      saveLocation: state.options.saveLocation,
+      isSaving: state.savingA11yAudit,
+      savedPath: state.lastA11yAudit,
+    });
+    modal.appendChild(header);
+
+    const content = createModalContent();
+
+    if (result.violations.length === 0) {
+      const successMsg = document.createElement('div');
+      Object.assign(successMsg.style, {
+        textAlign: 'center',
+        padding: '40px',
+        color: '#10b981',
+        fontSize: '0.875rem',
+      });
+      successMsg.textContent = 'No accessibility violations found!';
+      content.appendChild(successMsg);
+
+      // Show pass count
+      if (result.passes.length > 0) {
+        const passInfo = document.createElement('div');
+        Object.assign(passInfo.style, {
+          textAlign: 'center',
+          color: CSS_COLORS.textMuted,
+          fontSize: '0.75rem',
+          marginTop: '8px',
+        });
+        passInfo.textContent = `${result.passes.length} rules passed`;
+        content.appendChild(passInfo);
+      }
+    } else {
+      // Summary bar
+      const counts = getViolationCounts(result.violations);
+      const summaryBar = document.createElement('div');
+      Object.assign(summaryBar.style, {
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '16px',
+        padding: '10px 12px',
+        backgroundColor: `${color}10`,
+        border: `1px solid ${color}30`,
+        borderRadius: '6px',
+        flexWrap: 'wrap',
+      });
+
+      for (const impact of ['critical', 'serious', 'moderate', 'minor'] as const) {
+        if (counts[impact] === 0) continue;
+        const badge = document.createElement('span');
+        const impactColor = getImpactColor(impact);
+        Object.assign(badge.style, {
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontSize: '0.6875rem',
+          fontWeight: '600',
+          color: impactColor,
+        });
+        const dot = document.createElement('span');
+        Object.assign(dot.style, {
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: impactColor,
+        });
+        badge.appendChild(dot);
+        badge.appendChild(document.createTextNode(`${counts[impact]} ${impact}`));
+        summaryBar.appendChild(badge);
+      }
+      content.appendChild(summaryBar);
+
+      // Grouped violations
+      const grouped = groupViolationsByImpact(result.violations);
+      for (const [impact, violations] of grouped) {
+        if (violations.length === 0) continue;
+        renderA11yViolationGroup(content, impact, violations);
+      }
+    }
+
+    modal.appendChild(content);
+  }).catch((err) => {
+    if (!state.showA11yModal) return;
+
+    clearChildren(modal);
+    const header = createModalHeader({
+      color: CSS_COLORS.error,
+      title: 'Accessibility Audit \u2014 Error',
+      onClose: closeModal,
+      onCopyMd: async () => {},
+      sweetlinkConnected: state.sweetlinkConnected,
+      saveLocation: state.options.saveLocation,
+    });
+    modal.appendChild(header);
+
+    const content = createModalContent();
+    content.appendChild(
+      createInfoBox(CSS_COLORS.error, 'Audit Failed', `${err instanceof Error ? err.message : 'Unknown error'}`)
+    );
+    modal.appendChild(content);
+  });
+}
+
+function renderA11yViolationGroup(
+  container: HTMLElement,
+  impact: string,
+  violations: AxeViolation[]
+): void {
+  const impactColor = getImpactColor(impact);
+
+  const section = document.createElement('div');
+  section.style.marginBottom = '20px';
+
+  // Section header
+  const sectionTitle = document.createElement('h3');
+  Object.assign(sectionTitle.style, {
+    color: impactColor,
+    fontSize: '0.8125rem',
+    fontWeight: '600',
+    marginBottom: '10px',
+    borderBottom: `1px solid ${impactColor}40`,
+    paddingBottom: '6px',
+    textTransform: 'capitalize',
+  });
+  sectionTitle.textContent = `${impact} (${violations.length})`;
+  section.appendChild(sectionTitle);
+
+  for (const violation of violations) {
+    const violationEl = document.createElement('div');
+    Object.assign(violationEl.style, {
+      marginBottom: '12px',
+      padding: '10px 12px',
+      backgroundColor: `${impactColor}08`,
+      border: `1px solid ${impactColor}20`,
+      borderRadius: '6px',
+    });
+
+    // Rule ID
+    const ruleId = document.createElement('div');
+    Object.assign(ruleId.style, {
+      color: impactColor,
+      fontSize: '0.6875rem',
+      fontWeight: '600',
+      marginBottom: '4px',
+    });
+    ruleId.textContent = violation.id;
+    violationEl.appendChild(ruleId);
+
+    // Help text
+    const helpText = document.createElement('div');
+    Object.assign(helpText.style, {
+      color: CSS_COLORS.text,
+      fontSize: '0.75rem',
+      marginBottom: '4px',
+    });
+    helpText.textContent = violation.help;
+    violationEl.appendChild(helpText);
+
+    // Description
+    const desc = document.createElement('div');
+    Object.assign(desc.style, {
+      color: CSS_COLORS.textSecondary,
+      fontSize: '0.6875rem',
+      marginBottom: '6px',
+    });
+    desc.textContent = violation.description;
+    violationEl.appendChild(desc);
+
+    // Node count
+    const nodeCount = document.createElement('div');
+    Object.assign(nodeCount.style, {
+      color: CSS_COLORS.textMuted,
+      fontSize: '0.625rem',
+      marginBottom: '4px',
+    });
+    nodeCount.textContent = `${violation.nodes.length} element${violation.nodes.length === 1 ? '' : 's'} affected`;
+    violationEl.appendChild(nodeCount);
+
+    // Affected nodes (collapsed by default, show first 3)
+    const nodesPreview = document.createElement('div');
+    Object.assign(nodesPreview.style, {
+      marginTop: '6px',
+    });
+
+    const visibleNodes = violation.nodes.slice(0, 3);
+    for (const node of visibleNodes) {
+      const nodeEl = document.createElement('div');
+      Object.assign(nodeEl.style, {
+        padding: '3px 6px',
+        marginBottom: '2px',
+        backgroundColor: 'rgba(0,0,0,0.2)',
+        borderRadius: '3px',
+        fontSize: '0.625rem',
+        color: CSS_COLORS.textSecondary,
+        fontFamily: 'monospace',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      });
+      nodeEl.textContent = node.html.length > 100 ? `${node.html.slice(0, 100)}...` : node.html;
+      nodeEl.title = node.html;
+      nodesPreview.appendChild(nodeEl);
+    }
+
+    if (violation.nodes.length > 3) {
+      const moreBtn = document.createElement('button');
+      Object.assign(moreBtn.style, {
+        background: 'none',
+        border: 'none',
+        color: impactColor,
+        fontSize: '0.625rem',
+        cursor: 'pointer',
+        padding: '2px 0',
+        fontFamily: FONT_MONO,
+      });
+      moreBtn.textContent = `+ ${violation.nodes.length - 3} more`;
+      moreBtn.onclick = () => {
+        // Show remaining nodes
+        moreBtn.remove();
+        for (const node of violation.nodes.slice(3)) {
+          const nodeEl = document.createElement('div');
+          Object.assign(nodeEl.style, {
+            padding: '3px 6px',
+            marginBottom: '2px',
+            backgroundColor: 'rgba(0,0,0,0.2)',
+            borderRadius: '3px',
+            fontSize: '0.625rem',
+            color: CSS_COLORS.textSecondary,
+            fontFamily: 'monospace',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          });
+          nodeEl.textContent = node.html.length > 100 ? `${node.html.slice(0, 100)}...` : node.html;
+          nodeEl.title = node.html;
+          nodesPreview.appendChild(nodeEl);
+        }
+      };
+      nodesPreview.appendChild(moreBtn);
+    }
+
+    violationEl.appendChild(nodesPreview);
+    section.appendChild(violationEl);
+  }
+
+  container.appendChild(section);
 }
 
 // ============================================================================

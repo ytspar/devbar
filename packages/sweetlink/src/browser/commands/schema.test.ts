@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { extractPageSchema, schemaToMarkdown } from './schema.js';
-import type { PageSchema } from './types.js';
+import { checkMissingTags, extractFavicons, extractPageSchema, isImageKey, schemaToMarkdown } from './schema.js';
+import type { PageSchema } from '../../types.js';
 
 describe('extractPageSchema', () => {
   beforeEach(() => {
@@ -278,5 +278,196 @@ describe('schemaToMarkdown', () => {
 
     expect(md).toContain('### Item 1\n');
     expect(md).not.toContain('(null)');
+  });
+});
+
+describe('extractFavicons', () => {
+  beforeEach(() => {
+    while (document.head.firstChild) document.head.removeChild(document.head.firstChild);
+  });
+
+  afterEach(() => {
+    while (document.head.firstChild) document.head.removeChild(document.head.firstChild);
+  });
+
+  it('returns empty array when no icons', () => {
+    expect(extractFavicons()).toEqual([]);
+  });
+
+  it('extracts favicon link with sizes and type', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'icon');
+    link.setAttribute('href', '/favicon-32x32.png');
+    link.setAttribute('sizes', '32x32');
+    link.setAttribute('type', 'image/png');
+    document.head.appendChild(link);
+
+    const icons = extractFavicons();
+
+    expect(icons.length).toBe(1);
+    expect(icons[0].label).toBe('favicon (32x32 image/png)');
+    expect(icons[0].size).toBe('32x32');
+  });
+
+  it('extracts favicon without sizes', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'icon');
+    link.setAttribute('href', '/favicon.svg');
+    link.setAttribute('type', 'image/svg+xml');
+    document.head.appendChild(link);
+
+    const icons = extractFavicons();
+
+    expect(icons[0].label).toBe('favicon (image/svg+xml)');
+  });
+
+  it('extracts apple-touch-icon', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'apple-touch-icon');
+    link.setAttribute('href', '/apple-touch-icon.png');
+    link.setAttribute('sizes', '180x180');
+    document.head.appendChild(link);
+
+    const icons = extractFavicons();
+
+    expect(icons.some((i) => i.label.startsWith('apple-touch-icon'))).toBe(true);
+    expect(icons[0].size).toBe('180x180');
+  });
+
+  it('deduplicates identical hrefs', () => {
+    const link1 = document.createElement('link');
+    link1.setAttribute('rel', 'icon');
+    link1.setAttribute('href', '/favicon.ico');
+    document.head.appendChild(link1);
+
+    const link2 = document.createElement('link');
+    link2.setAttribute('rel', 'shortcut icon');
+    link2.setAttribute('href', '/favicon.ico');
+    document.head.appendChild(link2);
+
+    const icons = extractFavicons();
+
+    expect(icons.length).toBe(1);
+  });
+
+  it('does not include non-icon links', () => {
+    const manifest = document.createElement('link');
+    manifest.setAttribute('rel', 'manifest');
+    manifest.setAttribute('href', '/site.webmanifest');
+    document.head.appendChild(manifest);
+
+    const stylesheet = document.createElement('link');
+    stylesheet.setAttribute('rel', 'stylesheet');
+    stylesheet.setAttribute('href', '/style.css');
+    document.head.appendChild(stylesheet);
+
+    expect(extractFavicons()).toEqual([]);
+  });
+});
+
+describe('checkMissingTags', () => {
+  beforeEach(() => {
+    while (document.head.firstChild) document.head.removeChild(document.head.firstChild);
+  });
+
+  afterEach(() => {
+    while (document.head.firstChild) document.head.removeChild(document.head.firstChild);
+  });
+
+  it('reports all missing tags for empty schema', () => {
+    const schema: PageSchema = {
+      jsonLd: [],
+      metaTags: {},
+      openGraph: {},
+      twitter: {},
+      microdata: [],
+    };
+
+    const missing = checkMissingTags(schema);
+
+    expect(missing.length).toBeGreaterThan(0);
+    expect(missing.some((t) => t.tag === 'og:image')).toBe(true);
+    expect(missing.some((t) => t.tag === 'description')).toBe(true);
+  });
+
+  it('does not report present tags', () => {
+    const schema: PageSchema = {
+      jsonLd: [],
+      metaTags: { description: 'hello', viewport: 'width=device-width' },
+      openGraph: { title: 'T', description: 'D', image: 'img.png', url: 'u', type: 'website' },
+      twitter: { card: 'summary', title: 'T', image: 'img.png' },
+      microdata: [],
+    };
+
+    // Add favicon and canonical so those checks pass
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'icon');
+    link.setAttribute('href', '/fav.ico');
+    document.head.appendChild(link);
+
+    const canon = document.createElement('link');
+    canon.setAttribute('rel', 'canonical');
+    canon.setAttribute('href', 'https://example.com');
+    document.head.appendChild(canon);
+
+    const missing = checkMissingTags(schema);
+
+    expect(missing.length).toBe(0);
+  });
+
+  it('marks og:image as error severity', () => {
+    const schema: PageSchema = {
+      jsonLd: [],
+      metaTags: { description: 'x', viewport: 'x' },
+      openGraph: { title: 'T', description: 'D' },
+      twitter: {},
+      microdata: [],
+    };
+
+    const missing = checkMissingTags(schema);
+    const ogImage = missing.find((t) => t.tag === 'og:image');
+
+    expect(ogImage).toBeDefined();
+    expect(ogImage!.severity).toBe('error');
+  });
+
+  it('marks twitter:card as warning severity', () => {
+    const schema: PageSchema = {
+      jsonLd: [],
+      metaTags: {},
+      openGraph: {},
+      twitter: {},
+      microdata: [],
+    };
+
+    const missing = checkMissingTags(schema);
+    const tw = missing.find((t) => t.tag === 'twitter:card');
+
+    expect(tw).toBeDefined();
+    expect(tw!.severity).toBe('warning');
+  });
+});
+
+describe('isImageKey', () => {
+  it('identifies standard image keys', () => {
+    expect(isImageKey('image')).toBe(true);
+    expect(isImageKey('logo')).toBe(true);
+    expect(isImageKey('thumbnail')).toBe(true);
+    expect(isImageKey('image:url')).toBe(true);
+    expect(isImageKey('image:secure_url')).toBe(true);
+  });
+
+  it('rejects image metadata keys', () => {
+    expect(isImageKey('image:width')).toBe(false);
+    expect(isImageKey('image:height')).toBe(false);
+    expect(isImageKey('image:type')).toBe(false);
+    expect(isImageKey('image:alt')).toBe(false);
+  });
+
+  it('rejects non-image keys', () => {
+    expect(isImageKey('title')).toBe(false);
+    expect(isImageKey('description')).toBe(false);
+    expect(isImageKey('url')).toBe(false);
+    expect(isImageKey('card')).toBe(false);
   });
 });

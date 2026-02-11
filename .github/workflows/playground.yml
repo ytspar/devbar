@@ -5,7 +5,7 @@
 # - Push to test/* or playground/* branches
 # - Manual workflow dispatch
 #
-# The playground is deployed to https://ytspar.github.io/devbar/
+# The playground is deployed to https://devbar.dev/
 
 name: Deploy Playground
 
@@ -73,7 +73,7 @@ jobs:
         run: pnpm --filter playground build
         env:
           NODE_ENV: production
-          VITE_BASE_URL: /devbar/
+          VITE_BASE_URL: /
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

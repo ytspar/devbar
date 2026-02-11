@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>devbar playground</title>
+    <title>devbar — Development toolbar and AI debugging toolkit</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="16x16 32x32" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
@@ -12,30 +12,42 @@
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="theme-color" content="#10b981" />
 
-    <!-- Open Graph meta tags for testing schema extraction -->
-    <meta property="og:title" content="devbar playground" />
-    <meta property="og:description" content="A playground for testing devbar and sweetlink packages" />
+    <!-- Standard meta tags -->
+    <meta name="description" content="Development toolbar and AI debugging toolkit. Breakpoint indicator, Core Web Vitals, console capture, screenshots, and a WebSocket bridge for AI agents." />
+    <meta name="author" content="ytspar" />
+    <link rel="canonical" href="https://devbar.dev/" />
+
+    <!-- Open Graph meta tags -->
+    <meta property="og:title" content="devbar — Development toolbar and AI debugging toolkit" />
+    <meta property="og:description" content="Development toolbar and AI debugging toolkit. Breakpoint indicator, Core Web Vitals, console capture, screenshots, and a WebSocket bridge for AI agents." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ytspar.github.io/devbar/" />
+    <meta property="og:url" content="https://devbar.dev/" />
+    <meta property="og:image" content="og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
 
     <!-- Twitter Card meta tags -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="devbar playground" />
-    <meta name="twitter:description" content="Test environment for devbar and sweetlink" />
+    <meta name="twitter:title" content="devbar — Development toolbar and AI debugging toolkit" />
+    <meta name="twitter:description" content="Development toolbar and AI debugging toolkit. Breakpoint indicator, Core Web Vitals, console capture, screenshots, and a WebSocket bridge for AI agents." />
+    <meta name="twitter:image" content="og-image.png" />
 
-    <!-- Standard meta tags -->
-    <meta name="description" content="A Vite-powered playground for testing devbar and sweetlink packages" />
-    <meta name="author" content="ytspar" />
-
-    <!-- JSON-LD structured data for testing schema extraction -->
+    <!-- JSON-LD structured data -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "devbar playground",
-      "description": "Development playground for testing devbar and sweetlink packages",
+      "name": "devbar",
+      "description": "Development toolbar and AI debugging toolkit. Breakpoint indicator, Core Web Vitals, console capture, screenshots, and a WebSocket bridge for AI agents.",
+      "url": "https://devbar.dev/",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Any",
+      "author": {
+        "@type": "Person",
+        "name": "ytspar",
+        "url": "https://github.com/ytspar"
+      },
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -60,7 +72,7 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <main id="app"></main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -2,8 +2,35 @@ import { sweetlink } from '@ytspar/sweetlink/vite';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 
+const PROD_ORIGIN = 'https://devbar.dev';
+
+/**
+ * Rewrite relative og:image / twitter:image URLs to absolute during production
+ * builds. In dev, relative paths resolve against localhost so images load locally.
+ * Social media crawlers require absolute URLs for unfurl previews.
+ */
+function ogAbsoluteUrls() {
+  let base = '/';
+  return {
+    name: 'og-absolute-urls',
+    configResolved(config: { base: string }) {
+      base = config.base;
+    },
+    transformIndexHtml(html: string) {
+      if (process.env.NODE_ENV !== 'production') return html;
+      return html.replace(
+        /(<meta\s+(?:property|name)="(?:og|twitter):image"\s+content=")([^"]+)(")/g,
+        (_: string, before: string, url: string, after: string) => {
+          if (url.startsWith('http')) return before + url + after;
+          return before + PROD_ORIGIN + base + url + after;
+        }
+      );
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [sweetlink()],
+  plugins: [sweetlink(), ogAbsoluteUrls()],
 
   // Use workspace packages directly via node_modules (symlinked by pnpm)
   resolve: {

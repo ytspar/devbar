@@ -43,6 +43,18 @@ function createHeader(): HTMLElement {
   const header = document.createElement('header');
   header.className = 'demo-header';
 
+  // Section heading — uses the same ruler-line motif as landing sections
+  const heading = document.createElement('h2');
+  heading.className = 'section-heading';
+  heading.textContent = 'Interactive Demo';
+  header.appendChild(heading);
+
+  const description = document.createElement('p');
+  description.className = 'demo-intro';
+  description.textContent =
+    'Sample UI elements for demonstrating devbar and sweetlink features like screenshot capture, console log streaming, and DOM queries. These are not part of the toolbar itself.';
+  header.appendChild(description);
+
   // Navigation - text inset in horizontal line
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Demo navigation');
@@ -78,7 +90,7 @@ function createConsoleTestSection(): HTMLElement {
 
   const description = document.createElement('p');
   description.textContent =
-    'Click buttons to trigger console messages. devbar captures these and shows badges for errors/warnings.';
+    'Try devbar\u2019s console capture in action. Click any button below to trigger console messages \u2014 watch the devbar toolbar update with live error and warning counts.';
   content.appendChild(description);
 
   const buttonGroup = document.createElement('div');
@@ -139,7 +151,7 @@ function createDomQuerySection(): HTMLElement {
 
   const description = document.createElement('p');
   description.textContent =
-    'Elements with various IDs, classes, and data attributes for testing DOM queries.';
+    'These elements demonstrate sweetlink\u2019s DOM query capabilities. AI agents can locate, inspect, and interact with elements by ID, class, or data attribute.';
   content.appendChild(description);
 
   // Cards with different selectors
@@ -196,7 +208,8 @@ function createFormSection(): HTMLElement {
   const { section, content } = createNotchedSection('section-3', 'Form Elements');
 
   const description = document.createElement('p');
-  description.textContent = 'Various form elements for testing interactions and screenshots.';
+  description.textContent =
+    'Sample form elements for demonstrating screenshot capture and interactive element detection by devbar and sweetlink.';
   content.appendChild(description);
 
   const form = document.createElement('form');
@@ -284,7 +297,8 @@ function createTableSection(): HTMLElement {
   const { section, content } = createNotchedSection('section-4', 'Data Table');
 
   const description = document.createElement('p');
-  description.textContent = 'Sample data table for testing screenshot capture and DOM queries.';
+  description.textContent =
+    'A sample data table showcasing how devbar captures structured content for screenshot and DOM query operations.';
   content.appendChild(description);
 
   const table = document.createElement('table');

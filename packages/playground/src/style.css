@@ -40,13 +40,23 @@ body {
 .demo-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0 2rem 2rem;
 }
 
 /* Header */
 .demo-header {
   margin-bottom: 2rem;
-  padding: 1.5rem 0 0;
+}
+
+.demo-intro {
+  text-align: center;
+  font-size: var(--devbar-text-lg);
+  color: var(--devbar-color-text-secondary);
+  font-weight: var(--devbar-font-normal);
+  max-width: 600px;
+  margin: -0.5rem auto 2rem;
+  line-height: var(--devbar-leading-relaxed);
+  letter-spacing: 0.02em;
 }
 
 .demo-header nav {
@@ -836,7 +846,8 @@ body.theme-light {
 .landing-logo {
   display: flex;
   justify-content: center;
-  margin-bottom: 1.5rem;
+  margin: 0 0 1.5rem;
+  font-weight: normal;
 }
 
 .landing-logo-img {

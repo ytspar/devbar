@@ -130,49 +130,60 @@ function setCoverageBlocks(pct: number): void {
 }
 
 /**
+ * Fetch JSON with sessionStorage cache to avoid GitHub API rate limits (60/hr).
+ * Cached values survive HMR reloads but expire with the browser tab.
+ */
+function cachedFetch<T>(url: string, key: string): Promise<T> {
+  const cached = sessionStorage.getItem(key);
+  if (cached) return Promise.resolve(JSON.parse(cached) as T);
+  return fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`${r.status}`);
+    return r.json() as Promise<T>;
+  }).then((data) => {
+    sessionStorage.setItem(key, JSON.stringify(data));
+    return data;
+  });
+}
+
+/**
  * Fetch live badge data from npm and GitHub APIs
  */
 function fetchBadgeData(): void {
-  fetch('https://registry.npmjs.org/@ytspar/devbar/latest')
-    .then((r) => r.json())
-    .then((d) => {
-      const el = document.getElementById('badge-devbar-version');
-      if (el) el.textContent = `v${d.version}`;
-    })
-    .catch(() => {});
+  cachedFetch<{ version: string }>(
+    'https://registry.npmjs.org/@ytspar/devbar/latest', 'badge:devbar'
+  ).then((d) => {
+    const el = document.getElementById('badge-devbar-version');
+    if (el) el.textContent = `v${d.version}`;
+  }).catch(() => {});
 
-  fetch('https://registry.npmjs.org/@ytspar/sweetlink/latest')
-    .then((r) => r.json())
-    .then((d) => {
-      const el = document.getElementById('badge-sweetlink-version');
-      if (el) el.textContent = `v${d.version}`;
-    })
-    .catch(() => {});
+  cachedFetch<{ version: string }>(
+    'https://registry.npmjs.org/@ytspar/sweetlink/latest', 'badge:sweetlink'
+  ).then((d) => {
+    const el = document.getElementById('badge-sweetlink-version');
+    if (el) el.textContent = `v${d.version}`;
+  }).catch(() => {});
 
-  fetch('https://api.github.com/repos/ytspar/devbar')
-    .then((r) => r.json())
-    .then((d) => {
-      const el = document.getElementById('badge-stars');
-      if (el && typeof d.stargazers_count === 'number') {
-        el.textContent = String(d.stargazers_count);
-      }
-    })
-    .catch(() => {});
+  cachedFetch<{ stargazers_count?: number }>(
+    'https://api.github.com/repos/ytspar/devbar', 'badge:stars'
+  ).then((d) => {
+    const el = document.getElementById('badge-stars');
+    if (el && typeof d.stargazers_count === 'number') {
+      el.textContent = String(d.stargazers_count);
+    }
+  }).catch(() => {});
 
-  fetch(
-    'https://api.github.com/repos/ytspar/devbar/actions/workflows/canary.yml/runs?per_page=1&status=completed'
-  )
-    .then((r) => r.json())
-    .then((d) => {
-      const el = document.getElementById('badge-build');
-      if (el && d.workflow_runs?.[0]) {
-        const conclusion = d.workflow_runs[0].conclusion;
-        el.textContent = conclusion === 'success' ? 'passing' : conclusion;
-      }
-    })
-    .catch(() => {});
+  cachedFetch<{ workflow_runs?: Array<{ conclusion: string }> }>(
+    'https://api.github.com/repos/ytspar/devbar/actions/workflows/canary.yml/runs?per_page=1&status=completed',
+    'badge:build'
+  ).then((d) => {
+    const el = document.getElementById('badge-build');
+    if (el && d.workflow_runs?.[0]) {
+      const conclusion = d.workflow_runs[0].conclusion;
+      el.textContent = conclusion === 'success' ? 'passing' : conclusion;
+    }
+  }).catch(() => {});
 
-  // Coverage data (generated during CI build)
+  // Coverage data (generated during CI build, not cached — local file)
   fetch(`${import.meta.env.BASE_URL}coverage.json`)
     .then((r) => {
       if (!r.ok) throw new Error();
@@ -191,15 +202,15 @@ export function createLandingHero(): HTMLElement {
   const hero = document.createElement('section');
   hero.className = 'landing-hero';
 
-  // Logotype logo
-  const logoContainer = document.createElement('div');
-  logoContainer.className = 'landing-logo';
+  // Logotype logo as h1 for SEO heading hierarchy
+  const h1 = document.createElement('h1');
+  h1.className = 'landing-logo';
   const logo = document.createElement('img');
   logo.src = `${import.meta.env.BASE_URL}logo/devbar-logo.svg`;
   logo.alt = 'devbar';
   logo.className = 'landing-logo-img';
-  logoContainer.appendChild(logo);
-  hero.appendChild(logoContainer);
+  h1.appendChild(logo);
+  hero.appendChild(h1);
 
   // Tagline
   hero.appendChild(
@@ -298,9 +309,12 @@ interface Token {
 /**
  * Simple syntax highlighter for TypeScript/JavaScript
  */
-function highlightCode(code: string, language: 'typescript' | 'bash' = 'typescript'): HTMLElement {
+function highlightCode(code: string, language: 'typescript' | 'bash' = 'typescript', label = 'Code example'): HTMLElement {
   const pre = document.createElement('pre');
   pre.className = 'code-block';
+  pre.setAttribute('tabindex', '0');
+  pre.setAttribute('role', 'region');
+  pre.setAttribute('aria-label', label);
   const codeEl = document.createElement('code');
   codeEl.className = `language-${language}`;
 
@@ -629,7 +643,7 @@ export function createQuickStartSection(): HTMLElement {
 
   // Step 1: Install
   const { card: step1, content: content1 } = createNotchedCard('quickstart-step', '1. Install');
-  content1.appendChild(highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash'));
+  content1.appendChild(highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash', 'Install command'));
   stepsContainer.appendChild(step1);
 
   // Step 2: Vite setup
@@ -645,7 +659,8 @@ import { sweetlink } from '@ytspar/sweetlink/vite'
 export default defineConfig({
   plugins: [sweetlink()]
 })`,
-      'typescript'
+      'typescript',
+      'Vite configuration'
     )
   );
   stepsContainer.appendChild(step2);
@@ -663,7 +678,8 @@ import { initGlobalDevBar } from '@ytspar/devbar'
 if (import.meta.env.DEV) {
   initGlobalDevBar()
 }`,
-      'typescript'
+      'typescript',
+      'DevBar initialization'
     )
   );
   stepsContainer.appendChild(step3);
@@ -675,7 +691,8 @@ if (import.meta.env.DEV) {
       `pnpm sweetlink screenshot   # Capture page
 pnpm sweetlink logs         # Get console output
 pnpm sweetlink refresh      # Reload browser`,
-      'bash'
+      'bash',
+      'CLI commands'
     )
   );
   stepsContainer.appendChild(step4);

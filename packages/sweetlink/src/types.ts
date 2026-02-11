@@ -228,6 +228,38 @@ export interface ConsoleLogsErrorCommand {
   error?: string;
 }
 
+export interface SaveA11yCommand {
+  type: 'save-a11y';
+  data?: unknown;
+}
+
+export interface A11ySavedCommand {
+  type: 'a11y-saved';
+  a11yPath?: string;
+}
+
+export interface A11yErrorCommand {
+  type: 'a11y-error';
+  error?: string;
+}
+
+export interface GetSchemaCommand {
+  type: 'get-schema';
+}
+
+export interface GetOutlineCommand {
+  type: 'get-outline';
+}
+
+export interface GetA11yCommand {
+  type: 'get-a11y';
+  forceRefresh?: boolean;
+}
+
+export interface GetVitalsCommand {
+  type: 'get-vitals';
+}
+
 /**
  * Commands that can be sent over the Sweetlink WebSocket connection.
  *
@@ -270,7 +302,14 @@ export type SweetlinkCommand =
   | SchemaErrorCommand
   | SaveConsoleLogsCommand
   | ConsoleLogsSavedCommand
-  | ConsoleLogsErrorCommand;
+  | ConsoleLogsErrorCommand
+  | GetSchemaCommand
+  | GetOutlineCommand
+  | GetA11yCommand
+  | GetVitalsCommand
+  | SaveA11yCommand
+  | A11ySavedCommand
+  | A11yErrorCommand;
 
 /**
  * Response structure for Sweetlink commands
@@ -361,6 +400,57 @@ export interface PageSchema {
   microdata: MicrodataItem[];
 }
 
+/**
+ * A meta image found on the page (OG, Twitter, favicon, etc.)
+ */
+export interface MetaImage {
+  label: string;
+  url: string;
+  size?: string;
+}
+
+/**
+ * A missing recommended meta tag
+ */
+export interface MissingTag {
+  tag: string;
+  severity: 'error' | 'warning';
+  hint: string;
+}
+
+// ============================================================================
+// Accessibility Types
+// ============================================================================
+
+/**
+ * Axe-core violation result (simplified)
+ */
+export interface AxeViolation {
+  id: string;
+  impact: 'critical' | 'serious' | 'moderate' | 'minor';
+  description: string;
+  help: string;
+  helpUrl: string;
+  tags: string[];
+  nodes: Array<{
+    html: string;
+    target: string[];
+    failureSummary?: string;
+  }>;
+}
+
+/**
+ * Axe-core audit result
+ */
+export interface AxeResult {
+  violations: AxeViolation[];
+  passes: Array<{ id: string; description: string }>;
+  incomplete: AxeViolation[];
+  inapplicable: Array<{ id: string }>;
+  timestamp: string;
+  url: string;
+}
+
 // ============================================================================
 // Subscription Types (v1.4.0)
 // ============================================================================
@@ -431,12 +521,12 @@ export function isHmrScreenshotData(value: unknown): value is HmrScreenshotData 
 }
 
 /**
- * Type guard for save-screenshot command data
- * Validates minimum required fields for handleSaveScreenshot
+ * Shared shape for screenshot-like command data (screenshot + url + dimensions + timestamp).
+ * Used by both save-screenshot and design-review-screenshot commands.
  */
-export function isSaveScreenshotData(
-  value: unknown
-): value is { screenshot: string; url: string; timestamp: number; width: number; height: number } {
+type ScreenshotPayload = { screenshot: string; url: string; timestamp: number; width: number; height: number };
+
+function isScreenshotPayload(value: unknown): value is ScreenshotPayload {
   if (value === null || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
   return (
@@ -449,84 +539,70 @@ export function isSaveScreenshotData(
 }
 
 /**
- * Type guard for design-review-screenshot command data
- * Validates minimum required fields for handleDesignReviewScreenshot
+ * Type guard for save-screenshot command data
  */
-export function isDesignReviewScreenshotData(
-  value: unknown
-): value is { screenshot: string; url: string; timestamp: number; width: number; height: number } {
+export function isSaveScreenshotData(value: unknown): value is ScreenshotPayload {
+  return isScreenshotPayload(value);
+}
+
+/**
+ * Type guard for design-review-screenshot command data
+ */
+export function isDesignReviewScreenshotData(value: unknown): value is ScreenshotPayload {
+  return isScreenshotPayload(value);
+}
+
+/**
+ * Shared shape for markdown-based save commands (markdown + url + title + timestamp).
+ * Used by outline, schema, console-logs, and a11y save commands.
+ */
+type MarkdownSavePayload = { markdown: string; url: string; title: string; timestamp: number };
+
+function isMarkdownSavePayload(value: unknown): value is MarkdownSavePayload {
   if (value === null || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
   return (
-    typeof obj.screenshot === 'string' &&
+    typeof obj.markdown === 'string' &&
     typeof obj.url === 'string' &&
-    typeof obj.timestamp === 'number' &&
-    typeof obj.width === 'number' &&
-    typeof obj.height === 'number'
+    typeof obj.title === 'string' &&
+    typeof obj.timestamp === 'number'
   );
 }
 
 /**
  * Type guard for save-outline command data
- * Validates minimum required fields for handleSaveOutline
  */
-export function isSaveOutlineData(value: unknown): value is {
-  outline: unknown[];
-  markdown: string;
-  url: string;
-  title: string;
-  timestamp: number;
-} {
-  if (value === null || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    Array.isArray(obj.outline) &&
-    typeof obj.markdown === 'string' &&
-    typeof obj.url === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.timestamp === 'number'
-  );
+export function isSaveOutlineData(
+  value: unknown
+): value is MarkdownSavePayload & { outline: unknown[] } {
+  return isMarkdownSavePayload(value) && Array.isArray((value as Record<string, unknown>).outline);
 }
 
 /**
  * Type guard for save-schema command data
- * Validates minimum required fields for handleSaveSchema
  */
 export function isSaveSchemaData(
   value: unknown
-): value is { schema: unknown; markdown: string; url: string; title: string; timestamp: number } {
-  if (value === null || typeof value !== 'object') return false;
+): value is MarkdownSavePayload & { schema: unknown } {
+  if (!isMarkdownSavePayload(value)) return false;
   const obj = value as Record<string, unknown>;
-  return (
-    obj.schema !== null &&
-    typeof obj.schema === 'object' &&
-    typeof obj.markdown === 'string' &&
-    typeof obj.url === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.timestamp === 'number'
-  );
+  return obj.schema !== null && typeof obj.schema === 'object';
 }
 
 /**
  * Type guard for save-console-logs command data
- * Validates minimum required fields for handleSaveConsoleLogs
  */
-export function isSaveConsoleLogsData(value: unknown): value is {
-  logs: unknown[];
-  markdown: string;
-  url: string;
-  title: string;
-  timestamp: number;
-} {
-  if (value === null || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    Array.isArray(obj.logs) &&
-    typeof obj.markdown === 'string' &&
-    typeof obj.url === 'string' &&
-    typeof obj.title === 'string' &&
-    typeof obj.timestamp === 'number'
-  );
+export function isSaveConsoleLogsData(
+  value: unknown
+): value is MarkdownSavePayload & { logs: unknown[] } {
+  return isMarkdownSavePayload(value) && Array.isArray((value as Record<string, unknown>).logs);
+}
+
+/**
+ * Type guard for save-a11y command data
+ */
+export function isSaveA11yData(value: unknown): value is MarkdownSavePayload {
+  return isMarkdownSavePayload(value);
 }
 
 /**

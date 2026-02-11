@@ -129,6 +129,11 @@ export class GlobalDevBar {
   // Modal states
   showOutlineModal = false;
   showSchemaModal = false;
+  showA11yModal = false;
+  a11yLoading = false;
+  lastA11yAudit: string | null = null;
+  savingA11yAudit = false;
+  a11yTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Track active HTML tooltips for cleanup on re-render
   activeTooltips = new Set<HTMLDivElement>();
@@ -340,10 +345,15 @@ export class GlobalDevBar {
     this.consoleLogs = consoleCapture.getLogs();
     this.debug.lifecycle('Copied console logs', { count: this.consoleLogs.length });
 
-    // Subscribe to log changes for real-time badge updates
+    // Subscribe to log changes for real-time badge updates.
+    // Skip re-render while a modal overlay is open — content within
+    // the modal (e.g. image loads) can generate console messages that
+    // would tear down and recreate the modal in an infinite loop.
     this.logChangeListener = () => {
       this.consoleLogs = consoleCapture.getLogs();
-      this.render();
+      if (!this.overlayElement) {
+        this.render();
+      }
     };
     consoleCapture.addListener(this.logChangeListener);
 
@@ -397,6 +407,7 @@ export class GlobalDevBar {
     if (this.outlineTimeout) clearTimeout(this.outlineTimeout);
     if (this.schemaTimeout) clearTimeout(this.schemaTimeout);
     if (this.consoleLogsTimeout) clearTimeout(this.consoleLogsTimeout);
+    if (this.a11yTimeout) clearTimeout(this.a11yTimeout);
 
     // Remove event listeners
     if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
@@ -430,6 +441,7 @@ export class GlobalDevBar {
     if (this.overlayElement) {
       this.overlayElement.remove();
       this.overlayElement = null;
+      document.body.style.overflow = '';
     }
 
     this.debug.lifecycle('DevBar destroyed');
@@ -452,7 +464,7 @@ export class GlobalDevBar {
   }
 
   handleNotification(
-    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
+    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
     path: string | undefined,
     durationMs: number
   ): void {
@@ -481,7 +493,7 @@ export class GlobalDevBar {
     this.render();
   }
 
-  private clearConsoleLogs(): void {
+  clearConsoleLogs(): void {
     consoleCapture.clear();
     this.consoleLogs = [];
     this.consoleFilter = null;

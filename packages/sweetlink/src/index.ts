@@ -36,23 +36,15 @@ export {
   scaleCanvas,
   type ToDataUrlOptions,
 } from './browser/screenshotUtils.js';
-// CDP integration: import from '@ytspar/sweetlink/cdp' for these functions
+// Ruler types (import from '@ytspar/sweetlink/ruler' for value exports)
 export type {
   ElementMeasurement,
   MeasurementOptions,
   MeasurementResult,
   RulerOutput,
 } from './ruler.js';
-// Pixel Ruler for visual measurement
-export {
-  getCardHeaderPreset,
-  getNavigationPreset,
-  measureElementsScript,
-  measureViaPlaywright,
-} from './ruler.js';
+// Server types (import from '@ytspar/sweetlink/server' for value exports)
 export type { InitSweetlinkOptions } from './server.js';
-// Server infrastructure
-export { closeSweetlink, getAssociatedAppPort, getSweetlinkPort, initSweetlink } from './server.js';
 // Shared types
 export type {
   ApiKeyStatusCommand,

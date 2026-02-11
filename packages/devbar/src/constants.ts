@@ -107,6 +107,7 @@ export const BUTTON_COLORS = {
   review: PALETTE.purple,
   outline: PALETTE.cyan,
   schema: PALETTE.amber,
+  a11y: PALETTE.pink,
   error: PALETTE.red,
   warning: PALETTE.amber,
   info: PALETTE.blue,

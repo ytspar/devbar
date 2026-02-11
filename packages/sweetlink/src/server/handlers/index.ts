@@ -4,6 +4,7 @@
  * Re-exports all handler functions.
  */
 
+export { handleSaveA11y, type A11ySaveResult } from './a11y.js';
 export {
   DESIGN_REVIEW_PROMPT,
   type DesignReviewResult,

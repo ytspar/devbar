@@ -11,7 +11,11 @@ import type { ConsoleLog, ServerInfo, SweetlinkCommand, SweetlinkResponse } from
 // Import command handlers
 import {
   handleExecJS,
+  handleGetA11y,
   handleGetLogs,
+  handleGetOutline,
+  handleGetSchema,
+  handleGetVitals,
   handleQueryDOM,
   handleRequestScreenshot,
   handleScreenshot,
@@ -362,6 +366,18 @@ export class SweetlinkBridge {
 
       case 'exec-js':
         return handleExecJS(command);
+
+      case 'get-schema':
+        return handleGetSchema();
+
+      case 'get-outline':
+        return handleGetOutline();
+
+      case 'get-a11y':
+        return await handleGetA11y(command);
+
+      case 'get-vitals':
+        return await handleGetVitals();
 
       default:
         return {

@@ -4,31 +4,9 @@
  * Lazy-loads axe-core and provides accessibility auditing capabilities.
  */
 
-/**
- * Axe-core result types (simplified)
- */
-export interface AxeViolation {
-  id: string;
-  impact: 'critical' | 'serious' | 'moderate' | 'minor';
-  description: string;
-  help: string;
-  helpUrl: string;
-  tags: string[];
-  nodes: Array<{
-    html: string;
-    target: string[];
-    failureSummary?: string;
-  }>;
-}
+import type { AxeResult, AxeViolation } from '@ytspar/sweetlink/types';
 
-export interface AxeResult {
-  violations: AxeViolation[];
-  passes: Array<{ id: string; description: string }>;
-  incomplete: AxeViolation[];
-  inapplicable: Array<{ id: string }>;
-  timestamp: string;
-  url: string;
-}
+export type { AxeResult, AxeViolation };
 
 /**
  * Accessibility audit state
@@ -93,13 +71,16 @@ export async function runA11yAudit(forceRefresh = false): Promise<AxeResult> {
   // Handle ESM/CJS interop
   const axe = (axeModule as unknown as { default?: typeof axeModule }).default ?? axeModule;
 
-  // Run axe analysis
-  const result = await axe.run(document, {
-    runOnly: {
-      type: 'tag',
-      values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'],
-    },
-  });
+  // Run axe analysis, excluding devbar's own UI elements
+  const result = await axe.run(
+    { exclude: ['[data-devbar]'] },
+    {
+      runOnly: {
+        type: 'tag',
+        values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'],
+      },
+    }
+  );
 
   // Transform to our format
   const auditResult: AxeResult = {

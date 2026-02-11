@@ -77,6 +77,13 @@ export interface DevBarState {
   showOutlineModal: boolean;
   showSchemaModal: boolean;
 
+  // Accessibility
+  showA11yModal: boolean;
+  a11yLoading: boolean;
+  lastA11yAudit: string | null;
+  savingA11yAudit: boolean;
+  a11yTimeout: ReturnType<typeof setTimeout> | null;
+
   // Console Logs save
   savingConsoleLogs: boolean;
   lastConsoleLogs: string | null;
@@ -135,9 +142,10 @@ export interface DevBarState {
   toggleCompactMode: () => void;
   connectWebSocket: (port?: number) => void;
   handleNotification: (
-    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs',
+    type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
     path: string | undefined,
     durationMs: number
   ) => void;
   applySettings: (settings: DevBarSettings) => void;
+  clearConsoleLogs: () => void;
 }

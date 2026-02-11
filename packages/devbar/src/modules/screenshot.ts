@@ -36,11 +36,11 @@ function saveOrDownload(
   opts: {
     type: string;
     data: Record<string, unknown>;
-    savingFlag: 'savingOutline' | 'savingSchema' | 'savingConsoleLogs';
+    savingFlag: 'savingOutline' | 'savingSchema' | 'savingConsoleLogs' | 'savingA11yAudit';
     downloadFilename: string;
     downloadContent: string;
     downloadMimeType: string;
-    notificationKey: 'outline' | 'schema' | 'consoleLogs';
+    notificationKey: 'outline' | 'schema' | 'consoleLogs' | 'a11y';
     notificationMessage: string;
   }
 ): void {
@@ -299,6 +299,7 @@ export function showDesignReviewConfirmation(state: DevBarState): void {
   state.showDesignReviewConfirm = true;
   state.showOutlineModal = false;
   state.showSchemaModal = false;
+  state.showA11yModal = false;
   state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
@@ -359,6 +360,7 @@ export function proceedWithDesignReview(state: DevBarState): void {
 export function handleDocumentOutline(state: DevBarState): void {
   state.showOutlineModal = !state.showOutlineModal;
   state.showSchemaModal = false;
+  state.showA11yModal = false;
   state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
@@ -370,9 +372,40 @@ export function handleDocumentOutline(state: DevBarState): void {
 export function handlePageSchema(state: DevBarState): void {
   state.showSchemaModal = !state.showSchemaModal;
   state.showOutlineModal = false;
+  state.showA11yModal = false;
   state.showSettingsPopover = false;
   state.consoleFilter = null;
   state.render();
+}
+
+/**
+ * Toggle the accessibility audit modal.
+ */
+export function handleA11yAudit(state: DevBarState): void {
+  state.showA11yModal = !state.showA11yModal;
+  state.showOutlineModal = false;
+  state.showSchemaModal = false;
+  state.showSettingsPopover = false;
+  state.consoleFilter = null;
+  state.render();
+}
+
+/**
+ * Save the accessibility audit report to file via WebSocket.
+ */
+export function handleSaveA11yAudit(state: DevBarState, markdown: string): void {
+  if (state.savingA11yAudit) return;
+
+  saveOrDownload(state, {
+    type: 'save-a11y',
+    data: { markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    savingFlag: 'savingA11yAudit',
+    downloadFilename: 'a11y-audit',
+    downloadContent: markdown,
+    downloadMimeType: 'text/markdown',
+    notificationKey: 'a11y',
+    notificationMessage: 'a11y report downloaded',
+  });
 }
 
 /**

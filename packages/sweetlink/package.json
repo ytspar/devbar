@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/sweetlink",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Autonomous development toolkit for AI agents - screenshots, DOM queries, console logs, and JavaScript execution via WebSocket and Chrome DevTools Protocol",
   "keywords": [
     "autonomous-development",

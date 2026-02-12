@@ -352,34 +352,32 @@ export function proceedWithDesignReview(state: DevBarState): void {
   handleDesignReview(state);
 }
 
+function toggleModal(state: DevBarState, key: 'showOutlineModal' | 'showSchemaModal' | 'showA11yModal'): void {
+  const wasOpen = state[key];
+  closeAllModals(state);
+  state[key] = !wasOpen;
+  state.render();
+}
+
 /**
  * Toggle the document outline modal.
  */
 export function handleDocumentOutline(state: DevBarState): void {
-  const wasOpen = state.showOutlineModal;
-  closeAllModals(state);
-  state.showOutlineModal = !wasOpen;
-  state.render();
+  toggleModal(state, 'showOutlineModal');
 }
 
 /**
  * Toggle the page schema modal.
  */
 export function handlePageSchema(state: DevBarState): void {
-  const wasOpen = state.showSchemaModal;
-  closeAllModals(state);
-  state.showSchemaModal = !wasOpen;
-  state.render();
+  toggleModal(state, 'showSchemaModal');
 }
 
 /**
  * Toggle the accessibility audit modal.
  */
 export function handleA11yAudit(state: DevBarState): void {
-  const wasOpen = state.showA11yModal;
-  closeAllModals(state);
-  state.showA11yModal = !wasOpen;
-  state.render();
+  toggleModal(state, 'showA11yModal');
 }
 
 /**

@@ -803,30 +803,7 @@ export function renderA11yModal(state: DevBarState): void {
   const overlay = createModalOverlay(closeModal);
   const modal = createModalBox(color);
 
-  // Show loading state initially
-  const loadingContent = createModalContent();
-  const loadingMsg = document.createElement('div');
-  Object.assign(loadingMsg.style, {
-    textAlign: 'center',
-    padding: '40px',
-    color: CSS_COLORS.textSecondary,
-    fontSize: '0.875rem',
-  });
-  loadingMsg.textContent = 'Running accessibility audit...';
-  loadingMsg.style.animation = 'pulse 1.5s ease-in-out infinite';
-  loadingContent.appendChild(loadingMsg);
-
-  // Temporary header without save/copy (shown during loading)
-  const loadingHeader = createModalHeader({
-    color,
-    title: 'Accessibility Audit',
-    onClose: closeModal,
-    onCopyMd: async () => {},
-    sweetlinkConnected: state.sweetlinkConnected,
-    saveLocation: state.options.saveLocation,
-  });
-  modal.appendChild(loadingHeader);
-  modal.appendChild(loadingContent);
+  setupA11yLoadingState(modal, color, closeModal, state);
   overlay.appendChild(modal);
 
   state.overlayElement = overlay;
@@ -863,78 +840,7 @@ export function renderA11yModal(state: DevBarState): void {
     modal.appendChild(header);
 
     const content = createModalContent();
-
-    if (result.violations.length === 0) {
-      const successMsg = document.createElement('div');
-      Object.assign(successMsg.style, {
-        textAlign: 'center',
-        padding: '40px',
-        color: CSS_COLORS.primary,
-        fontSize: '0.875rem',
-      });
-      successMsg.textContent = 'No accessibility violations found!';
-      content.appendChild(successMsg);
-
-      // Show pass count
-      if (result.passes.length > 0) {
-        const passInfo = document.createElement('div');
-        Object.assign(passInfo.style, {
-          textAlign: 'center',
-          color: CSS_COLORS.textMuted,
-          fontSize: '0.75rem',
-          marginTop: '8px',
-        });
-        passInfo.textContent = `${result.passes.length} rules passed`;
-        content.appendChild(passInfo);
-      }
-    } else {
-      // Summary bar
-      const counts = getViolationCounts(result.violations);
-      const summaryBar = document.createElement('div');
-      Object.assign(summaryBar.style, {
-        display: 'flex',
-        gap: '12px',
-        marginBottom: '16px',
-        padding: '10px 12px',
-        backgroundColor: withAlpha(color, 6),
-        border: `1px solid ${withAlpha(color, 19)}`,
-        borderRadius: '6px',
-        flexWrap: 'wrap',
-      });
-
-      for (const impact of ['critical', 'serious', 'moderate', 'minor'] as const) {
-        if (counts[impact] === 0) continue;
-        const badge = document.createElement('span');
-        const impactColor = getImpactColor(impact);
-        Object.assign(badge.style, {
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '4px',
-          fontSize: '0.6875rem',
-          fontWeight: '600',
-          color: impactColor,
-        });
-        const dot = document.createElement('span');
-        Object.assign(dot.style, {
-          width: '6px',
-          height: '6px',
-          borderRadius: '50%',
-          backgroundColor: impactColor,
-        });
-        badge.appendChild(dot);
-        badge.appendChild(document.createTextNode(`${counts[impact]} ${impact}`));
-        summaryBar.appendChild(badge);
-      }
-      content.appendChild(summaryBar);
-
-      // Grouped violations
-      const grouped = groupViolationsByImpact(result.violations);
-      for (const [impact, violations] of grouped) {
-        if (violations.length === 0) continue;
-        renderA11yViolationGroup(content, impact, violations);
-      }
-    }
-
+    renderA11ySuccessContent(content, result, color);
     modal.appendChild(content);
   }).catch((err) => {
     if (!state.showA11yModal) return;
@@ -956,6 +862,135 @@ export function renderA11yModal(state: DevBarState): void {
     );
     modal.appendChild(content);
   });
+}
+
+/** Set up the loading/spinner state shown while the a11y audit is running. */
+function setupA11yLoadingState(
+  modal: HTMLDivElement,
+  color: string,
+  closeModal: () => void,
+  state: DevBarState
+): void {
+  const loadingContent = createModalContent();
+  const loadingMsg = document.createElement('div');
+  Object.assign(loadingMsg.style, {
+    textAlign: 'center',
+    padding: '40px',
+    color: CSS_COLORS.textSecondary,
+    fontSize: '0.875rem',
+  });
+  loadingMsg.textContent = 'Running accessibility audit...';
+  loadingMsg.style.animation = 'pulse 1.5s ease-in-out infinite';
+  loadingContent.appendChild(loadingMsg);
+
+  // Temporary header without save/copy (shown during loading)
+  const loadingHeader = createModalHeader({
+    color,
+    title: 'Accessibility Audit',
+    onClose: closeModal,
+    onCopyMd: async () => {},
+    sweetlinkConnected: state.sweetlinkConnected,
+    saveLocation: state.options.saveLocation,
+  });
+  modal.appendChild(loadingHeader);
+  modal.appendChild(loadingContent);
+}
+
+/** Render the success content for the a11y modal: summary cards, violation groups, or a no-issues message. */
+function renderA11ySuccessContent(
+  content: HTMLDivElement,
+  result: { violations: AxeViolation[]; passes: Array<{ id: string; description: string }> },
+  color: string
+): void {
+  if (result.violations.length === 0) {
+    const successMsg = document.createElement('div');
+    Object.assign(successMsg.style, {
+      textAlign: 'center',
+      padding: '40px',
+      color: CSS_COLORS.primary,
+      fontSize: '0.875rem',
+    });
+    successMsg.textContent = 'No accessibility violations found!';
+    content.appendChild(successMsg);
+
+    // Show pass count
+    if (result.passes.length > 0) {
+      const passInfo = document.createElement('div');
+      Object.assign(passInfo.style, {
+        textAlign: 'center',
+        color: CSS_COLORS.textMuted,
+        fontSize: '0.75rem',
+        marginTop: '8px',
+      });
+      passInfo.textContent = `${result.passes.length} rules passed`;
+      content.appendChild(passInfo);
+    }
+  } else {
+    // Summary bar
+    const counts = getViolationCounts(result.violations);
+    const summaryBar = document.createElement('div');
+    Object.assign(summaryBar.style, {
+      display: 'flex',
+      gap: '12px',
+      marginBottom: '16px',
+      padding: '10px 12px',
+      backgroundColor: withAlpha(color, 6),
+      border: `1px solid ${withAlpha(color, 19)}`,
+      borderRadius: '6px',
+      flexWrap: 'wrap',
+    });
+
+    for (const impact of ['critical', 'serious', 'moderate', 'minor'] as const) {
+      if (counts[impact] === 0) continue;
+      const badge = document.createElement('span');
+      const impactColor = getImpactColor(impact);
+      Object.assign(badge.style, {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        fontSize: '0.6875rem',
+        fontWeight: '600',
+        color: impactColor,
+      });
+      const dot = document.createElement('span');
+      Object.assign(dot.style, {
+        width: '6px',
+        height: '6px',
+        borderRadius: '50%',
+        backgroundColor: impactColor,
+      });
+      badge.appendChild(dot);
+      badge.appendChild(document.createTextNode(`${counts[impact]} ${impact}`));
+      summaryBar.appendChild(badge);
+    }
+    content.appendChild(summaryBar);
+
+    // Grouped violations
+    const grouped = groupViolationsByImpact(result.violations);
+    for (const [impact, violations] of grouped) {
+      if (violations.length === 0) continue;
+      renderA11yViolationGroup(content, impact, violations);
+    }
+  }
+}
+
+function createViolationNodeEl(node: { html: string }): HTMLDivElement {
+  const el = document.createElement('div');
+  Object.assign(el.style, {
+    padding: '3px 6px',
+    marginBottom: '2px',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: '3px',
+    fontSize: '0.625rem',
+    color: CSS_COLORS.textSecondary,
+    fontFamily: 'monospace',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  });
+  el.textContent = node.html.length > 100 ? `${node.html.slice(0, 100)}...` : node.html;
+  el.title = node.html;
+  return el;
 }
 
 function renderA11yViolationGroup(
@@ -1041,22 +1076,7 @@ function renderA11yViolationGroup(
 
     const visibleNodes = violation.nodes.slice(0, 3);
     for (const node of visibleNodes) {
-      const nodeEl = document.createElement('div');
-      Object.assign(nodeEl.style, {
-        padding: '3px 6px',
-        marginBottom: '2px',
-        backgroundColor: 'rgba(0,0,0,0.2)',
-        borderRadius: '3px',
-        fontSize: '0.625rem',
-        color: CSS_COLORS.textSecondary,
-        fontFamily: 'monospace',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      });
-      nodeEl.textContent = node.html.length > 100 ? `${node.html.slice(0, 100)}...` : node.html;
-      nodeEl.title = node.html;
-      nodesPreview.appendChild(nodeEl);
+      nodesPreview.appendChild(createViolationNodeEl(node));
     }
 
     if (violation.nodes.length > 3) {
@@ -1072,25 +1092,9 @@ function renderA11yViolationGroup(
       });
       moreBtn.textContent = `+ ${violation.nodes.length - 3} more`;
       moreBtn.onclick = () => {
-        // Show remaining nodes
         moreBtn.remove();
         for (const node of violation.nodes.slice(3)) {
-          const nodeEl = document.createElement('div');
-          Object.assign(nodeEl.style, {
-            padding: '3px 6px',
-            marginBottom: '2px',
-            backgroundColor: 'rgba(0,0,0,0.2)',
-            borderRadius: '3px',
-            fontSize: '0.625rem',
-            color: CSS_COLORS.textSecondary,
-            fontFamily: 'monospace',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          });
-          nodeEl.textContent = node.html.length > 100 ? `${node.html.slice(0, 100)}...` : node.html;
-          nodeEl.title = node.html;
-          nodesPreview.appendChild(nodeEl);
+          nodesPreview.appendChild(createViolationNodeEl(node));
         }
       };
       nodesPreview.appendChild(moreBtn);

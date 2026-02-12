@@ -15,9 +15,6 @@ export const DEFAULT_SCREENSHOT_SCALE = 0.25;
 /** Default JPEG quality */
 export const DEFAULT_SCREENSHOT_QUALITY = 0.7;
 
-/** JPEG quality for devbar screenshots (balances clarity vs file size ~100KB) */
-export const DEVBAR_SCREENSHOT_QUALITY = 0.65;
-
 // ============================================================================
 // Canvas Scaling
 // ============================================================================

@@ -263,12 +263,13 @@ export async function measureViaPlaywright(options: {
   showAlignment?: boolean;
   limit?: number;
   colors?: string[];
+  verbose?: boolean;
 }): Promise<RulerOutput & { screenshotPath?: string }> {
   const { browser, page } = await getBrowser(options.url);
 
   try {
     // Inject the measurement overlay
-    console.log('[Sweetlink Ruler] Injecting measurement overlay...');
+    if (options.verbose) console.log('[Sweetlink Ruler] Injecting measurement overlay...');
 
     const measureOptions: MeasurementOptions = {
       selectors: options.selectors,
@@ -284,13 +285,14 @@ export async function measureViaPlaywright(options: {
       `(${measureElementsScript})(${JSON.stringify(measureOptions)})`
     )) as RulerOutput;
 
-    console.log(`[Sweetlink Ruler] Measured: ${result.summary}`);
+    if (options.verbose) console.log(`[Sweetlink Ruler] Measured: ${result.summary}`);
 
     if (result.alignment) {
       const { verticalOffset, horizontalOffset, aligned } = result.alignment;
-      console.log(
-        `[Sweetlink Ruler] Alignment: Δy=${verticalOffset}px, Δx=${horizontalOffset}px ${aligned ? '✓ ALIGNED' : '✗ NOT ALIGNED'}`
-      );
+      if (options.verbose)
+        console.log(
+          `[Sweetlink Ruler] Alignment: Δy=${verticalOffset}px, Δx=${horizontalOffset}px ${aligned ? '✓ ALIGNED' : '✗ NOT ALIGNED'}`
+        );
     }
 
     // Take screenshot if output path provided
@@ -304,12 +306,12 @@ export async function measureViaPlaywright(options: {
 
       await page.screenshot({ path: options.output, fullPage: false });
       screenshotPath = options.output;
-      console.log(`[Sweetlink Ruler] Screenshot saved to: ${options.output}`);
+      if (options.verbose) console.log(`[Sweetlink Ruler] Screenshot saved to: ${options.output}`);
     }
 
     return { ...result, screenshotPath };
   } finally {
-    console.log('[Sweetlink Ruler] Closing browser...');
+    if (options.verbose) console.log('[Sweetlink Ruler] Closing browser...');
     await browser.close();
   }
 }

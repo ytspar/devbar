@@ -13,11 +13,8 @@ import { WebSocket } from 'ws';
 import { detectCDP, getNetworkRequestsViaCDP } from '../cdp.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
-import { DEFAULT_WS_PORT, WS_PORT_OFFSET } from '../types.js';
+import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
-
-/** Port scanning constants for cleanup */
-const MAX_PORT_RETRIES = 10;
 const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
 
 /**

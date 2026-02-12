@@ -28,13 +28,7 @@ export const MAX_RECONNECT_DELAY_MS = 30000;
 // ============================================================================
 
 // Re-export port constants from sweetlink
-export { DEFAULT_WS_PORT as WS_PORT, WS_PORT_OFFSET } from '@ytspar/sweetlink/types';
-
-/** Maximum ports to try when scanning for matching server */
-export const MAX_PORT_RETRIES = 10;
-
-/** Delay between port scan attempts (ms) */
-export const PORT_RETRY_DELAY_MS = 100;
+export { DEFAULT_WS_PORT as WS_PORT, MAX_PORT_RETRIES, PORT_RETRY_DELAY_MS, WS_PORT_OFFSET } from '@ytspar/sweetlink/types';
 
 /** Delay before restarting port scan from base after all ports fail (ms) */
 export const PORT_SCAN_RESTART_DELAY_MS = 3000;

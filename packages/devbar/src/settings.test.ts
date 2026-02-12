@@ -7,9 +7,11 @@ import {
   ACCENT_COLOR_PRESETS,
   DEFAULT_SETTINGS,
   type DevBarSettings,
-  SETTINGS_STORAGE_KEY,
   SettingsManager,
 } from './settings.js';
+
+/** Mirror the internal storage key used by SettingsManager */
+const SETTINGS_STORAGE_KEY = 'devbar-settings';
 
 // Mock localStorage
 const localStorageMock = (() => {

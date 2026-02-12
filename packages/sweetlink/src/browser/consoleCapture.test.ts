@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConsoleLog } from '../types.js';
 import {
   ConsoleCapture,
-  createErrorHandler,
-  createRejectionHandler,
   formatArg,
   formatArgs,
   MAX_CONSOLE_LOGS,
@@ -239,76 +237,6 @@ describe('ConsoleCapture', () => {
     capture.start();
 
     expect(console.log).toBe(firstLog);
-  });
-});
-
-describe('createErrorHandler', () => {
-  it('captures error events to logs', () => {
-    const logsRef: { logs: ConsoleLog[] } = { logs: [] };
-    const handler = createErrorHandler(logsRef);
-
-    const errorEvent = {
-      message: 'Test error',
-      filename: 'test.js',
-      error: new Error('Test'),
-    } as ErrorEvent;
-
-    handler(errorEvent);
-
-    expect(logsRef.logs.length).toBe(1);
-    expect(logsRef.logs[0].level).toBe('error');
-    expect(logsRef.logs[0].message).toContain('Uncaught: Test error');
-    expect(logsRef.logs[0].source).toBe('test.js');
-  });
-
-  it('respects max logs limit', () => {
-    const logsRef: { logs: ConsoleLog[] } = { logs: [] };
-    const handler = createErrorHandler(logsRef, 2);
-
-    for (let i = 0; i < 5; i++) {
-      handler({ message: `Error ${i}` } as ErrorEvent);
-    }
-
-    expect(logsRef.logs.length).toBe(2);
-    expect(logsRef.logs[0].message).toContain('Error 3');
-  });
-});
-
-describe('createRejectionHandler', () => {
-  it('captures Error rejections', () => {
-    const logsRef: { logs: ConsoleLog[] } = { logs: [] };
-    const handler = createRejectionHandler(logsRef);
-
-    const error = new Error('Promise failed');
-    const event = { reason: error } as PromiseRejectionEvent;
-
-    handler(event);
-
-    expect(logsRef.logs.length).toBe(1);
-    expect(logsRef.logs[0].level).toBe('error');
-    expect(logsRef.logs[0].message).toContain('Unhandled rejection: Error: Promise failed');
-  });
-
-  it('captures non-Error rejections', () => {
-    const logsRef: { logs: ConsoleLog[] } = { logs: [] };
-    const handler = createRejectionHandler(logsRef);
-
-    const event = { reason: 'string rejection' } as PromiseRejectionEvent;
-
-    handler(event);
-
-    expect(logsRef.logs[0].message).toBe('Unhandled rejection: string rejection');
-  });
-
-  it('respects max logs limit', () => {
-    const logsRef: { logs: ConsoleLog[] } = { logs: [] };
-    const handler = createRejectionHandler(logsRef, 2);
-
-    for (let i = 0; i < 5; i++) {
-      handler({ reason: `Rejection ${i}` } as PromiseRejectionEvent);
-    }
-
-    expect(logsRef.logs.length).toBe(2);
   });
 });
 

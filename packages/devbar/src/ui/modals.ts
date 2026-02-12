@@ -4,7 +4,7 @@
  * Modal creation utilities for the devbar UI.
  */
 
-import { CSS_COLORS, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';
+import { CSS_COLORS, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES, withAlpha } from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
 import { createCloseButton, createStyledButton } from './buttons.js';
 
@@ -50,7 +50,7 @@ export function createModalBox(color: string): HTMLDivElement {
   Object.assign(modal.style, {
     ...MODAL_BOX_BASE_STYLES,
     border: `1px solid ${color}`,
-    boxShadow: `0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px ${color}33`,
+    boxShadow: `0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px ${withAlpha(color, 20)}`,
   });
   return modal;
 }
@@ -69,7 +69,7 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '16px 20px',
-    borderBottom: `1px solid ${color}40`,
+    borderBottom: `1px solid ${withAlpha(color, 25)}`,
     flexWrap: 'wrap',
     gap: '8px',
   });
@@ -151,8 +151,8 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
       width: '100%',
       marginTop: '4px',
       padding: '8px 12px',
-      backgroundColor: `${color}15`,
-      border: `1px solid ${color}30`,
+      backgroundColor: withAlpha(color, 8),
+      border: `1px solid ${withAlpha(color, 19)}`,
       borderRadius: '6px',
       fontSize: '0.75rem',
       color: color,
@@ -222,8 +222,8 @@ export function createInfoBox(
 ): HTMLDivElement {
   const box = document.createElement('div');
   Object.assign(box.style, {
-    backgroundColor: `${color}15`,
-    border: `1px solid ${color}40`,
+    backgroundColor: withAlpha(color, 8),
+    border: `1px solid ${withAlpha(color, 25)}`,
     borderRadius: '8px',
     padding: '14px',
     marginBottom: '16px',

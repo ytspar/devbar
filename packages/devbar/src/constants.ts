@@ -326,6 +326,17 @@ export const CSS_COLORS = {
   borderSubtle: 'var(--devbar-color-border-subtle)',
 } as const;
 
+/**
+ * Mix a CSS color with transparent to produce a translucent variant.
+ * Uses color-mix() which, unlike hex alpha suffixes, works with var() values.
+ *
+ * @param color  Any CSS color value, including `var()` references
+ * @param percent  Opacity level (0 = fully transparent, 100 = fully opaque)
+ */
+export function withAlpha(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`;
+}
+
 /** Flexible input type for theme customization */
 export type DevBarThemeInput = {
   colors: { [K in keyof DevBarTheme['colors']]: string };

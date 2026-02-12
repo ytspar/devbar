@@ -48,6 +48,7 @@
   },
   "homepage": "https://github.com/ytspar/devbar/tree/main/packages/devbar#readme",
   "scripts": {
+    "prepublishOnly": "rm -rf dist && tsc",
     "build": "rm -rf dist && tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

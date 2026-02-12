@@ -16,7 +16,7 @@
  * ```
  */
 
-import { CSS_COLORS, FONT_MONO } from '../constants.js';
+import { CSS_COLORS, FONT_MONO, withAlpha } from '../constants.js';
 
 /** Card configuration */
 export interface CardConfig {
@@ -87,7 +87,7 @@ export function createCard(config: CardConfig): HTMLElement {
     letterSpacing: '0.1em',
     lineHeight: '1',
     whiteSpace: 'nowrap',
-    color: isEmpty ? `${CSS_COLORS.primary}b3` : CSS_COLORS.primary, // 70% opacity when empty
+    color: isEmpty ? withAlpha(CSS_COLORS.primary, 70) : CSS_COLORS.primary,
   });
   titleEl.textContent = title;
 
@@ -157,6 +157,6 @@ export function setCardEmpty(card: HTMLElement, isEmpty: boolean): void {
   // Update title color
   const title = card.querySelector('h2') as HTMLElement | null;
   if (title) {
-    title.style.color = isEmpty ? `${CSS_COLORS.primary}b3` : CSS_COLORS.primary;
+    title.style.color = isEmpty ? withAlpha(CSS_COLORS.primary, 70) : CSS_COLORS.primary;
   }
 }

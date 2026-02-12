@@ -113,6 +113,22 @@ function getRelativePath(absolutePath: string): string {
   return absolutePath;
 }
 
+/**
+ * Report screenshot success to console
+ */
+function reportScreenshotSuccess(
+  outputPath: string,
+  width: number,
+  height: number,
+  method: string,
+  selector?: string
+): void {
+  console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
+  console.log(`[Sweetlink] Dimensions: ${width}x${height}`);
+  if (selector) console.log(`[Sweetlink] Selector: ${selector}`);
+  console.log(`[Sweetlink] Method: ${method}`);
+}
+
 import type { SweetlinkCommand } from '../types.js';
 
 interface SweetlinkResponse {
@@ -279,12 +295,7 @@ async function screenshot(options: {
         url: options.url,
       });
 
-      console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
-      console.log(`[Sweetlink] Dimensions: ${result.width}x${result.height}`);
-      if (options.selector) {
-        console.log(`[Sweetlink] Selector: ${options.selector}`);
-      }
-      console.log(`[Sweetlink] Method: Playwright (Auto-launch/CDP)`);
+      reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (Auto-launch/CDP)', options.selector);
 
       return;
     } catch (error) {
@@ -335,12 +346,7 @@ async function screenshot(options: {
             url: options.url,
           });
 
-          console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
-          console.log(`[Sweetlink] Dimensions: ${result.width}x${result.height}`);
-          if (options.selector) {
-            console.log(`[Sweetlink] Selector: ${options.selector}`);
-          }
-          console.log(`[Sweetlink] Method: Playwright (auto-escalation from WebSocket failure)`);
+          reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (auto-escalation from WebSocket failure)', options.selector);
           return;
         } catch (playwrightError) {
           console.error(
@@ -361,12 +367,7 @@ async function screenshot(options: {
     const base64Data = response.data.screenshot.replace(/^data:image\/png;base64,/, '');
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
-    console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
-    console.log(`[Sweetlink] Dimensions: ${response.data.width}x${response.data.height}`);
-    if (response.data.selector) {
-      console.log(`[Sweetlink] Selector: ${response.data.selector}`);
-    }
-    console.log(`[Sweetlink] Method: WebSocket (html2canvas)`);
+    reportScreenshotSuccess(outputPath, response.data.width, response.data.height, 'WebSocket (html2canvas)', response.data.selector);
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);

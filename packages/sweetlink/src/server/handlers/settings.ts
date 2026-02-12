@@ -23,17 +23,32 @@ const SETTINGS_FILE = 'settings.json';
 // ============================================================================
 
 /**
- * devbar settings schema (must match devbar package)
+ * devbar settings schema
+ *
+ * Canonical definition: packages/devbar/src/settings.ts
+ * Keep in sync — this copy exists to avoid a circular dependency.
  */
 export interface DevBarSettings {
   version: 1;
+
+  // Display
   position: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
   themeMode: 'dark' | 'light' | 'system';
   compactMode: boolean;
   accentColor: string;
+
+  // Features
   showScreenshot: boolean;
   showConsoleBadges: boolean;
   showTooltips: boolean;
+
+  // Save behavior
+  saveLocation: 'auto' | 'local' | 'download';
+
+  // Screenshot
+  screenshotQuality: number;
+
+  // Metrics visibility
   showMetrics: {
     breakpoint: boolean;
     fcp: boolean;
@@ -42,6 +57,8 @@ export interface DevBarSettings {
     inp: boolean;
     pageSize: boolean;
   };
+
+  // Debug
   debug: boolean;
 }
 

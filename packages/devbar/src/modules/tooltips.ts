@@ -5,7 +5,7 @@
  * click-to-toggle tooltips for mobile, and composable hover behavior via TooltipHoverOptions.
  */
 
-import { CSS_COLORS, FONT_MONO } from '../constants.js';
+import { CSS_COLORS, FONT_MONO, withAlpha } from '../constants.js';
 import type { DevBarState } from './types.js';
 
 /** Base styles for tooltip containers */
@@ -407,32 +407,73 @@ export function addTooltipShortcut(
   container.appendChild(row);
 }
 
-/** Add a warning message to tooltip */
-export function addTooltipWarning(container: HTMLElement, text: string): void {
-  const warning = document.createElement('div');
-  Object.assign(warning.style, {
+// ---------------------------------------------------------------------------
+// Status box helpers (warning, success, error, progress)
+// ---------------------------------------------------------------------------
+
+/** Configuration for a status box icon */
+type StatusIconConfig = {
+  text: string;
+  color: string;
+  extraStyles?: Partial<CSSStyleDeclaration>;
+};
+
+/**
+ * Create a color-coded status container with an icon.
+ * Shared foundation for warning, success, error, and progress boxes.
+ */
+function createStatusBox(
+  color: string,
+  iconConfig: StatusIconConfig,
+  extraContainerStyles?: Partial<CSSStyleDeclaration>,
+): HTMLDivElement {
+  const box = document.createElement('div');
+  Object.assign(box.style, {
     display: 'flex',
     alignItems: 'flex-start',
     gap: '6px',
-    marginTop: '8px',
     padding: '6px 8px',
-    backgroundColor: `${CSS_COLORS.warning}15`,
-    border: `1px solid ${CSS_COLORS.warning}30`,
+    backgroundColor: withAlpha(color, 8),
+    border: `1px solid ${withAlpha(color, 19)}`,
     borderRadius: '4px',
-    fontSize: '0.625rem',
+    ...extraContainerStyles,
   });
 
   const icon = document.createElement('span');
-  icon.textContent = '\u26A0';
-  Object.assign(icon.style, { color: CSS_COLORS.warning, flexShrink: '0' });
-  warning.appendChild(icon);
+  icon.textContent = iconConfig.text;
+  Object.assign(icon.style, { color: iconConfig.color, flexShrink: '0', ...iconConfig.extraStyles });
+  box.appendChild(icon);
+
+  return box;
+}
+
+/** Append a secondary text line below a primary line (used by success/error boxes) */
+function appendSubtext(parent: HTMLElement, text: string, extraStyles?: Partial<CSSStyleDeclaration>): void {
+  const sub = document.createElement('div');
+  Object.assign(sub.style, {
+    color: CSS_COLORS.textMuted,
+    fontSize: '0.625rem',
+    marginTop: '2px',
+    ...extraStyles,
+  });
+  sub.textContent = text;
+  parent.appendChild(sub);
+}
+
+/** Add a warning message to tooltip */
+export function addTooltipWarning(container: HTMLElement, text: string): void {
+  const box = createStatusBox(
+    CSS_COLORS.warning,
+    { text: '\u26A0', color: CSS_COLORS.warning },
+    { marginTop: '8px', fontSize: '0.625rem' },
+  );
 
   const textSpan = document.createElement('span');
   Object.assign(textSpan.style, { color: CSS_COLORS.warning });
   textSpan.textContent = text;
-  warning.appendChild(textSpan);
+  box.appendChild(textSpan);
 
-  container.appendChild(warning);
+  container.appendChild(box);
 }
 
 /** Add a success status message to tooltip */
@@ -441,21 +482,10 @@ export function addTooltipSuccess(
   text: string,
   subtext?: string
 ): void {
-  const status = document.createElement('div');
-  Object.assign(status.style, {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '6px',
-    padding: '6px 8px',
-    backgroundColor: `${CSS_COLORS.primary}15`,
-    border: `1px solid ${CSS_COLORS.primary}30`,
-    borderRadius: '4px',
-  });
-
-  const icon = document.createElement('span');
-  icon.textContent = '\u2713';
-  Object.assign(icon.style, { color: CSS_COLORS.primary, fontWeight: '600', flexShrink: '0' });
-  status.appendChild(icon);
+  const box = createStatusBox(
+    CSS_COLORS.primary,
+    { text: '\u2713', color: CSS_COLORS.primary, extraStyles: { fontWeight: '600' } },
+  );
 
   const textContainer = document.createElement('div');
   const mainText = document.createElement('div');
@@ -464,19 +494,11 @@ export function addTooltipSuccess(
   textContainer.appendChild(mainText);
 
   if (subtext) {
-    const sub = document.createElement('div');
-    Object.assign(sub.style, {
-      color: CSS_COLORS.textMuted,
-      fontSize: '0.625rem',
-      marginTop: '2px',
-      wordBreak: 'break-all',
-    });
-    sub.textContent = subtext;
-    textContainer.appendChild(sub);
+    appendSubtext(textContainer, subtext, { wordBreak: 'break-all' });
   }
 
-  status.appendChild(textContainer);
-  container.appendChild(status);
+  box.appendChild(textContainer);
+  container.appendChild(box);
 }
 
 /** Add an error status message to tooltip */
@@ -485,26 +507,10 @@ export function addTooltipError(
   title: string,
   message: string
 ): void {
-  const status = document.createElement('div');
-  Object.assign(status.style, {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '6px',
-    padding: '6px 8px',
-    backgroundColor: `${CSS_COLORS.error}15`,
-    border: `1px solid ${CSS_COLORS.error}30`,
-    borderRadius: '4px',
-  });
-
-  const icon = document.createElement('span');
-  icon.textContent = '\u00D7';
-  Object.assign(icon.style, {
-    color: CSS_COLORS.error,
-    fontWeight: '600',
-    flexShrink: '0',
-    fontSize: '0.875rem',
-  });
-  status.appendChild(icon);
+  const box = createStatusBox(
+    CSS_COLORS.error,
+    { text: '\u00D7', color: CSS_COLORS.error, extraStyles: { fontWeight: '600', fontSize: '0.875rem' } },
+  );
 
   const textContainer = document.createElement('div');
   const titleEl = document.createElement('div');
@@ -512,47 +518,64 @@ export function addTooltipError(
   titleEl.textContent = title;
   textContainer.appendChild(titleEl);
 
-  const msgEl = document.createElement('div');
-  Object.assign(msgEl.style, {
-    color: CSS_COLORS.textMuted,
-    fontSize: '0.625rem',
-    marginTop: '2px',
-  });
-  msgEl.textContent = message;
-  textContainer.appendChild(msgEl);
+  appendSubtext(textContainer, message);
 
-  status.appendChild(textContainer);
-  container.appendChild(status);
+  box.appendChild(textContainer);
+  container.appendChild(box);
 }
 
-/** Add a "in progress" status to tooltip */
+/** Add an "in progress" status to tooltip */
 export function addTooltipProgress(container: HTMLElement, text: string): void {
-  const status = document.createElement('div');
-  Object.assign(status.style, {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '6px 8px',
-    backgroundColor: `${CSS_COLORS.info}15`,
-    border: `1px solid ${CSS_COLORS.info}30`,
-    borderRadius: '4px',
-  });
-
-  const spinner = document.createElement('span');
-  spinner.textContent = '~';
-  Object.assign(spinner.style, {
-    color: CSS_COLORS.info,
-    fontWeight: '600',
-    animation: 'pulse 1s infinite',
-  });
-  status.appendChild(spinner);
+  const box = createStatusBox(
+    CSS_COLORS.info,
+    {
+      text: '~',
+      color: CSS_COLORS.info,
+      extraStyles: { fontWeight: '600', animation: 'pulse 1s infinite' },
+    },
+    { alignItems: 'center' },
+  );
 
   const textSpan = document.createElement('span');
   Object.assign(textSpan.style, { color: CSS_COLORS.info });
   textSpan.textContent = text;
-  status.appendChild(textSpan);
+  box.appendChild(textSpan);
 
-  container.appendChild(status);
+  container.appendChild(box);
+}
+
+// ---------------------------------------------------------------------------
+// Composite tooltip builders
+// ---------------------------------------------------------------------------
+
+/** Shorthand helpers bound to a specific tooltip + state, passed to button content builders */
+export type ButtonTooltipHelpers = {
+  addTitle: (title: string) => void;
+  addDescription: (desc: string) => void;
+  addSectionHeader: (header: string) => void;
+  addShortcut: (key: string, desc: string) => void;
+  addWarning: (text: string) => void;
+  addSuccess: (text: string, subtext?: string) => void;
+  addError: (title: string, message: string) => void;
+  addProgress: (text: string) => void;
+};
+
+/** Create bound helper functions scoped to a tooltip element */
+function createBoundHelpers(
+  state: DevBarState,
+  tooltip: HTMLDivElement,
+  titleColor: string,
+): ButtonTooltipHelpers {
+  return {
+    addTitle: (title: string) => addTooltipTitle(state, tooltip, title, titleColor),
+    addDescription: (desc: string) => addTooltipDescription(tooltip, desc),
+    addSectionHeader: (header: string) => addTooltipSectionHeader(tooltip, header),
+    addShortcut: (key: string, desc: string) => addTooltipShortcut(tooltip, key, desc),
+    addWarning: (text: string) => addTooltipWarning(tooltip, text),
+    addSuccess: (text: string, subtext?: string) => addTooltipSuccess(tooltip, text, subtext),
+    addError: (title: string, message: string) => addTooltipError(tooltip, title, message),
+    addProgress: (text: string) => addTooltipProgress(tooltip, text),
+  };
 }
 
 /** Attach a button tooltip with custom title color */
@@ -560,33 +583,32 @@ export function attachButtonTooltip(
   state: DevBarState,
   element: HTMLElement,
   titleColor: string,
-  buildContent: (
-    tooltip: HTMLDivElement,
-    helpers: {
-      addTitle: (title: string) => void;
-      addDescription: (desc: string) => void;
-      addSectionHeader: (header: string) => void;
-      addShortcut: (key: string, desc: string) => void;
-      addWarning: (text: string) => void;
-      addSuccess: (text: string, subtext?: string) => void;
-      addError: (title: string, message: string) => void;
-      addProgress: (text: string) => void;
-    }
-  ) => void
+  buildContent: (tooltip: HTMLDivElement, helpers: ButtonTooltipHelpers) => void
 ): void {
   attachHtmlTooltip(state, element, (tooltip) => {
-    const helpers = {
-      addTitle: (title: string) => addTooltipTitle(state, tooltip, title, titleColor),
-      addDescription: (desc: string) => addTooltipDescription(tooltip, desc),
-      addSectionHeader: (header: string) => addTooltipSectionHeader(tooltip, header),
-      addShortcut: (key: string, desc: string) => addTooltipShortcut(tooltip, key, desc),
-      addWarning: (text: string) => addTooltipWarning(tooltip, text),
-      addSuccess: (text: string, subtext?: string) => addTooltipSuccess(tooltip, text, subtext),
-      addError: (title: string, message: string) => addTooltipError(tooltip, title, message),
-      addProgress: (text: string) => addTooltipProgress(tooltip, text),
-    };
-    buildContent(tooltip, helpers);
+    buildContent(tooltip, createBoundHelpers(state, tooltip, titleColor));
   });
+}
+
+/** Build a color-coded thresholds section (good / needs work / poor) */
+function buildThresholdsSection(
+  container: HTMLElement,
+  thresholds: { good: string; needsWork: string; poor: string },
+): void {
+  addTooltipSectionHeader(container, 'Thresholds');
+
+  const thresholdsContainer = document.createElement('div');
+  Object.assign(thresholdsContainer.style, {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  });
+
+  addTooltipColoredRow(thresholdsContainer, 'Good', thresholds.good, CSS_COLORS.primary);
+  addTooltipColoredRow(thresholdsContainer, 'Needs work', thresholds.needsWork, CSS_COLORS.warning);
+  addTooltipColoredRow(thresholdsContainer, 'Poor', thresholds.poor, CSS_COLORS.error);
+
+  container.appendChild(thresholdsContainer);
 }
 
 /** Attach a metric tooltip with title, description, and colored thresholds */
@@ -600,26 +622,59 @@ export function attachMetricTooltip(
   attachHtmlTooltip(state, element, (tooltip) => {
     addTooltipTitle(state, tooltip, title);
     addTooltipDescription(tooltip, description);
-    addTooltipSectionHeader(tooltip, 'Thresholds');
-
-    const thresholdsContainer = document.createElement('div');
-    Object.assign(thresholdsContainer.style, {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '4px',
-    });
-
-    addTooltipColoredRow(thresholdsContainer, 'Good', thresholds.good, CSS_COLORS.primary);
-    addTooltipColoredRow(
-      thresholdsContainer,
-      'Needs work',
-      thresholds.needsWork,
-      CSS_COLORS.warning
-    );
-    addTooltipColoredRow(thresholdsContainer, 'Poor', thresholds.poor, CSS_COLORS.error);
-
-    tooltip.appendChild(thresholdsContainer);
+    buildThresholdsSection(tooltip, thresholds);
   });
+}
+
+/** Tailwind CSS breakpoint definitions */
+const TAILWIND_BREAKPOINTS = [
+  { name: 'base', range: '<640px' },
+  { name: 'sm', range: '\u2265640px' },
+  { name: 'md', range: '\u2265768px' },
+  { name: 'lg', range: '\u22651024px' },
+  { name: 'xl', range: '\u22651280px' },
+  { name: '2xl', range: '\u22651536px' },
+] as const;
+
+/** Build a single breakpoint reference row, highlighting the active breakpoint */
+function buildBreakpointRow(bpName: string, bpRange: string, isActive: boolean): HTMLDivElement {
+  const row = document.createElement('div');
+  Object.assign(row.style, { display: 'flex', gap: '8px' });
+
+  const nameSpan = document.createElement('span');
+  Object.assign(nameSpan.style, {
+    color: isActive ? CSS_COLORS.primary : CSS_COLORS.textMuted,
+    fontWeight: isActive ? '600' : '400',
+    minWidth: '32px',
+  });
+  nameSpan.textContent = bpName;
+  row.appendChild(nameSpan);
+
+  const rangeSpan = document.createElement('span');
+  Object.assign(rangeSpan.style, {
+    color: isActive ? CSS_COLORS.text : CSS_COLORS.textMuted,
+  });
+  rangeSpan.textContent = bpRange;
+  row.appendChild(rangeSpan);
+
+  return row;
+}
+
+/** Build the breakpoint reference list showing all Tailwind breakpoints */
+function buildBreakpointReferenceList(activeBreakpoint: string): HTMLDivElement {
+  const bpContainer = document.createElement('div');
+  Object.assign(bpContainer.style, {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    fontSize: '0.625rem',
+  });
+
+  for (const bp of TAILWIND_BREAKPOINTS) {
+    bpContainer.appendChild(buildBreakpointRow(bp.name, bp.range, bp.name === activeBreakpoint));
+  }
+
+  return bpContainer;
 }
 
 /** Attach a breakpoint tooltip showing current breakpoint and all breakpoint ranges */
@@ -642,48 +697,7 @@ export function attachBreakpointTooltip(
 
     // Breakpoints reference
     addTooltipSectionHeader(tooltip, 'Breakpoints');
-
-    const bpContainer = document.createElement('div');
-    Object.assign(bpContainer.style, {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2px',
-      fontSize: '0.625rem',
-    });
-
-    const breakpoints = [
-      { name: 'base', range: '<640px' },
-      { name: 'sm', range: '\u2265640px' },
-      { name: 'md', range: '\u2265768px' },
-      { name: 'lg', range: '\u22651024px' },
-      { name: 'xl', range: '\u22651280px' },
-      { name: '2xl', range: '\u22651536px' },
-    ];
-
-    for (const bp of breakpoints) {
-      const row = document.createElement('div');
-      Object.assign(row.style, { display: 'flex', gap: '8px' });
-
-      const nameSpan = document.createElement('span');
-      Object.assign(nameSpan.style, {
-        color: bp.name === breakpoint ? CSS_COLORS.primary : CSS_COLORS.textMuted,
-        fontWeight: bp.name === breakpoint ? '600' : '400',
-        minWidth: '32px',
-      });
-      nameSpan.textContent = bp.name;
-      row.appendChild(nameSpan);
-
-      const rangeSpan = document.createElement('span');
-      Object.assign(rangeSpan.style, {
-        color: bp.name === breakpoint ? CSS_COLORS.text : CSS_COLORS.textMuted,
-      });
-      rangeSpan.textContent = bp.range;
-      row.appendChild(rangeSpan);
-
-      bpContainer.appendChild(row);
-    }
-
-    tooltip.appendChild(bpContainer);
+    tooltip.appendChild(buildBreakpointReferenceList(breakpoint));
   });
 }
 

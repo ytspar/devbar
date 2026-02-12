@@ -12,19 +12,12 @@ import type {
   ChannelSubscribeCommand,
   ChannelUnsubscribeCommand,
   ConsoleLog,
-  DesignReviewScreenshotCommand,
   HmrScreenshotCommand,
   HmrScreenshotData,
   LogEventCommand,
   LogSubscribeCommand,
   LogUnsubscribeCommand,
   RequestScreenshotCommand,
-  SaveA11yCommand,
-  SaveConsoleLogsCommand,
-  SaveOutlineCommand,
-  SaveSchemaCommand,
-  SaveScreenshotCommand,
-  SaveSettingsCommand,
   ScreenshotResponseCommand,
   SweetlinkCommand,
   SweetlinkResponse,
@@ -289,6 +282,57 @@ type MessageHandler = (
 ) => Promise<boolean | void> | boolean | void;
 
 // ============================================================================
+// Browser Command Helper
+// ============================================================================
+
+/**
+ * Create a browser-only message handler with standardised validation,
+ * try/catch, logging, and response sending.
+ *
+ * Eliminates the repeated boilerplate across save-screenshot, save-outline,
+ * save-schema, save-console-logs, save-a11y, save-settings, and
+ * design-review-screenshot handlers.
+ */
+function browserCommand<TData, TResult>(opts: {
+  /** Human-readable label for log messages, e.g. "Screenshot" */
+  label: string;
+  /** WS message type sent on error */
+  errorType: string;
+  /** WS message type sent on success */
+  successType: string;
+  /** Runtime type guard for command.data */
+  validate: (data: unknown) => data is TData;
+  /** Validation error message sent when the guard fails */
+  validationError: string;
+  /** The actual async work — receives validated data, returns result payload */
+  execute: (data: TData) => Promise<TResult>;
+  /** Build the log line from the result (printed on success) */
+  logResult: (result: TResult) => string;
+  /** Extract the fields to include in the success response */
+  successData: (result: TResult) => Record<string, unknown>;
+}): MessageHandler {
+  return async (command: SweetlinkCommand, ctx: MessageHandlerContext): Promise<boolean> => {
+    if (!ctx.isBrowserClient) return false;
+    // All browser save commands carry a data payload; access via indexed type
+    // since not every SweetlinkCommand variant declares `data`.
+    const data: unknown = (command as unknown as Record<string, unknown>).data;
+    if (!opts.validate(data)) {
+      sendError(ctx.ws, opts.errorType, opts.validationError);
+      return true;
+    }
+    try {
+      const result = await opts.execute(data);
+      console.log(`[Sweetlink] ${opts.logResult(result)}`);
+      sendSuccess(ctx.ws, opts.successType, opts.successData(result));
+    } catch (error) {
+      console.error(`[Sweetlink] ${opts.label} failed:`, getErrorMessage(error));
+      sendError(ctx.ws, opts.errorType, error);
+    }
+    return true;
+  };
+}
+
+// ============================================================================
 // Individual Message Handlers
 // ============================================================================
 
@@ -333,158 +377,91 @@ function handleCheckApiKey(_command: SweetlinkCommand, ctx: MessageHandlerContex
 }
 
 /** Handle save-screenshot from browser */
-async function handleSaveScreenshotMsg(
-  command: SaveScreenshotCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveScreenshotData(command.data)) {
-    sendError(ctx.ws, 'screenshot-error', 'Invalid screenshot data');
-    return true;
-  }
-  try {
-    const savedPath = await handleSaveScreenshot(command.data);
-    console.log(`[Sweetlink] Screenshot saved to ${savedPath}`);
-    sendSuccess(ctx.ws, 'screenshot-saved', { path: savedPath });
-  } catch (error) {
-    console.error('[Sweetlink] Screenshot save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'screenshot-error', error);
-  }
-  return true;
-}
+const handleSaveScreenshotMsg = browserCommand({
+  label: 'Screenshot save',
+  errorType: 'screenshot-error',
+  successType: 'screenshot-saved',
+  validate: isSaveScreenshotData,
+  validationError: 'Invalid screenshot data',
+  execute: async (data) => ({ path: await handleSaveScreenshot(data) }),
+  logResult: (r) => `Screenshot saved to ${r.path}`,
+  successData: (r) => ({ path: r.path }),
+});
 
 /** Handle design-review-screenshot from browser */
-async function handleDesignReviewMsg(
-  command: DesignReviewScreenshotCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isDesignReviewScreenshotData(command.data)) {
-    sendError(ctx.ws, 'design-review-error', 'Invalid design review data');
-    return true;
-  }
-  try {
-    const result = await handleDesignReviewScreenshot(command.data);
-    console.log(`[Sweetlink] Design review saved to ${result.reviewPath}`);
-    sendSuccess(ctx.ws, 'design-review-saved', {
-      screenshotPath: result.screenshotPath,
-      reviewPath: result.reviewPath,
-    });
-  } catch (error) {
-    console.error('[Sweetlink] Design review failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'design-review-error', error);
-  }
-  return true;
-}
+const handleDesignReviewMsg = browserCommand({
+  label: 'Design review',
+  errorType: 'design-review-error',
+  successType: 'design-review-saved',
+  validate: isDesignReviewScreenshotData,
+  validationError: 'Invalid design review data',
+  execute: (data) => handleDesignReviewScreenshot(data),
+  logResult: (r) => `Design review saved to ${r.reviewPath}`,
+  successData: (r) => ({ screenshotPath: r.screenshotPath, reviewPath: r.reviewPath }),
+});
 
 /** Handle save-outline from browser */
-async function handleSaveOutlineMsg(
-  command: SaveOutlineCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveOutlineData(command.data)) {
-    sendError(ctx.ws, 'outline-error', 'Invalid outline data');
-    return true;
-  }
-  try {
-    const result = await handleSaveOutline(command.data);
-    console.log(`[Sweetlink] Outline saved to ${result.outlinePath}`);
-    sendSuccess(ctx.ws, 'outline-saved', { outlinePath: result.outlinePath });
-  } catch (error) {
-    console.error('[Sweetlink] Outline save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'outline-error', error);
-  }
-  return true;
-}
+const handleSaveOutlineMsg = browserCommand({
+  label: 'Outline save',
+  errorType: 'outline-error',
+  successType: 'outline-saved',
+  validate: isSaveOutlineData,
+  validationError: 'Invalid outline data',
+  execute: (data) => handleSaveOutline(data),
+  logResult: (r) => `Outline saved to ${r.outlinePath}`,
+  successData: (r) => ({ outlinePath: r.outlinePath }),
+});
 
 /** Handle save-schema from browser */
-async function handleSaveSchemaMsg(
-  command: SaveSchemaCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveSchemaData(command.data)) {
-    sendError(ctx.ws, 'schema-error', 'Invalid schema data');
-    return true;
-  }
-  try {
-    const result = await handleSaveSchema(command.data);
-    console.log(`[Sweetlink] Schema saved to ${result.schemaPath}`);
-    sendSuccess(ctx.ws, 'schema-saved', { schemaPath: result.schemaPath });
-  } catch (error) {
-    console.error('[Sweetlink] Schema save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'schema-error', error);
-  }
-  return true;
-}
+const handleSaveSchemaMsg = browserCommand({
+  label: 'Schema save',
+  errorType: 'schema-error',
+  successType: 'schema-saved',
+  validate: isSaveSchemaData,
+  validationError: 'Invalid schema data',
+  execute: (data) => handleSaveSchema(data),
+  logResult: (r) => `Schema saved to ${r.schemaPath}`,
+  successData: (r) => ({ schemaPath: r.schemaPath }),
+});
 
 /** Handle save-console-logs from browser */
-async function handleSaveConsoleLogsMsg(
-  command: SaveConsoleLogsCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveConsoleLogsData(command.data)) {
-    sendError(ctx.ws, 'console-logs-error', 'Invalid console logs data');
-    return true;
-  }
-  try {
-    const result = await handleSaveConsoleLogs(command.data);
-    console.log(`[Sweetlink] Console logs saved to ${result.consoleLogsPath}`);
-    sendSuccess(ctx.ws, 'console-logs-saved', { consoleLogsPath: result.consoleLogsPath });
-  } catch (error) {
-    console.error('[Sweetlink] Console logs save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'console-logs-error', error);
-  }
-  return true;
-}
+const handleSaveConsoleLogsMsg = browserCommand({
+  label: 'Console logs save',
+  errorType: 'console-logs-error',
+  successType: 'console-logs-saved',
+  validate: isSaveConsoleLogsData,
+  validationError: 'Invalid console logs data',
+  execute: (data) => handleSaveConsoleLogs(data),
+  logResult: (r) => `Console logs saved to ${r.consoleLogsPath}`,
+  successData: (r) => ({ consoleLogsPath: r.consoleLogsPath }),
+});
 
 /** Handle save-a11y from browser */
-async function handleSaveA11yMsg(
-  command: SaveA11yCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveA11yData(command.data)) {
-    sendError(ctx.ws, 'a11y-error', 'Invalid a11y data');
-    return true;
-  }
-  try {
-    const result = await handleSaveA11y(command.data);
-    console.log(`[Sweetlink] A11y report saved to ${result.a11yPath}`);
-    sendSuccess(ctx.ws, 'a11y-saved', { a11yPath: result.a11yPath });
-  } catch (error) {
-    console.error('[Sweetlink] A11y save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'a11y-error', error);
-  }
-  return true;
-}
+const handleSaveA11yMsg = browserCommand({
+  label: 'A11y save',
+  errorType: 'a11y-error',
+  successType: 'a11y-saved',
+  validate: isSaveA11yData,
+  validationError: 'Invalid a11y data',
+  execute: (data) => handleSaveA11y(data),
+  logResult: (r) => `A11y report saved to ${r.a11yPath}`,
+  successData: (r) => ({ a11yPath: r.a11yPath }),
+});
 
 /** Handle save-settings from browser */
-async function handleSaveSettingsMsg(
-  command: SaveSettingsCommand,
-  ctx: MessageHandlerContext
-): Promise<boolean> {
-  if (!ctx.isBrowserClient) return false;
-  if (!isSaveSettingsData(command.data)) {
-    sendError(ctx.ws, 'settings-error', 'Invalid settings data');
-    return true;
-  }
-  try {
-    // Type assertion after validation - handler expects DevBarSettings
-    // Cast through unknown as the runtime validation ensures structure
-    const result = await handleSaveSettings(
-      command.data as unknown as Parameters<typeof handleSaveSettings>[0]
-    );
-    console.log(`[Sweetlink] Settings saved to ${result.settingsPath}`);
-    sendSuccess(ctx.ws, 'settings-saved', { settingsPath: result.settingsPath });
-  } catch (error) {
-    console.error('[Sweetlink] Settings save failed:', getErrorMessage(error));
-    sendError(ctx.ws, 'settings-error', error);
-  }
-  return true;
-}
+const handleSaveSettingsMsg = browserCommand({
+  label: 'Settings save',
+  errorType: 'settings-error',
+  successType: 'settings-saved',
+  validate: isSaveSettingsData,
+  validationError: 'Invalid settings data',
+  // Type assertion after validation - handler expects DevBarSettings
+  // Cast through unknown as the runtime validation ensures structure
+  execute: (data) =>
+    handleSaveSettings(data as unknown as Parameters<typeof handleSaveSettings>[0]),
+  logResult: (r) => `Settings saved to ${r.settingsPath}`,
+  successData: (r) => ({ settingsPath: r.settingsPath }),
+});
 
 /** Handle load-settings from browser */
 async function handleLoadSettingsMsg(
@@ -728,13 +705,13 @@ function handleLogEvent(command: LogEventCommand, ctx: MessageHandlerContext): b
 const messageHandlers: Record<string, MessageHandler> = {
   'browser-client-ready': handleBrowserClientReady,
   'check-api-key': handleCheckApiKey,
-  'save-screenshot': handleSaveScreenshotMsg as MessageHandler,
-  'design-review-screenshot': handleDesignReviewMsg as MessageHandler,
-  'save-outline': handleSaveOutlineMsg as MessageHandler,
-  'save-schema': handleSaveSchemaMsg as MessageHandler,
-  'save-console-logs': handleSaveConsoleLogsMsg as MessageHandler,
-  'save-a11y': handleSaveA11yMsg as MessageHandler,
-  'save-settings': handleSaveSettingsMsg as MessageHandler,
+  'save-screenshot': handleSaveScreenshotMsg,
+  'design-review-screenshot': handleDesignReviewMsg,
+  'save-outline': handleSaveOutlineMsg,
+  'save-schema': handleSaveSchemaMsg,
+  'save-console-logs': handleSaveConsoleLogsMsg,
+  'save-a11y': handleSaveA11yMsg,
+  'save-settings': handleSaveSettingsMsg,
   'load-settings': handleLoadSettingsMsg,
   'request-screenshot': handleRequestScreenshot as MessageHandler,
   'screenshot-response': handleScreenshotResponse as MessageHandler,

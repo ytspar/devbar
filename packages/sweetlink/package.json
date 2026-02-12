@@ -97,6 +97,7 @@
   },
   "private": false,
   "scripts": {
+    "prepublishOnly": "rm -rf dist && tsc",
     "build": "rm -rf dist && tsc",
     "test": "vitest run",
     "dev": "node dist/cli/sweetlink-dev.js",

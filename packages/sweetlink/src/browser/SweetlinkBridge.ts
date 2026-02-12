@@ -54,6 +54,8 @@ export interface SweetlinkBridgeConfig {
   hmrScreenshots?: boolean;
   hmrDebounceMs?: number;
   hmrCaptureDelay?: number;
+  /** Enable verbose console.log output for debugging connection and command flow */
+  debug?: boolean;
 }
 
 // ============================================================================
@@ -83,12 +85,15 @@ export class SweetlinkBridge {
   private readonly hmrScreenshots: boolean;
   private readonly hmrConfig: HmrCaptureConfig;
   private readonly currentAppPort: number;
+  private readonly debug: boolean;
 
   // Cleanup functions
   private cleanupFunctions: (() => void)[] = [];
   private capture = new ConsoleCapture();
 
   constructor(config: SweetlinkBridgeConfig = {}) {
+    this.debug = config.debug ?? false;
+
     // Skip on server-side
     if (typeof window === 'undefined') {
       this.basePort = DEFAULT_WS_PORT;
@@ -117,6 +122,11 @@ export class SweetlinkBridge {
       debounceMs: config.hmrDebounceMs ?? DEFAULT_HMR_DEBOUNCE_MS,
       captureDelay: config.hmrCaptureDelay ?? DEFAULT_HMR_CAPTURE_DELAY_MS,
     };
+  }
+
+  /** Log informational message only when debug is enabled */
+  private log(...args: unknown[]): void {
+    if (this.debug) console.log(...args);
   }
 
   /**
@@ -230,7 +240,7 @@ export class SweetlinkBridge {
     const verificationTimeout = setTimeout(() => {
       if (!this.verified && ws.readyState === WebSocket.OPEN) {
         // Server didn't send server-info (old version) - accept for backwards compatibility
-        console.log(
+        this.log(
           `[Sweetlink] Server on port ${port} is old version (no server-info). Accepting for backwards compatibility.`
         );
         this.verified = true;
@@ -239,7 +249,7 @@ export class SweetlinkBridge {
     }, VERIFICATION_TIMEOUT_MS);
 
     ws.onopen = () => {
-      console.log(`[Sweetlink] Connected to server on port ${port}`);
+      this.log(`[Sweetlink] Connected to server on port ${port}`);
       ws.send(JSON.stringify({ type: 'browser-client-ready' }));
     };
 
@@ -250,11 +260,11 @@ export class SweetlinkBridge {
         // Handle confirmation and info messages
         switch (message.type) {
           case 'screenshot-saved':
-            console.log('[Sweetlink] Screenshot saved:', message.path);
+            this.log('[Sweetlink] Screenshot saved:', message.path);
             return;
 
           case 'design-review-saved':
-            console.log('[Sweetlink] Design review saved:', message.reviewPath);
+            this.log('[Sweetlink] Design review saved:', message.reviewPath);
             return;
 
           case 'design-review-error':
@@ -264,12 +274,12 @@ export class SweetlinkBridge {
           case 'server-info': {
             clearTimeout(verificationTimeout);
             const info = message as ServerInfo;
-            console.log('[Sweetlink] Server info received:', info);
+            this.log('[Sweetlink] Server info received:', info);
 
             const serverMatchesApp = info.appPort === null || info.appPort === this.currentAppPort;
 
             if (!serverMatchesApp) {
-              console.log(
+              this.log(
                 `[Sweetlink] Server is for port ${info.appPort}, but we're on port ${this.currentAppPort}. Trying next port...`
               );
               ws.close();
@@ -278,7 +288,7 @@ export class SweetlinkBridge {
               if (nextPort < this.basePort + this.maxPortRetries) {
                 setTimeout(() => this.connectWebSocket(nextPort), PORT_RETRY_DELAY_MS);
               } else {
-                console.log(
+                this.log(
                   `[Sweetlink] No matching server found for port ${this.currentAppPort}. Will retry...`
                 );
                 setTimeout(() => this.connectWebSocket(this.basePort), PORT_SEARCH_FAIL_RETRY_MS);
@@ -289,7 +299,7 @@ export class SweetlinkBridge {
             this.verified = true;
             this.serverInfo = info;
             this.connected = true;
-            console.log(
+            this.log(
               `[Sweetlink] Verified connection to server for port ${info.appPort ?? 'any'} (project: ${info.projectDir})`
             );
             return;
@@ -321,7 +331,7 @@ export class SweetlinkBridge {
 
     ws.onclose = (event) => {
       clearTimeout(verificationTimeout);
-      console.log('[Sweetlink] Disconnected from server');
+      this.log('[Sweetlink] Disconnected from server');
       this.connected = false;
       this.serverInfo = null;
       this.verified = false;
@@ -330,7 +340,7 @@ export class SweetlinkBridge {
       if (event.code === 4001) {
         const nextPort = port + 1;
         if (nextPort < this.basePort + this.maxPortRetries) {
-          console.log(`[Sweetlink] Origin mismatch, trying port ${nextPort}...`);
+          this.log(`[Sweetlink] Origin mismatch, trying port ${nextPort}...`);
           setTimeout(() => this.connectWebSocket(nextPort), PORT_RETRY_DELAY_MS);
           return;
         }
@@ -338,7 +348,7 @@ export class SweetlinkBridge {
 
       // Try to reconnect
       this.reconnectTimeout = setTimeout(() => {
-        console.log('[Sweetlink] Attempting to reconnect...');
+        this.log('[Sweetlink] Attempting to reconnect...');
         this.connectWebSocket(this.basePort);
       }, RECONNECT_DELAY_MS);
     };

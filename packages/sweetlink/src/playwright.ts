@@ -71,14 +71,16 @@ function ensureDir(filePath: string): void {
  * Tries to connect to existing CDP first, then falls back to launching a new instance
  */
 export async function getBrowser(
-  url?: string
+  url?: string,
+  options?: { verbose?: boolean }
 ): Promise<{ browser: Browser; page: Page; isNew: boolean }> {
+  const verbose = options?.verbose ?? false;
   const { chromium } = await getPlaywright();
   const targetUrl = url || DEFAULT_DEV_URL;
 
   // Try connecting to existing CDP
   try {
-    console.log('[Sweetlink] Attempting to connect to existing Chrome...');
+    if (verbose) console.log('[Sweetlink] Attempting to connect to existing Chrome...');
     // Add a short timeout for connection attempt
     const browser = await Promise.race([
       chromium.connectOverCDP(CDP_URL),
@@ -87,7 +89,7 @@ export async function getBrowser(
       ),
     ]);
 
-    console.log('[Sweetlink] Connected to existing Chrome.');
+    if (verbose) console.log('[Sweetlink] Connected to existing Chrome.');
     const contexts = browser.contexts();
     const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
     const pages = context.pages();
@@ -96,14 +98,14 @@ export async function getBrowser(
     let page = pages.find((p) => p.url() === targetUrl);
     if (!page) {
       page = await context.newPage();
-      console.log(`[Sweetlink] Navigating to ${targetUrl}...`);
+      if (verbose) console.log(`[Sweetlink] Navigating to ${targetUrl}...`);
       await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
     }
 
     return { browser, page, isNew: false };
   } catch {
     // Fallback: Launch new browser
-    console.log('[Sweetlink] Launching new browser instance...');
+    if (verbose) console.log('[Sweetlink] Launching new browser instance...');
     const browser = await chromium.launch({
       headless: true,
     });
@@ -114,9 +116,9 @@ export async function getBrowser(
 
     // Navigate to target URL
     try {
-      console.log(`[Sweetlink] Navigating to ${targetUrl}...`);
+      if (verbose) console.log(`[Sweetlink] Navigating to ${targetUrl}...`);
       await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
-      console.log('[Sweetlink] Navigation complete.');
+      if (verbose) console.log('[Sweetlink] Navigation complete.');
     } catch (e) {
       console.warn('[Sweetlink] Navigation timeout or error:', e);
     }
@@ -136,8 +138,11 @@ export async function screenshotViaPlaywright(options: {
   hover?: boolean;
   a11y?: boolean; // Placeholder for future
   url?: string;
+  /** Enable progress logging (default: false) */
+  verbose?: boolean;
 }): Promise<{ buffer: Buffer; width: number; height: number }> {
-  const { browser, page } = await getBrowser(options.url);
+  const verbose = options.verbose ?? false;
+  const { browser, page } = await getBrowser(options.url, { verbose });
 
   try {
     // Set viewport if requested
@@ -148,20 +153,20 @@ export async function screenshotViaPlaywright(options: {
 
     // Handle selector and hover
     if (options.selector) {
-      console.log(`[Sweetlink] Waiting for selector: ${options.selector}`);
+      if (verbose) console.log(`[Sweetlink] Waiting for selector: ${options.selector}`);
       const locator = page.locator(options.selector).first();
       try {
         await locator.waitFor({ state: 'visible', timeout: SELECTOR_TIMEOUT_MS });
-        console.log('[Sweetlink] Selector found and visible.');
+        if (verbose) console.log('[Sweetlink] Selector found and visible.');
       } catch {
         console.error(`[Sweetlink] Timeout waiting for selector: ${options.selector}`);
         throw new Error(`Timeout waiting for selector: ${options.selector}`);
       }
 
       if (options.hover) {
-        console.log('[Sweetlink] Triggering hover...');
+        if (verbose) console.log('[Sweetlink] Triggering hover...');
         await locator.hover();
-        console.log('[Sweetlink] Hover complete.');
+        if (verbose) console.log('[Sweetlink] Hover complete.');
         // Small delay for transitions
         await page.waitForTimeout(HOVER_TRANSITION_DELAY_MS);
       }
@@ -178,16 +183,16 @@ export async function screenshotViaPlaywright(options: {
     let buffer: Buffer;
     if (options.selector) {
       const locator = page.locator(options.selector).first();
-      console.log('[Sweetlink] Capturing element screenshot...');
+      if (verbose) console.log('[Sweetlink] Capturing element screenshot...');
       buffer = await locator.screenshot({ path: options.output });
-      console.log('[Sweetlink] Element screenshot captured.');
+      if (verbose) console.log('[Sweetlink] Element screenshot captured.');
     } else {
-      console.log('[Sweetlink] Capturing full page screenshot...');
+      if (verbose) console.log('[Sweetlink] Capturing full page screenshot...');
       buffer = await page.screenshot({
         path: options.output,
         fullPage: options.fullPage,
       });
-      console.log('[Sweetlink] Full page screenshot captured.');
+      if (verbose) console.log('[Sweetlink] Full page screenshot captured.');
     }
 
     // Get dimensions
@@ -205,8 +210,8 @@ export async function screenshotViaPlaywright(options: {
     // Actually, for a CLI tool, we should probably close the connection/browser we opened.
     // If we connected to existing CDP, browser.close() might close the user's browser?
     // chromium.connectOverCDP returns a Browser that, when closed, disconnects.
-    console.log('[Sweetlink] Closing browser...');
+    if (verbose) console.log('[Sweetlink] Closing browser...');
     await browser.close();
-    console.log('[Sweetlink] Browser closed.');
+    if (verbose) console.log('[Sweetlink] Browser closed.');
   }
 }

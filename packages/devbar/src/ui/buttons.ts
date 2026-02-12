@@ -4,7 +4,7 @@
  * Button creation and styling utilities for the devbar UI.
  */
 
-import { ACTION_BUTTON_BASE_STYLES, FONT_MONO } from '../constants.js';
+import { ACTION_BUTTON_BASE_STYLES, CSS_COLORS, FONT_MONO, withAlpha } from '../constants.js';
 
 /**
  * Get button styling based on active state and color
@@ -16,9 +16,9 @@ export function getButtonStyles(
 ): Record<string, string> {
   return {
     ...ACTION_BUTTON_BASE_STYLES,
-    borderColor: isActive ? color : `${color}80`,
-    backgroundColor: isActive ? `${color}33` : 'transparent',
-    color: isActive ? color : `${color}99`,
+    borderColor: isActive ? color : withAlpha(color, 50),
+    backgroundColor: isActive ? withAlpha(color, 20) : 'transparent',
+    color: isActive ? color : withAlpha(color, 60),
     cursor: isDisabled ? 'not-allowed' : 'pointer',
     opacity: '1',
   };
@@ -33,10 +33,10 @@ function applyButtonHoverEffects(
   isActive: boolean = false
 ): void {
   btn.onmouseenter = () => {
-    btn.style.backgroundColor = `${color}20`;
+    btn.style.backgroundColor = withAlpha(color, 13);
   };
   btn.onmouseleave = () => {
-    btn.style.backgroundColor = isActive ? `${color}33` : 'transparent';
+    btn.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
   };
 }
 
@@ -45,7 +45,7 @@ function applyButtonHoverEffects(
  * Used for modal close buttons and cancel actions.
  */
 export function createCloseButton(onClick: () => void, text = '\u00D7'): HTMLButtonElement {
-  const color = '#6b7280';
+  const color = CSS_COLORS.textMuted;
   const btn = document.createElement('button');
   Object.assign(btn.style, {
     padding: '2px 6px',
@@ -63,7 +63,7 @@ export function createCloseButton(onClick: () => void, text = '\u00D7'): HTMLBut
   });
   btn.textContent = text;
   btn.onmouseenter = () => {
-    btn.style.borderColor = `${color}60`;
+    btn.style.borderColor = withAlpha(color, 38);
   };
   btn.onmouseleave = () => {
     btn.style.borderColor = 'transparent';
@@ -103,7 +103,7 @@ export function createStyledButton(options: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
-    border: `1px solid ${color}60`,
+    border: `1px solid ${withAlpha(color, 38)}`,
     borderRadius,
     color,
     fontFamily: FONT_MONO,

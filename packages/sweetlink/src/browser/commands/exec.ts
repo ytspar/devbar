@@ -49,7 +49,11 @@ function execViaScriptTag(code: string): unknown {
  */
 export function handleExecJS(command: ExecJsCommand): SweetlinkResponse {
   // Security: Block in production environments
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
+  const isNodeProd = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+  const isViteProd =
+    typeof import.meta !== 'undefined' &&
+    (import.meta as unknown as Record<string, Record<string, unknown>>).env?.PROD === true;
+  if (isNodeProd || isViteProd) {
     return errorResponse('exec-js is disabled in production for security reasons');
   }
 

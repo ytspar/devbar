@@ -21,7 +21,6 @@ export {
 export {
   BUTTON_COLORS,
   CATEGORY_COLORS,
-  COLORS,
   DEVBAR_THEME,
   DEVBAR_THEME_LIGHT,
   type DevBarTheme,

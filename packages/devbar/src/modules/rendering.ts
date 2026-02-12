@@ -31,16 +31,18 @@ import {
 } from '../ui/index.js';
 import { getResponsiveMetricVisibility } from './performance.js';
 import {
+  a11yToMarkdown,
   runA11yAudit,
   groupViolationsByImpact,
   getImpactColor,
   getViolationCounts,
   preloadAxe,
 } from '../accessibility.js';
-import type { AxeResult, AxeViolation } from '../accessibility.js';
+import type { AxeViolation } from '../accessibility.js';
 import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
+  consoleLogsToMarkdown,
   copyPathToClipboard,
   handleA11yAudit,
   handleDocumentOutline,
@@ -63,7 +65,7 @@ import {
   attachTextTooltip,
   clearAllTooltips,
 } from './tooltips.js';
-import type { DevBarState, PositionStyle } from './types.js';
+import { closeAllModals, type DevBarState, type PositionStyle } from './types.js';
 
 /**
  * Capture the center of an element's bounding rect as a dot position.
@@ -189,31 +191,29 @@ function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapt
   // Safety: only one overlay at a time. First match wins; close the rest.
   // (Overlay cleanup already performed by render() before calling this.)
   if (state.consoleFilter) {
-    state.showOutlineModal = false;
-    state.showSchemaModal = false;
-    state.showA11yModal = false;
-    state.showDesignReviewConfirm = false;
-    state.showSettingsPopover = false;
+    const filter = state.consoleFilter;
+    closeAllModals(state);
+    state.consoleFilter = filter;
     renderConsolePopup(state, consoleCaptureSingleton);
   } else if (state.showOutlineModal) {
-    state.showSchemaModal = false;
-    state.showA11yModal = false;
-    state.showDesignReviewConfirm = false;
-    state.showSettingsPopover = false;
+    closeAllModals(state);
+    state.showOutlineModal = true;
     renderOutlineModal(state);
   } else if (state.showSchemaModal) {
-    state.showA11yModal = false;
-    state.showDesignReviewConfirm = false;
-    state.showSettingsPopover = false;
+    closeAllModals(state);
+    state.showSchemaModal = true;
     renderSchemaModal(state);
   } else if (state.showA11yModal) {
-    state.showDesignReviewConfirm = false;
-    state.showSettingsPopover = false;
+    closeAllModals(state);
+    state.showA11yModal = true;
     renderA11yModal(state);
   } else if (state.showDesignReviewConfirm) {
-    state.showSettingsPopover = false;
+    closeAllModals(state);
+    state.showDesignReviewConfirm = true;
     renderDesignReviewConfirmModal(state);
   } else if (state.showSettingsPopover) {
+    closeAllModals(state);
+    state.showSettingsPopover = true;
     renderSettingsPopover(state);
   }
 }
@@ -486,40 +486,30 @@ function renderCompact(state: DevBarState): void {
 }
 
 // ============================================================================
-// Expanded State
+// Expanded State — Helper Functions
 // ============================================================================
 
-function renderExpanded(
+/**
+ * Compute the CSS position for the expanded devbar wrapper.
+ * Uses the captured dot position when available for smooth collapse/expand transitions.
+ */
+function computeExpandedPosition(
   state: DevBarState,
-  customControls: {
-    id: string;
-    label: string;
-    onClick: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    variant?: 'default' | 'warning';
-  }[]
-): void {
-  if (!state.container) return;
-
-  const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = state.options;
-  const { errorCount, warningCount, infoCount } = state.getLogCounts();
-
+  position: string,
+  isCentered: boolean
+): PositionStyle {
   // Dot offset from container edge in expanded mode:
   // border (1px) + padding (12px) + half indicator (6px) = 19px from left
   // border (1px) + padding (8px) + half indicator (6px) = 15px from top
   const DOT_OFFSET_LEFT = 19;
   const DOT_OFFSET_TOP = 15;
 
-  const isCentered = position === 'bottom-center';
-
-  let posStyle: PositionStyle;
-
   // Use captured dot position to align the expanded bar's dot with where it was
   // Always use top/left positioning for precise alignment
   if (state.lastDotPosition && !isCentered) {
     const isRight = position.endsWith('right');
 
+    let posStyle: PositionStyle;
     if (isRight) {
       // For right-aligned, fall back to default
       const isTop = position.startsWith('top');
@@ -533,22 +523,32 @@ function renderExpanded(
     }
     // Clear the position after using it
     state.lastDotPosition = null;
-  } else {
-    const positionStyles: Record<string, PositionStyle> = {
-      'bottom-left': { bottom: '20px', left: '80px' },
-      'bottom-right': { bottom: '20px', right: '16px' },
-      'top-left': { top: '20px', left: '80px' },
-      'top-right': { top: '20px', right: '16px' },
-      'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
-    };
-    posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+    return posStyle;
   }
 
-  const sizeOverrides = state.options.sizeOverrides;
+  const positionStyles: Record<string, PositionStyle> = {
+    'bottom-left': { bottom: '20px', left: '80px' },
+    'bottom-right': { bottom: '20px', right: '16px' },
+    'top-left': { top: '20px', left: '80px' },
+    'top-right': { top: '20px', right: '16px' },
+    'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+  };
+  return positionStyles[position] ?? positionStyles['bottom-left'];
+}
 
-  const wrapper = state.container;
-
+/**
+ * Style the expanded wrapper container and attach the double-click-to-collapse handler.
+ */
+function styleExpandedWrapper(
+  state: DevBarState,
+  wrapper: HTMLElement,
+  posStyle: PositionStyle,
+  accentColor: string,
+  isCentered: boolean
+): void {
   state.resetPositionStyles(wrapper);
+
+  const sizeOverrides = state.options.sizeOverrides;
 
   // Calculate size values with overrides or defaults
   // Use fit-content so DevBar only takes space it needs, but allow expansion up to max
@@ -589,8 +589,12 @@ function renderExpanded(
     state.debug.state('Collapsed DevBar (double-click)');
     state.render();
   };
+}
 
-  // Main row - wrapping controlled by CSS media query
+/**
+ * Create the main row flex container used in expanded mode.
+ */
+function createExpandedMainRow(): HTMLDivElement {
   const mainRow = document.createElement('div');
   mainRow.className = 'devbar-main';
   Object.assign(mainRow.style, {
@@ -606,8 +610,13 @@ function renderExpanded(
     fontSize: '0.6875rem',
     lineHeight: '1rem',
   });
+  return mainRow;
+}
 
-  // Connection indicator (click to collapse)
+/**
+ * Create the connection indicator configured to collapse the devbar on click.
+ */
+function createExpandedConnectionIndicator(state: DevBarState): HTMLSpanElement {
   const connIndicator = createConnectionIndicator(state);
   attachTextTooltip(state, connIndicator, () =>
     state.sweetlinkConnected
@@ -621,20 +630,16 @@ function renderExpanded(
     state.debug.state('Collapsed DevBar (connection dot click)');
     state.render();
   };
+  return connIndicator;
+}
 
-  // Status row wrapper - keeps connection dot, info, and badges together
-  const statusRow = document.createElement('div');
-  statusRow.className = 'devbar-status';
-  Object.assign(statusRow.style, {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    flexWrap: 'nowrap',
-    flexShrink: '0',
-  });
-  statusRow.appendChild(connIndicator);
-
-  // Info section
+/**
+ * Create the info section containing breakpoint display and performance metrics.
+ */
+function createInfoSection(
+  state: DevBarState,
+  showMetrics: DevBarState['options']['showMetrics']
+): HTMLDivElement {
   const infoSection = document.createElement('div');
   infoSection.className = 'devbar-info';
   Object.assign(infoSection.style, {
@@ -650,168 +655,237 @@ function renderExpanded(
 
   // Breakpoint info
   if (showMetrics.breakpoint && state.breakpointInfo) {
-    const bp = state.breakpointInfo.tailwindBreakpoint as keyof typeof TAILWIND_BREAKPOINTS;
-    const breakpointData = TAILWIND_BREAKPOINTS[bp];
-
-    const bpSpan = document.createElement('span');
-    bpSpan.className = 'devbar-item';
-    Object.assign(bpSpan.style, { opacity: '0.9', cursor: 'default' });
-
-    // Use HTML tooltip for breakpoint info
-    attachBreakpointTooltip(
-      state,
-      bpSpan,
-      bp,
-      state.breakpointInfo.dimensions,
-      breakpointData?.label || ''
-    );
-
-    let bpText: string = bp;
-    if (bp !== 'base') {
-      bpText =
-        bp === 'sm'
-          ? `${bp} - ${state.breakpointInfo.dimensions.split('x')[0]}`
-          : `${bp} - ${state.breakpointInfo.dimensions}`;
-    }
-    bpSpan.textContent = bpText;
-    infoSection.appendChild(bpSpan);
+    appendBreakpointInfo(state, infoSection);
   }
 
   // Performance stats with responsive visibility
   if (state.perfStats) {
-    const { visible, hidden } = getResponsiveMetricVisibility(state);
-
-    const addSeparator = () => {
-      const sep = document.createElement('span');
-      sep.style.opacity = '0.4';
-      sep.textContent = '|';
-      infoSection.appendChild(sep);
-    };
-
-    // Metric configurations for reuse
-    const metricConfigs: Record<
-      'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize',
-      {
-        label: string;
-        value: string;
-        title: string;
-        description: string;
-        thresholds?: { good: string; needsWork: string; poor: string };
-      }
-    > = {
-      fcp: {
-        label: 'FCP',
-        value: state.perfStats.fcp,
-        title: 'First Contentful Paint (FCP)',
-        description: 'Time until the first text or image renders on screen.',
-        thresholds: { good: '<1.8s', needsWork: '1.8-3s', poor: '>3s' },
-      },
-      lcp: {
-        label: 'LCP',
-        value: state.perfStats.lcp,
-        title: 'Largest Contentful Paint (LCP)',
-        description: 'Time until the largest visible element renders on screen.',
-        thresholds: { good: '<2.5s', needsWork: '2.5-4s', poor: '>4s' },
-      },
-      cls: {
-        label: 'CLS',
-        value: state.perfStats.cls,
-        title: 'Cumulative Layout Shift (CLS)',
-        description: 'Visual stability score. Higher values mean more unexpected layout shifts.',
-        thresholds: { good: '<0.1', needsWork: '0.1-0.25', poor: '>0.25' },
-      },
-      inp: {
-        label: 'INP',
-        value: state.perfStats.inp,
-        title: 'Interaction to Next Paint (INP)',
-        description: 'Responsiveness to user input. Measures the longest interaction delay.',
-        thresholds: { good: '<200ms', needsWork: '200-500ms', poor: '>500ms' },
-      },
-      pageSize: {
-        label: '',
-        value: state.perfStats.totalSize,
-        title: 'Total Page Size',
-        description:
-          'Compressed/transferred size including HTML, CSS, JS, images, and other resources.',
-      },
-    };
-
-    // Render visible metrics
-    for (const metric of visible) {
-      if (!showMetrics[metric]) continue;
-      const config = metricConfigs[metric];
-
-      addSeparator();
-      const span = document.createElement('span');
-      span.className = 'devbar-item';
-      Object.assign(span.style, {
-        opacity: metric === 'pageSize' ? '0.7' : '0.85',
-        cursor: 'default',
-      });
-      span.textContent = config.label ? `${config.label} ${config.value}` : config.value;
-
-      if (config.thresholds) {
-        attachMetricTooltip(state, span, config.title, config.description, config.thresholds);
-      } else {
-        attachInfoTooltip(state, span, config.title, config.description);
-      }
-      infoSection.appendChild(span);
-    }
-
-    // Render ellipsis button for hidden metrics
-    const hiddenMetricsEnabled = hidden.filter((m) => showMetrics[m]);
-    if (hiddenMetricsEnabled.length > 0) {
-      addSeparator();
-      const ellipsisBtn = document.createElement('span');
-      ellipsisBtn.className = 'devbar-item devbar-clickable';
-      Object.assign(ellipsisBtn.style, {
-        opacity: '0.7',
-        cursor: 'pointer',
-        padding: '0 2px',
-      });
-      ellipsisBtn.textContent = '\u00B7\u00B7\u00B7';
-
-      // Attach click-toggle tooltip showing hidden metrics (for mobile support)
-      attachClickToggleTooltip(state, ellipsisBtn, (tooltip) => {
-        addTooltipTitle(state, tooltip, 'More Metrics');
-
-        const metricsContainer = document.createElement('div');
-        Object.assign(metricsContainer.style, {
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-          marginTop: '8px',
-        });
-
-        for (const metric of hiddenMetricsEnabled) {
-          const config = metricConfigs[metric];
-          const row = document.createElement('div');
-          Object.assign(row.style, {
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: '12px',
-          });
-
-          const labelSpan = document.createElement('span');
-          Object.assign(labelSpan.style, { color: CSS_COLORS.textMuted });
-          labelSpan.textContent = config.title.split('(')[0].trim();
-
-          const valueSpan = document.createElement('span');
-          Object.assign(valueSpan.style, { color: CSS_COLORS.text, fontWeight: '500' });
-          valueSpan.textContent = config.value;
-
-          row.appendChild(labelSpan);
-          row.appendChild(valueSpan);
-          metricsContainer.appendChild(row);
-        }
-
-        tooltip.appendChild(metricsContainer);
-      });
-
-      infoSection.appendChild(ellipsisBtn);
-    }
+    appendPerformanceMetrics(state, infoSection, showMetrics);
   }
 
+  return infoSection;
+}
+
+/**
+ * Append the Tailwind breakpoint indicator to the info section.
+ */
+function appendBreakpointInfo(state: DevBarState, infoSection: HTMLDivElement): void {
+  if (!state.breakpointInfo) return;
+
+  const bp = state.breakpointInfo.tailwindBreakpoint as keyof typeof TAILWIND_BREAKPOINTS;
+  const breakpointData = TAILWIND_BREAKPOINTS[bp];
+
+  const bpSpan = document.createElement('span');
+  bpSpan.className = 'devbar-item';
+  Object.assign(bpSpan.style, { opacity: '0.9', cursor: 'default' });
+
+  // Use HTML tooltip for breakpoint info
+  attachBreakpointTooltip(
+    state,
+    bpSpan,
+    bp,
+    state.breakpointInfo.dimensions,
+    breakpointData?.label || ''
+  );
+
+  let bpText: string = bp;
+  if (bp !== 'base') {
+    bpText =
+      bp === 'sm'
+        ? `${bp} - ${state.breakpointInfo.dimensions.split('x')[0]}`
+        : `${bp} - ${state.breakpointInfo.dimensions}`;
+  }
+  bpSpan.textContent = bpText;
+  infoSection.appendChild(bpSpan);
+}
+
+/** Metric config shape used by performance metric rendering. */
+type MetricConfig = {
+  label: string;
+  value: string;
+  title: string;
+  description: string;
+  thresholds?: { good: string; needsWork: string; poor: string };
+};
+
+/**
+ * Build the metric configuration map from current perf stats.
+ */
+function buildMetricConfigs(
+  perfStats: NonNullable<DevBarState['perfStats']>
+): Record<'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize', MetricConfig> {
+  return {
+    fcp: {
+      label: 'FCP',
+      value: perfStats.fcp,
+      title: 'First Contentful Paint (FCP)',
+      description: 'Time until the first text or image renders on screen.',
+      thresholds: { good: '<1.8s', needsWork: '1.8-3s', poor: '>3s' },
+    },
+    lcp: {
+      label: 'LCP',
+      value: perfStats.lcp,
+      title: 'Largest Contentful Paint (LCP)',
+      description: 'Time until the largest visible element renders on screen.',
+      thresholds: { good: '<2.5s', needsWork: '2.5-4s', poor: '>4s' },
+    },
+    cls: {
+      label: 'CLS',
+      value: perfStats.cls,
+      title: 'Cumulative Layout Shift (CLS)',
+      description: 'Visual stability score. Higher values mean more unexpected layout shifts.',
+      thresholds: { good: '<0.1', needsWork: '0.1-0.25', poor: '>0.25' },
+    },
+    inp: {
+      label: 'INP',
+      value: perfStats.inp,
+      title: 'Interaction to Next Paint (INP)',
+      description: 'Responsiveness to user input. Measures the longest interaction delay.',
+      thresholds: { good: '<200ms', needsWork: '200-500ms', poor: '>500ms' },
+    },
+    pageSize: {
+      label: '',
+      value: perfStats.totalSize,
+      title: 'Total Page Size',
+      description:
+        'Compressed/transferred size including HTML, CSS, JS, images, and other resources.',
+    },
+  };
+}
+
+/**
+ * Append performance metric spans (visible metrics + hidden-metrics ellipsis) to the info section.
+ */
+function appendPerformanceMetrics(
+  state: DevBarState,
+  infoSection: HTMLDivElement,
+  showMetrics: DevBarState['options']['showMetrics']
+): void {
+  if (!state.perfStats) return;
+
+  const { visible, hidden } = getResponsiveMetricVisibility(state);
+  const metricConfigs = buildMetricConfigs(state.perfStats);
+
+  const addSeparator = () => {
+    const sep = document.createElement('span');
+    sep.style.opacity = '0.4';
+    sep.textContent = '|';
+    infoSection.appendChild(sep);
+  };
+
+  // Render visible metrics
+  for (const metric of visible) {
+    if (!showMetrics[metric]) continue;
+    const config = metricConfigs[metric];
+
+    addSeparator();
+    const span = document.createElement('span');
+    span.className = 'devbar-item';
+    Object.assign(span.style, {
+      opacity: metric === 'pageSize' ? '0.7' : '0.85',
+      cursor: 'default',
+    });
+    span.textContent = config.label ? `${config.label} ${config.value}` : config.value;
+
+    if (config.thresholds) {
+      attachMetricTooltip(state, span, config.title, config.description, config.thresholds);
+    } else {
+      attachInfoTooltip(state, span, config.title, config.description);
+    }
+    infoSection.appendChild(span);
+  }
+
+  // Render ellipsis button for hidden metrics
+  const hiddenMetricsEnabled = hidden.filter((m) => showMetrics[m]);
+  if (hiddenMetricsEnabled.length > 0) {
+    addSeparator();
+    appendHiddenMetricsEllipsis(state, infoSection, hiddenMetricsEnabled, metricConfigs);
+  }
+}
+
+/**
+ * Append the ellipsis button that reveals hidden metrics in a click-toggle tooltip.
+ */
+function appendHiddenMetricsEllipsis(
+  state: DevBarState,
+  infoSection: HTMLDivElement,
+  hiddenMetricsEnabled: Array<'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize'>,
+  metricConfigs: Record<'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize', MetricConfig>
+): void {
+  const ellipsisBtn = document.createElement('span');
+  ellipsisBtn.className = 'devbar-item devbar-clickable';
+  Object.assign(ellipsisBtn.style, {
+    opacity: '0.7',
+    cursor: 'pointer',
+    padding: '0 2px',
+  });
+  ellipsisBtn.textContent = '\u00B7\u00B7\u00B7';
+
+  // Attach click-toggle tooltip showing hidden metrics (for mobile support)
+  attachClickToggleTooltip(state, ellipsisBtn, (tooltip) => {
+    addTooltipTitle(state, tooltip, 'More Metrics');
+
+    const metricsContainer = document.createElement('div');
+    Object.assign(metricsContainer.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+      marginTop: '8px',
+    });
+
+    for (const metric of hiddenMetricsEnabled) {
+      const config = metricConfigs[metric];
+      const row = document.createElement('div');
+      Object.assign(row.style, {
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: '12px',
+      });
+
+      const labelSpan = document.createElement('span');
+      Object.assign(labelSpan.style, { color: CSS_COLORS.textMuted });
+      labelSpan.textContent = config.title.split('(')[0].trim();
+
+      const valueSpan = document.createElement('span');
+      Object.assign(valueSpan.style, { color: CSS_COLORS.text, fontWeight: '500' });
+      valueSpan.textContent = config.value;
+
+      row.appendChild(labelSpan);
+      row.appendChild(valueSpan);
+      metricsContainer.appendChild(row);
+    }
+
+    tooltip.appendChild(metricsContainer);
+  });
+
+  infoSection.appendChild(ellipsisBtn);
+}
+
+/**
+ * Create the status row containing the connection indicator, info section, and console badges.
+ */
+function createStatusRow(
+  state: DevBarState,
+  showMetrics: DevBarState['options']['showMetrics'],
+  showConsoleBadges: boolean,
+  errorCount: number,
+  warningCount: number,
+  infoCount: number
+): HTMLDivElement {
+  const connIndicator = createExpandedConnectionIndicator(state);
+
+  const statusRow = document.createElement('div');
+  statusRow.className = 'devbar-status';
+  Object.assign(statusRow.style, {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    flexWrap: 'nowrap',
+    flexShrink: '0',
+  });
+  statusRow.appendChild(connIndicator);
+
+  const infoSection = createInfoSection(state, showMetrics);
   statusRow.appendChild(infoSection);
 
   // Console badges - add to status row so they stay with info
@@ -827,9 +901,17 @@ function renderExpanded(
     }
   }
 
-  mainRow.appendChild(statusRow);
+  return statusRow;
+}
 
-  // Action buttons - always render container for consistent height
+/**
+ * Create the action buttons container (screenshot, AI review, outline, schema, a11y, settings, compact).
+ */
+function createActionButtonsContainer(
+  state: DevBarState,
+  showScreenshot: boolean,
+  accentColor: string
+): HTMLDivElement {
   const actionsContainer = document.createElement('div');
   actionsContainer.className = 'devbar-actions';
   if (showScreenshot) {
@@ -841,66 +923,128 @@ function renderExpanded(
   actionsContainer.appendChild(createA11yButton(state));
   actionsContainer.appendChild(createSettingsButton(state));
   actionsContainer.appendChild(createCompactToggleButton(state));
+  return actionsContainer;
+}
+
+/**
+ * Create the custom controls row for user-defined buttons.
+ * Returns null if there are no custom controls.
+ */
+function createCustomControlsRow(
+  customControls: {
+    id: string;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    variant?: 'default' | 'warning';
+  }[],
+  accentColor: string
+): HTMLDivElement | null {
+  if (customControls.length === 0) return null;
+
+  const customRow = document.createElement('div');
+  Object.assign(customRow.style, {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0 0.75rem 0.5rem 0.75rem',
+    borderTop: `1px solid ${accentColor}30`,
+    marginTop: '0',
+    paddingTop: '0.5rem',
+    fontFamily: FONT_MONO,
+    fontSize: '0.6875rem',
+  });
+
+  customControls.forEach((control) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+
+    const color = control.variant === 'warning' ? BUTTON_COLORS.warning : accentColor;
+    const isActive = control.active ?? false;
+    const isDisabled = control.disabled ?? false;
+
+    Object.assign(btn.style, {
+      padding: '4px 10px',
+      backgroundColor: isActive ? `${color}33` : 'transparent',
+      border: `1px solid ${isActive ? color : `${color}60`}`,
+      borderRadius: '6px',
+      color: isActive ? color : `${color}99`,
+      fontSize: '0.625rem',
+      cursor: isDisabled ? 'not-allowed' : 'pointer',
+      opacity: isDisabled ? '0.5' : '1',
+      transition: 'all 150ms',
+    });
+
+    btn.textContent = control.label;
+    btn.disabled = isDisabled;
+
+    if (!isDisabled) {
+      btn.onmouseenter = () => {
+        btn.style.backgroundColor = `${color}20`;
+        btn.style.borderColor = color;
+        btn.style.color = color;
+      };
+      btn.onmouseleave = () => {
+        btn.style.backgroundColor = isActive ? `${color}33` : 'transparent';
+        btn.style.borderColor = isActive ? color : `${color}60`;
+        btn.style.color = isActive ? color : `${color}99`;
+      };
+      btn.onclick = () => control.onClick();
+    }
+
+    customRow.appendChild(btn);
+  });
+
+  return customRow;
+}
+
+// ============================================================================
+// Expanded State — Orchestrator
+// ============================================================================
+
+function renderExpanded(
+  state: DevBarState,
+  customControls: {
+    id: string;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    variant?: 'default' | 'warning';
+  }[]
+): void {
+  if (!state.container) return;
+
+  const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = state.options;
+  const { errorCount, warningCount, infoCount } = state.getLogCounts();
+
+  const isCentered = position === 'bottom-center';
+  const wrapper = state.container;
+
+  // 1. Position and style the wrapper
+  const posStyle = computeExpandedPosition(state, position, isCentered);
+  styleExpandedWrapper(state, wrapper, posStyle, accentColor, isCentered);
+
+  // 2. Build the main row
+  const mainRow = createExpandedMainRow();
+
+  // 3. Status row (connection dot + info metrics + console badges)
+  const statusRow = createStatusRow(
+    state, showMetrics, showConsoleBadges, errorCount, warningCount, infoCount
+  );
+  mainRow.appendChild(statusRow);
+
+  // 4. Action buttons
+  const actionsContainer = createActionButtonsContainer(state, showScreenshot, accentColor);
   mainRow.appendChild(actionsContainer);
 
   wrapper.appendChild(mainRow);
 
-  // Render custom controls row if there are any
-  if (customControls.length > 0) {
-    const customRow = document.createElement('div');
-    Object.assign(customRow.style, {
-      display: 'flex',
-      flexWrap: 'wrap',
-      alignItems: 'center',
-      gap: '0.5rem',
-      padding: '0 0.75rem 0.5rem 0.75rem',
-      borderTop: `1px solid ${accentColor}30`,
-      marginTop: '0',
-      paddingTop: '0.5rem',
-      fontFamily: FONT_MONO,
-      fontSize: '0.6875rem',
-    });
-
-    customControls.forEach((control) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-
-      const color = control.variant === 'warning' ? BUTTON_COLORS.warning : accentColor;
-      const isActive = control.active ?? false;
-      const isDisabled = control.disabled ?? false;
-
-      Object.assign(btn.style, {
-        padding: '4px 10px',
-        backgroundColor: isActive ? `${color}33` : 'transparent',
-        border: `1px solid ${isActive ? color : `${color}60`}`,
-        borderRadius: '6px',
-        color: isActive ? color : `${color}99`,
-        fontSize: '0.625rem',
-        cursor: isDisabled ? 'not-allowed' : 'pointer',
-        opacity: isDisabled ? '0.5' : '1',
-        transition: 'all 150ms',
-      });
-
-      btn.textContent = control.label;
-      btn.disabled = isDisabled;
-
-      if (!isDisabled) {
-        btn.onmouseenter = () => {
-          btn.style.backgroundColor = `${color}20`;
-          btn.style.borderColor = color;
-          btn.style.color = color;
-        };
-        btn.onmouseleave = () => {
-          btn.style.backgroundColor = isActive ? `${color}33` : 'transparent';
-          btn.style.borderColor = isActive ? color : `${color}60`;
-          btn.style.color = isActive ? color : `${color}99`;
-        };
-        btn.onclick = () => control.onClick();
-      }
-
-      customRow.appendChild(btn);
-    });
-
+  // 5. Custom controls row (if any)
+  const customRow = createCustomControlsRow(customControls, accentColor);
+  if (customRow) {
     wrapper.appendChild(customRow);
   }
 }
@@ -943,10 +1087,9 @@ function createConsoleBadge(
     () => `${count} console ${label}${count === 1 ? '' : 's'} (click to view)`
   );
   badge.onclick = () => {
-    state.consoleFilter = state.consoleFilter === type ? null : type;
-    state.showOutlineModal = false;
-    state.showSchemaModal = false;
-    state.showSettingsPopover = false;
+    const newFilter = state.consoleFilter === type ? null : type;
+    closeAllModals(state);
+    state.consoleFilter = newFilter;
     state.render();
   };
 
@@ -1070,33 +1213,17 @@ function createScreenshotButton(state: DevBarState, accentColor: string): HTMLBu
     btn.style.fontSize = '0.5rem';
   } else {
     // Camera icon SVG
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '12');
-    svg.setAttribute('height', '12');
-    svg.setAttribute('viewBox', '0 0 50.8 50.8');
-    svg.style.stroke = 'currentColor';
-    svg.style.fill = 'none';
-
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.setAttribute('stroke-linecap', 'round');
-    g.setAttribute('stroke-linejoin', 'round');
-    g.setAttribute('stroke-width', '4');
-
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute(
-      'd',
-      'M19.844 7.938H7.938v11.905m0 11.113v11.906h11.905m23.019-11.906v11.906H30.956m11.906-23.018V7.938H30.956'
+    btn.appendChild(
+      createSvgIcon(
+        'M19.844 7.938H7.938v11.905m0 11.113v11.906h11.905m23.019-11.906v11.906H30.956m11.906-23.018V7.938H30.956',
+        {
+          viewBox: '0 0 50.8 50.8',
+          stroke: true,
+          strokeWidth: '4',
+          children: [{ type: 'circle', cx: '25.4', cy: '25.4', r: '8.731' }],
+        }
+      )
     );
-
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', '25.4');
-    circle.setAttribute('cy', '25.4');
-    circle.setAttribute('r', '8.731');
-
-    g.appendChild(path);
-    g.appendChild(circle);
-    svg.appendChild(g);
-    btn.appendChild(svg);
   }
 
   return btn;
@@ -1309,57 +1436,22 @@ function createSettingsButton(state: DevBarState): HTMLButtonElement {
   const isActive = state.showSettingsPopover;
   const color = CSS_COLORS.textSecondary;
 
-  Object.assign(btn.style, {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '22px',
-    height: '22px',
-    minWidth: '22px',
-    minHeight: '22px',
-    flexShrink: '0',
-    borderRadius: '50%',
-    border: `1px solid ${isActive ? color : `${color}60`}`,
-    backgroundColor: isActive ? `${color}20` : 'transparent',
-    color: isActive ? color : `${color}99`,
-    cursor: 'pointer',
-    transition: 'all 150ms',
-  });
+  Object.assign(btn.style, getButtonStyles(color, isActive, false));
 
   btn.onclick = () => {
-    state.showSettingsPopover = !state.showSettingsPopover;
-    state.consoleFilter = null;
-    state.showOutlineModal = false;
-    state.showSchemaModal = false;
-    state.showDesignReviewConfirm = false;
+    const wasOpen = state.showSettingsPopover;
+    closeAllModals(state);
+    state.showSettingsPopover = !wasOpen;
     state.render();
   };
 
   // Gear icon SVG
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '12');
-  svg.setAttribute('height', '12');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute(
-    'd',
-    'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'
+  btn.appendChild(
+    createSvgIcon(
+      'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z',
+      { stroke: true, children: [{ type: 'circle', cx: '12', cy: '12', r: '3' }] }
+    )
   );
-  svg.appendChild(path);
-
-  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  circle.setAttribute('cx', '12');
-  circle.setAttribute('cy', '12');
-  circle.setAttribute('r', '3');
-  svg.appendChild(circle);
-
-  btn.appendChild(svg);
   return btn;
 }
 
@@ -1375,22 +1467,8 @@ function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   const { accentColor } = state.options;
   const iconColor = CSS_COLORS.textSecondary;
 
-  Object.assign(btn.style, {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '22px',
-    height: '22px',
-    minWidth: '22px',
-    minHeight: '22px',
-    flexShrink: '0',
-    borderRadius: '50%',
-    border: `1px solid ${accentColor}60`,
-    backgroundColor: 'transparent',
-    color: `${iconColor}99`,
-    cursor: 'pointer',
-    transition: 'all 150ms',
-  });
+  Object.assign(btn.style, getButtonStyles(iconColor, false, false));
+  btn.style.borderColor = `${accentColor}60`;
 
   attachTextTooltip(
     state,
@@ -1415,22 +1493,10 @@ function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   };
 
   // Chevron icon SVG - points right when expanded, left when compact
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', '12');
-  svg.setAttribute('height', '12');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  // Left chevron (<) when expanded to shrink, right chevron (>) when compact to expand
-  path.setAttribute('points', isCompact ? '9 18 15 12 9 6' : '15 18 9 12 15 6');
-  svg.appendChild(path);
-
-  btn.appendChild(svg);
+  const chevronPoints = isCompact ? '9 18 15 12 9 6' : '15 18 9 12 15 6';
+  btn.appendChild(
+    createSvgIcon('', { stroke: true, children: [{ type: 'polyline', points: chevronPoints }] })
+  );
   return btn;
 }
 
@@ -1463,11 +1529,7 @@ function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: Console
     title: `Console ${label} (${logs.length})`,
     onClose: closeModal,
     onCopyMd: async () => {
-      const lines = logs.map((log) => {
-        const time = new Date(log.timestamp).toLocaleTimeString();
-        return `[${time}] ${log.level}: ${log.message}`;
-      });
-      await navigator.clipboard.writeText(lines.join('\n'));
+      await navigator.clipboard.writeText(consoleLogsToMarkdown(logs));
     },
     onSave: () => handleSaveConsoleLogs(state, logs),
     onClear: () => state.clearConsoleLogs(),
@@ -1561,7 +1623,7 @@ function renderOutlineModal(state: DevBarState): void {
   if (outline.length === 0) {
     content.appendChild(createEmptyMessage('No semantic elements found in this document'));
   } else {
-    renderOutlineNodes(outline, content, 0);
+    renderOutlineNodes(outline, content, 0, { lastHeadingLevel: 0 });
   }
 
   modal.appendChild(content);
@@ -1571,17 +1633,42 @@ function renderOutlineModal(state: DevBarState): void {
   document.body.appendChild(overlay);
 }
 
-function renderOutlineNodes(nodes: OutlineNode[], parentEl: HTMLElement, depth: number): void {
+function renderOutlineNodes(
+  nodes: OutlineNode[],
+  parentEl: HTMLElement,
+  depth: number,
+  headingTracker: { lastHeadingLevel: number }
+): void {
   for (const node of nodes) {
+    const isHeading = node.category === 'heading' && node.level > 0;
+    const skippedLevel = isHeading && node.level > headingTracker.lastHeadingLevel + 1;
+
+    if (isHeading) {
+      headingTracker.lastHeadingLevel = node.level;
+    }
+
     const nodeEl = document.createElement('div');
     Object.assign(nodeEl.style, {
       padding: `4px 0 4px ${depth * 16}px`,
     });
 
+    // Warning icon for heading hierarchy breaks
+    if (skippedLevel) {
+      const warn = document.createElement('span');
+      Object.assign(warn.style, {
+        color: CSS_COLORS.error,
+        fontSize: '0.625rem',
+        marginRight: '4px',
+      });
+      warn.textContent = '\u26A0';
+      warn.title = `Heading level skipped (expected h${node.level - 1} or higher before h${node.level})`;
+      nodeEl.appendChild(warn);
+    }
+
     const tagSpan = document.createElement('span');
     const categoryColor = CATEGORY_COLORS[node.category || 'other'] || CATEGORY_COLORS.other;
     Object.assign(tagSpan.style, {
-      color: categoryColor,
+      color: skippedLevel ? CSS_COLORS.error : categoryColor,
       fontSize: '0.6875rem',
       fontWeight: '500',
     });
@@ -1612,7 +1699,7 @@ function renderOutlineNodes(nodes: OutlineNode[], parentEl: HTMLElement, depth: 
     if (node.id) {
       const idSpan = document.createElement('span');
       Object.assign(idSpan.style, {
-        color: '#9ca3af',
+        color: CSS_COLORS.textSecondary,
         fontSize: '0.625rem',
         marginLeft: '6px',
       });
@@ -1623,7 +1710,7 @@ function renderOutlineNodes(nodes: OutlineNode[], parentEl: HTMLElement, depth: 
     parentEl.appendChild(nodeEl);
 
     if (node.children.length > 0) {
-      renderOutlineNodes(node.children, parentEl, depth + 1);
+      renderOutlineNodes(node.children, parentEl, depth + 1, headingTracker);
     }
   }
 }
@@ -1640,12 +1727,15 @@ function renderSchemaModal(state: DevBarState): void {
   const overlay = createModalOverlay(closeModal);
   const modal = createModalBox(color);
 
+  const missingTags = checkMissingTags(schema);
+  const favicons = extractFavicons();
+
   const header = createModalHeader({
     color,
     title: 'Page Schema',
     onClose: closeModal,
     onCopyMd: async () => {
-      const markdown = schemaToMarkdown(schema);
+      const markdown = schemaToMarkdown(schema, { missingTags, favicons });
       await navigator.clipboard.writeText(markdown);
     },
     onSave: () => handleSaveSchema(state),
@@ -1657,9 +1747,6 @@ function renderSchemaModal(state: DevBarState): void {
   modal.appendChild(header);
 
   const content = createModalContent();
-
-  const missingTags = checkMissingTags(schema);
-  const favicons = extractFavicons();
 
   const hasContent =
     schema.jsonLd.length > 0 ||
@@ -1770,7 +1857,7 @@ function renderJsonLdItems(container: HTMLElement, items: unknown[], color: stri
 
     const itemTitle = document.createElement('span');
     Object.assign(itemTitle.style, {
-      color: '#9ca3af',
+      color: CSS_COLORS.textSecondary,
       fontSize: '0.6875rem',
     });
     itemTitle.textContent = `Schema ${i + 1}`;
@@ -1798,10 +1885,10 @@ function renderJsonLdItems(container: HTMLElement, items: unknown[], color: stri
       borderRadius: '4px',
       borderLeft: `2px solid ${color}50`,
       padding: '10px 10px 10px 12px',
-      overflow: 'auto',
       fontSize: '0.625rem',
       margin: '0',
-      maxHeight: '300px',
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
     });
     appendHighlightedJson(codeEl, JSON.stringify(item, null, 2));
     itemEl.appendChild(codeEl);
@@ -2253,65 +2340,6 @@ function renderMissingTagsSection(
 // Accessibility Audit Modal
 // ============================================================================
 
-function formatA11yMarkdown(result: AxeResult): string {
-  const counts = getViolationCounts(result.violations);
-  const lines: string[] = [
-    '# Accessibility Audit Report',
-    '',
-    `**URL:** ${result.url}`,
-    `**Timestamp:** ${result.timestamp}`,
-    '',
-    '## Summary',
-    '',
-    `- **Total violations:** ${counts.total}`,
-    `- Critical: ${counts.critical}`,
-    `- Serious: ${counts.serious}`,
-    `- Moderate: ${counts.moderate}`,
-    `- Minor: ${counts.minor}`,
-    `- Passes: ${result.passes.length}`,
-    `- Incomplete: ${result.incomplete.length}`,
-    '',
-  ];
-
-  if (result.violations.length === 0) {
-    lines.push('No accessibility violations found.');
-    return lines.join('\n');
-  }
-
-  const grouped = groupViolationsByImpact(result.violations);
-  for (const [impact, violations] of grouped) {
-    if (violations.length === 0) continue;
-    lines.push(`## ${impact.charAt(0).toUpperCase() + impact.slice(1)} (${violations.length})`);
-    lines.push('');
-
-    for (const v of violations) {
-      lines.push(`### ${v.id}`);
-      lines.push('');
-      lines.push(`**${v.help}**`);
-      lines.push('');
-      lines.push(v.description);
-      lines.push('');
-      lines.push(`- Help: ${v.helpUrl}`);
-      lines.push(`- Elements affected: ${v.nodes.length}`);
-      lines.push('');
-
-      for (const node of v.nodes.slice(0, 10)) {
-        const html = node.html.length > 120 ? `${node.html.slice(0, 120)}...` : node.html;
-        lines.push(`  - \`${html}\``);
-        if (node.target.length > 0) {
-          lines.push(`    Selector: \`${node.target.join(', ')}\``);
-        }
-      }
-      if (v.nodes.length > 10) {
-        lines.push(`  - ... and ${v.nodes.length - 10} more`);
-      }
-      lines.push('');
-    }
-  }
-
-  return lines.join('\n');
-}
-
 function clearChildren(el: HTMLElement): void {
   while (el.firstChild) {
     el.removeChild(el.firstChild);
@@ -2363,7 +2391,7 @@ function renderA11yModal(state: DevBarState): void {
     // Check modal is still open
     if (!state.showA11yModal) return;
 
-    const markdown = formatA11yMarkdown(result);
+    const markdown = a11yToMarkdown(result);
 
     // Replace modal content
     clearChildren(modal);
@@ -2380,7 +2408,7 @@ function renderA11yModal(state: DevBarState): void {
       onCopyMd: async () => {
         await navigator.clipboard.writeText(markdown);
       },
-      onSave: () => handleSaveA11yAudit(state, markdown),
+      onSave: () => handleSaveA11yAudit(state, result),
       sweetlinkConnected: state.sweetlinkConnected,
       saveLocation: state.options.saveLocation,
       isSaving: state.savingA11yAudit,
@@ -2395,7 +2423,7 @@ function renderA11yModal(state: DevBarState): void {
       Object.assign(successMsg.style, {
         textAlign: 'center',
         padding: '40px',
-        color: '#10b981',
+        color: CSS_COLORS.primary,
         fontSize: '0.875rem',
       });
       successMsg.textContent = 'No accessibility violations found!';
@@ -2638,35 +2666,15 @@ function renderDesignReviewConfirmModal(state: DevBarState): void {
   const closeModal = () => closeDesignReviewConfirm(state);
 
   const overlay = createModalOverlay(closeModal);
-  // Override z-index for this modal to be above others
-  overlay.style.zIndex = '10003';
-
   const modal = createModalBox(color);
   modal.style.maxWidth = '450px';
 
-  // Header with title and close button
-  const header = document.createElement('div');
-  Object.assign(header.style, {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '14px 18px',
-    borderBottom: `1px solid ${color}40`,
-    backgroundColor: `${color}15`,
-  });
-
-  const title = document.createElement('span');
-  Object.assign(title.style, { color, fontSize: '0.875rem', fontWeight: '600' });
-  title.textContent = 'AI Design Review';
-  header.appendChild(title);
-
-  header.appendChild(createCloseButton(closeModal));
-  modal.appendChild(header);
+  // Minimal header (title + close only, no Copy MD / Save)
+  modal.appendChild(createModalHeader({ color, title: 'AI Design Review', onClose: closeModal }));
 
   // Content
-  const content = document.createElement('div');
+  const content = createModalContent();
   Object.assign(content.style, {
-    padding: '18px',
     color: CSS_COLORS.text,
     fontSize: '0.8125rem',
     lineHeight: '1.6',
@@ -2682,26 +2690,25 @@ function renderDesignReviewConfirmModal(state: DevBarState): void {
 
   modal.appendChild(content);
 
-  // Footer with buttons
-  const footer = document.createElement('div');
-  Object.assign(footer.style, {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '10px',
-    padding: '14px 18px',
-    borderTop: `1px solid ${CSS_COLORS.border}`,
-  });
-
-  footer.appendChild(createCloseButton(closeModal, 'Cancel'));
-
+  // Footer with action button
   if (state.apiKeyStatus?.configured) {
+    const footer = document.createElement('div');
+    Object.assign(footer.style, {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      gap: '10px',
+      padding: '14px 18px',
+      borderTop: `1px solid ${CSS_COLORS.border}`,
+    });
+
     const proceedBtn = createStyledButton({ color, text: 'Run Review', padding: '8px 16px' });
     proceedBtn.style.backgroundColor = `${color}20`;
     proceedBtn.onclick = () => proceedWithDesignReview(state);
     footer.appendChild(proceedBtn);
+
+    modal.appendChild(footer);
   }
 
-  modal.appendChild(footer);
   overlay.appendChild(modal);
 
   state.overlayElement = overlay;
@@ -2815,9 +2822,27 @@ function renderApiKeyConfiguredContent(state: DevBarState): HTMLElement {
 function renderSettingsPopover(state: DevBarState): void {
   const { position, accentColor } = state.options;
 
+  // Transparent overlay for click-outside-to-close (consistent with other modals)
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-devbar', 'true');
+  overlay.setAttribute('data-devbar-overlay', 'true');
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    zIndex: '10003',
+  });
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      state.showSettingsPopover = false;
+      state.render();
+    }
+  };
+
   const popover = document.createElement('div');
   popover.setAttribute('data-devbar', 'true');
-  popover.setAttribute('data-devbar-overlay', 'true');
 
   // Position: centered over the devbar on desktop, centered on screen on mobile
   const isTop = position.startsWith('top');
@@ -2878,8 +2903,9 @@ function renderSettingsPopover(state: DevBarState): void {
   popover.appendChild(grid);
   popover.appendChild(createResetSection(state));
 
-  state.overlayElement = popover;
-  document.body.appendChild(popover);
+  overlay.appendChild(popover);
+  state.overlayElement = overlay;
+  document.body.appendChild(overlay);
 }
 
 // ============================================================================
@@ -2917,7 +2943,6 @@ function createSettingsHeader(state: DevBarState): HTMLDivElement {
 
 function createThemeSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
-  const color = CSS_COLORS.textSecondary;
 
   const themeSection = createSettingsSection('Theme');
 
@@ -2926,23 +2951,13 @@ function createThemeSection(state: DevBarState): HTMLDivElement {
 
   const themeModes: ThemeMode[] = ['system', 'dark', 'light'];
   themeModes.forEach((mode) => {
-    const btn = document.createElement('button');
-    const isActive = state.themeMode === mode;
-    Object.assign(btn.style, {
-      padding: '4px 10px',
-      backgroundColor: isActive ? `${accentColor}20` : 'transparent',
-      border: `1px solid ${isActive ? accentColor : `${color}40`}`,
-      borderRadius: '4px',
-      color: isActive ? accentColor : color,
-      fontSize: '0.625rem',
-      cursor: 'pointer',
-      textTransform: 'capitalize',
-      transition: 'all 150ms',
+    const btn = createSettingsRadioButton({
+      label: mode,
+      isActive: state.themeMode === mode,
+      accentColor,
+      onClick: () => setThemeMode(state, mode),
     });
-    btn.textContent = mode;
-    btn.onclick = () => {
-      setThemeMode(state, mode);
-    };
+    btn.style.textTransform = 'capitalize';
     themeOptions.appendChild(btn);
   });
   themeSection.appendChild(themeOptions);
@@ -3241,7 +3256,6 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
 
 function createFeaturesSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
-  const color = CSS_COLORS.textSecondary;
 
   const featuresSection = createSettingsSection('Features');
 
@@ -3292,31 +3306,19 @@ function createFeaturesSection(state: DevBarState): HTMLDivElement {
   ];
 
   saveLocChoices.forEach(({ value, label }) => {
-    const btn = document.createElement('button');
-    const isActive = state.options.saveLocation === value;
     const isLocalDisabled = value === 'local' && !state.sweetlinkConnected;
-
-    Object.assign(btn.style, {
-      padding: '4px 10px',
-      backgroundColor: isActive ? `${accentColor}20` : 'transparent',
-      border: `1px solid ${isActive ? accentColor : `${color}40`}`,
-      borderRadius: '4px',
-      color: isActive ? accentColor : color,
-      fontSize: '0.625rem',
-      cursor: isLocalDisabled ? 'not-allowed' : 'pointer',
-      transition: 'all 150ms',
-      opacity: isLocalDisabled ? '0.5' : '1',
+    const btn = createSettingsRadioButton({
+      label,
+      isActive: state.options.saveLocation === value,
+      accentColor,
+      disabled: isLocalDisabled,
+      disabledTitle: 'Sweetlink not connected',
+      onClick: () => {
+        state.options.saveLocation = value;
+        state.settingsManager.saveSettings({ saveLocation: value });
+        state.render();
+      },
     });
-    btn.textContent = label;
-    if (isLocalDisabled) {
-      btn.title = 'Sweetlink not connected';
-    }
-    btn.onclick = () => {
-      if (isLocalDisabled) return;
-      state.options.saveLocation = value;
-      state.settingsManager.saveSettings({ saveLocation: value });
-      state.render();
-    };
     saveLocOptions.appendChild(btn);
   });
 
@@ -3428,6 +3430,52 @@ function createSettingsSection(title: string, hasBorder = true): HTMLDivElement 
   section.appendChild(sectionTitle);
 
   return section;
+}
+
+function createSettingsRadioButton(options: {
+  label: string;
+  isActive: boolean;
+  accentColor: string;
+  disabled?: boolean;
+  disabledTitle?: string;
+  onClick: () => void;
+}): HTMLButtonElement {
+  const { label, isActive, accentColor, disabled, disabledTitle, onClick } = options;
+  const color = CSS_COLORS.textSecondary;
+
+  const btn = document.createElement('button');
+  Object.assign(btn.style, {
+    padding: '4px 10px',
+    backgroundColor: isActive ? `${accentColor}20` : 'transparent',
+    border: `1px solid ${isActive ? accentColor : 'transparent'}`,
+    borderRadius: '4px',
+    color: isActive ? accentColor : color,
+    fontFamily: FONT_MONO,
+    fontSize: '0.625rem',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    transition: 'all 150ms',
+    opacity: disabled ? '0.5' : '1',
+  });
+  btn.textContent = label;
+
+  if (disabled) {
+    if (disabledTitle) btn.title = disabledTitle;
+  } else if (!isActive) {
+    btn.onmouseenter = () => {
+      btn.style.borderColor = `${color}`;
+      btn.style.backgroundColor = `${color}10`;
+    };
+    btn.onmouseleave = () => {
+      btn.style.borderColor = 'transparent';
+      btn.style.backgroundColor = 'transparent';
+    };
+  }
+
+  btn.onclick = () => {
+    if (!disabled) onClick();
+  };
+
+  return btn;
 }
 
 function createToggleRow(

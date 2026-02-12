@@ -5,7 +5,7 @@
  * Functions receive DevBarState (or specific parameters) rather than using `this`.
  */
 
-export type { DevBarState, PositionStyle } from './types.js';
+export { closeAllModals, type DevBarState, type PositionStyle } from './types.js';
 
 export { setupKeyboardShortcuts } from './keyboard.js';
 export {

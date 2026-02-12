@@ -68,7 +68,7 @@ describe('setupKeyboardShortcuts', () => {
       expect(state.render).toHaveBeenCalled();
     });
 
-    it('prioritizes settings popover over other modals', () => {
+    it('closes all modals at once including settings popover', () => {
       const state = createMockState({
         showSettingsPopover: true,
         showOutlineModal: true,
@@ -78,11 +78,10 @@ describe('setupKeyboardShortcuts', () => {
 
       state.keydownHandler!(createKeyboardEvent('Escape'));
 
-      // Settings popover should be closed first
+      // closeAllModals closes everything in a single pass
       expect(state.showSettingsPopover).toBe(false);
-      // Other modals should still be open
-      expect(state.showOutlineModal).toBe(true);
-      expect(state.consoleFilter).toBe('error');
+      expect(state.showOutlineModal).toBe(false);
+      expect(state.consoleFilter).toBeNull();
     });
 
     it('closes console filter on Escape', () => {

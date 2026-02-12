@@ -4,7 +4,7 @@
  * Button creation and styling utilities for the devbar UI.
  */
 
-import { ACTION_BUTTON_BASE_STYLES } from '../constants.js';
+import { ACTION_BUTTON_BASE_STYLES, FONT_MONO } from '../constants.js';
 
 /**
  * Get button styling based on active state and color
@@ -56,6 +56,7 @@ export function createCloseButton(onClick: () => void, text = '\u00D7'): HTMLBut
     border: '1px solid transparent',
     borderRadius: '6px',
     color,
+    fontFamily: FONT_MONO,
     fontSize: '0.875rem',
     cursor: 'pointer',
     transition: 'all 150ms',
@@ -105,6 +106,7 @@ export function createStyledButton(options: {
     border: `1px solid ${color}60`,
     borderRadius,
     color,
+    fontFamily: FONT_MONO,
     fontSize,
     cursor: 'pointer',
     transition: 'all 150ms',

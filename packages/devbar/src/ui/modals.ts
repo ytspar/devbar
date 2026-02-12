@@ -4,7 +4,7 @@
  * Modal creation utilities for the devbar UI.
  */
 
-import { MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';
+import { CSS_COLORS, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES } from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
 import { createCloseButton, createStyledButton } from './buttons.js';
 
@@ -15,10 +15,11 @@ export interface ModalConfig {
   color: string;
   title: string;
   onClose: () => void;
-  onCopyMd: () => Promise<void>;
+  /** When omitted, header renders only title + close button (minimal mode for confirm dialogs) */
+  onCopyMd?: () => Promise<void>;
   onSave?: () => void;
   onClear?: () => void;
-  sweetlinkConnected: boolean;
+  sweetlinkConnected?: boolean;
   /** Save location preference: 'auto', 'local' (via sweetlink), or 'download' (browser) */
   saveLocation?: 'auto' | 'local' | 'download';
   /** Whether a save operation is in progress */
@@ -58,7 +59,7 @@ export function createModalBox(color: string): HTMLDivElement {
  * Create modal header with title, copy/save/close buttons
  */
 export function createModalHeader(config: ModalConfig): HTMLDivElement {
-  const { color, title, onClose, onCopyMd, onSave, onClear, sweetlinkConnected, saveLocation = 'auto', isSaving, savedPath } =
+  const { color, title, onClose, onCopyMd, onSave, onClear, sweetlinkConnected = false, saveLocation = 'auto', isSaving, savedPath } =
     config;
   const effectiveSave = resolveSaveLocation(saveLocation, sweetlinkConnected);
 
@@ -86,20 +87,22 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
   const headerButtons = document.createElement('div');
   Object.assign(headerButtons.style, { display: 'flex', gap: '10px', alignItems: 'center' });
 
-  // Copy MD button
-  const copyBtn = createStyledButton({ color, text: 'Copy MD' });
-  copyBtn.onclick = async () => {
-    try {
-      await onCopyMd();
-      copyBtn.textContent = 'Copied!';
-      setTimeout(() => {
-        copyBtn.textContent = 'Copy MD';
-      }, 1500);
-    } catch {
-      console.error('[GlobalDevBar] Failed to copy to clipboard');
-    }
-  };
-  headerButtons.appendChild(copyBtn);
+  // Copy MD button (only in data modals, not confirm dialogs)
+  if (onCopyMd) {
+    const copyBtn = createStyledButton({ color, text: 'Copy MD' });
+    copyBtn.onclick = async () => {
+      try {
+        await onCopyMd();
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy MD';
+        }, 1500);
+      } catch {
+        console.error('[GlobalDevBar] Failed to copy to clipboard');
+      }
+    };
+    headerButtons.appendChild(copyBtn);
+  }
 
   // Save/Download button
   if (onSave) {
@@ -167,7 +170,7 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     // Path/status text
     const pathText = document.createElement('span');
     Object.assign(pathText.style, {
-      color: '#9ca3af',
+      color: CSS_COLORS.textSecondary,
       fontFamily: 'monospace',
       fontSize: '0.6875rem',
       wordBreak: 'break-all',
@@ -201,7 +204,7 @@ export function createEmptyMessage(text: string): HTMLDivElement {
   const emptyMsg = document.createElement('div');
   Object.assign(emptyMsg.style, {
     textAlign: 'center',
-    color: '#6b7280',
+    color: CSS_COLORS.textMuted,
     fontSize: '0.875rem',
     padding: '40px',
   });
@@ -237,7 +240,7 @@ export function createInfoBox(
 
   if (typeof content === 'string') {
     const textEl = document.createElement('div');
-    Object.assign(textEl.style, { color: '#94a3b8' });
+    Object.assign(textEl.style, { color: CSS_COLORS.textSecondary });
     textEl.textContent = content;
     box.appendChild(textEl);
   } else {

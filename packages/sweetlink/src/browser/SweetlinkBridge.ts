@@ -302,7 +302,6 @@ export class SweetlinkBridge {
         }
 
         const command = message as SweetlinkCommand;
-        console.log('[Sweetlink] Received command:', command.type);
 
         const response = await this.handleCommand(command);
         ws.send(JSON.stringify(response));

@@ -48,11 +48,11 @@ export function clearAllTooltips(state: DevBarState): void {
 }
 
 /** Add a bold title to tooltip (metric name, feature name, etc.) */
-export function addTooltipTitle(state: DevBarState, container: HTMLElement, title: string): void {
+export function addTooltipTitle(state: DevBarState, container: HTMLElement, title: string, color?: string): void {
   const titleEl = document.createElement('div');
-  const accentColor = state.settingsManager.get('accentColor') || CSS_COLORS.primary;
+  const titleColor = color || state.settingsManager.get('accentColor') || CSS_COLORS.primary;
   Object.assign(titleEl.style, {
-    color: accentColor,
+    color: titleColor,
     fontWeight: '600',
     marginBottom: '4px',
   });
@@ -238,6 +238,8 @@ export function attachHtmlTooltip(
   };
 
   element.onmouseenter = () => {
+    // Suppress tooltips while a modal overlay is open
+    if (state.overlayElement) return;
     cancelHide();
     // Clear any existing tooltip for this element first
     if (tooltipEl) {
@@ -314,6 +316,8 @@ export function attachClickToggleTooltip(
   // Click toggles pinned state
   element.onclick = (e) => {
     e.stopPropagation();
+    // Suppress tooltips while a modal overlay is open
+    if (state.overlayElement) return;
     if (isPinned) {
       // Unpin and hide
       isPinned = false;
@@ -329,6 +333,8 @@ export function attachClickToggleTooltip(
 
   // Hover shows tooltip (if not pinned)
   element.onmouseenter = () => {
+    // Suppress tooltips while a modal overlay is open
+    if (state.overlayElement) return;
     if (!isPinned) {
       setActiveState(true);
       showTooltip();
@@ -570,16 +576,7 @@ export function attachButtonTooltip(
 ): void {
   attachHtmlTooltip(state, element, (tooltip) => {
     const helpers = {
-      addTitle: (title: string) => {
-        const titleEl = document.createElement('div');
-        Object.assign(titleEl.style, {
-          color: titleColor,
-          fontWeight: '600',
-          marginBottom: '4px',
-        });
-        titleEl.textContent = title;
-        tooltip.appendChild(titleEl);
-      },
+      addTitle: (title: string) => addTooltipTitle(state, tooltip, title, titleColor),
       addDescription: (desc: string) => addTooltipDescription(tooltip, desc),
       addSectionHeader: (header: string) => addTooltipSectionHeader(tooltip, header),
       addShortcut: (key: string, desc: string) => addTooltipShortcut(tooltip, key, desc),

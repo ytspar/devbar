@@ -191,3 +191,65 @@ export function getCachedResult(): AxeResult | null {
 export function formatViolation(violation: AxeViolation): string {
   return `[${violation.impact.toUpperCase()}] ${violation.help}\n${violation.description}\n${violation.nodes.length} element(s) affected`;
 }
+
+/**
+ * Convert an axe-core audit result to markdown format
+ */
+export function a11yToMarkdown(result: AxeResult): string {
+  const counts = getViolationCounts(result.violations);
+  const lines: string[] = [
+    '# Accessibility Audit Report',
+    '',
+    `**URL:** ${result.url}`,
+    `**Timestamp:** ${result.timestamp}`,
+    '',
+    '## Summary',
+    '',
+    `- **Total violations:** ${counts.total}`,
+    `- Critical: ${counts.critical}`,
+    `- Serious: ${counts.serious}`,
+    `- Moderate: ${counts.moderate}`,
+    `- Minor: ${counts.minor}`,
+    `- Passes: ${result.passes.length}`,
+    `- Incomplete: ${result.incomplete.length}`,
+    '',
+  ];
+
+  if (result.violations.length === 0) {
+    lines.push('No accessibility violations found.');
+    return lines.join('\n');
+  }
+
+  const grouped = groupViolationsByImpact(result.violations);
+  for (const [impact, violations] of grouped) {
+    if (violations.length === 0) continue;
+    lines.push(`## ${impact.charAt(0).toUpperCase() + impact.slice(1)} (${violations.length})`);
+    lines.push('');
+
+    for (const v of violations) {
+      lines.push(`### ${v.id}`);
+      lines.push('');
+      lines.push(`**${v.help}**`);
+      lines.push('');
+      lines.push(v.description);
+      lines.push('');
+      lines.push(`- Help: ${v.helpUrl}`);
+      lines.push(`- Elements affected: ${v.nodes.length}`);
+      lines.push('');
+
+      for (const node of v.nodes.slice(0, 10)) {
+        const html = node.html.length > 120 ? `${node.html.slice(0, 120)}...` : node.html;
+        lines.push(`  - \`${html}\``);
+        if (node.target.length > 0) {
+          lines.push(`    Selector: \`${node.target.join(', ')}\``);
+        }
+      }
+      if (v.nodes.length > 10) {
+        lines.push(`  - ... and ${v.nodes.length - 10} more`);
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}

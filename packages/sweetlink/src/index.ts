@@ -28,11 +28,9 @@ export {
   DEVBAR_SCREENSHOT_QUALITY,
   delay,
   extractBase64FromDataUrl,
-  gatherScreenshotMetadata,
   getMediaTypeFromDataUrl,
   prepareForCapture,
   type ScaleCanvasOptions,
-  type ScreenshotMetadata,
   scaleCanvas,
   type ToDataUrlOptions,
 } from './browser/screenshotUtils.js';

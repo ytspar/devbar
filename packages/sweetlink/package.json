@@ -97,17 +97,21 @@
   },
   "private": false,
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "test": "vitest run",
     "dev": "node dist/cli/sweetlink-dev.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist claude-context"
   },
   "peerDependencies": {
+    "axe-core": "^4.0.0",
     "playwright": "^1.40.0",
     "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"
   },
   "peerDependenciesMeta": {
+    "axe-core": {
+      "optional": true
+    },
     "playwright": {
       "optional": true
     },

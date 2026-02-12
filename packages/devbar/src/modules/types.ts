@@ -149,3 +149,18 @@ export interface DevBarState {
   applySettings: (settings: DevBarSettings) => void;
   clearConsoleLogs: () => void;
 }
+
+/**
+ * Close all modals, popovers, and console filter.
+ *
+ * Resets every overlay flag to its closed state.  Does NOT call
+ * `state.render()` — callers decide whether a re-render is needed.
+ */
+export function closeAllModals(state: DevBarState): void {
+  state.showOutlineModal = false;
+  state.showSchemaModal = false;
+  state.showA11yModal = false;
+  state.showSettingsPopover = false;
+  state.showDesignReviewConfirm = false;
+  state.consoleFilter = null;
+}

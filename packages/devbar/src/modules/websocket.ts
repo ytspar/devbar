@@ -128,6 +128,391 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
   };
 }
 
+// ============================================================================
+// Per-command handler functions (private, called from handleSweetlinkCommand)
+// ============================================================================
+
+async function handleScreenshotCommand(
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'screenshot' }
+): Promise<void> {
+  const targetElement = command.selector
+    ? (document.querySelector(command.selector) as HTMLElement) || document.body
+    : document.body;
+  const html2canvas = await getHtml2Canvas();
+  const canvas = await html2canvas(targetElement, {
+    logging: false,
+    useCORS: true,
+    allowTaint: true,
+  });
+  ws.send(
+    JSON.stringify({
+      success: true,
+      data: {
+        screenshot: canvas.toDataURL('image/png'),
+        width: canvas.width,
+        height: canvas.height,
+        selector: command.selector || 'body',
+      },
+      timestamp: Date.now(),
+    })
+  );
+}
+
+function handleGetLogsCommand(
+  state: DevBarState,
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'get-logs' }
+): void {
+  let logs = state.consoleLogs;
+  if (command.filter) {
+    const filter = command.filter.toLowerCase();
+    logs = logs.filter(
+      (log) => log.level.includes(filter) || log.message.toLowerCase().includes(filter)
+    );
+  }
+  ws.send(JSON.stringify({ success: true, data: logs, timestamp: Date.now() }));
+}
+
+function handleQueryDomCommand(
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'query-dom' }
+): void {
+  if (command.selector) {
+    const elements = Array.from(document.querySelectorAll(command.selector));
+    const results = elements.map((el: Element) => {
+      if (command.property)
+        return (el as unknown as Record<string, unknown>)[command.property] ?? null;
+      return {
+        tagName: el.tagName,
+        className: el.className,
+        id: el.id,
+        textContent: el.textContent?.trim().slice(0, 100),
+      };
+    });
+    ws.send(
+      JSON.stringify({
+        success: true,
+        data: { count: results.length, results },
+        timestamp: Date.now(),
+      })
+    );
+  }
+}
+
+function handleExecJsCommand(
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'exec-js' }
+): void {
+  if (command.code && typeof command.code === 'string' && command.code.length <= 10000) {
+    try {
+      // Use indirect eval to avoid strict mode issues
+      const indirectEval = eval;
+      const result = indirectEval(command.code);
+      ws.send(JSON.stringify({ success: true, data: result, timestamp: Date.now() }));
+    } catch (e) {
+      ws.send(
+        JSON.stringify({
+          success: false,
+          error: e instanceof Error ? e.message : 'Execution failed',
+          timestamp: Date.now(),
+        })
+      );
+    }
+  }
+}
+
+async function handleGetA11yCommand(
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'get-a11y' }
+): Promise<void> {
+  try {
+    const result = await runA11yAudit(command.forceRefresh);
+    const violationsByImpact: Record<string, number> = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+    for (const v of result.violations) {
+      violationsByImpact[v.impact] = (violationsByImpact[v.impact] || 0) + 1;
+    }
+    ws.send(JSON.stringify({
+      success: true,
+      data: {
+        result,
+        summary: {
+          totalViolations: result.violations.length,
+          totalPasses: result.passes.length,
+          totalIncomplete: result.incomplete.length,
+          byImpact: violationsByImpact,
+        },
+        url: window.location.href,
+        title: document.title,
+        timestamp: Date.now(),
+      },
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    ws.send(JSON.stringify({
+      success: false,
+      error: e instanceof Error ? e.message : 'Accessibility audit failed',
+      timestamp: Date.now(),
+    }));
+  }
+}
+
+function handleGetOutlineCommand(ws: WebSocket): void {
+  try {
+    const outline = extractDocumentOutline();
+    const markdown = outlineToMarkdown(outline);
+    ws.send(JSON.stringify({
+      success: true,
+      data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    ws.send(JSON.stringify({
+      success: false,
+      error: e instanceof Error ? e.message : 'Outline extraction failed',
+      timestamp: Date.now(),
+    }));
+  }
+}
+
+function handleGetSchemaCommand(ws: WebSocket): void {
+  try {
+    const schema = extractPageSchema();
+    const markdown = schemaToMarkdown(schema);
+    ws.send(JSON.stringify({
+      success: true,
+      data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    ws.send(JSON.stringify({
+      success: false,
+      error: e instanceof Error ? e.message : 'Schema extraction failed',
+      timestamp: Date.now(),
+    }));
+  }
+}
+
+async function handleGetVitalsCommand(ws: WebSocket): Promise<void> {
+  try {
+    const paintEntries = performance.getEntriesByType('paint');
+    const fcpEntry = paintEntries.find((e) => e.name === 'first-contentful-paint');
+    const fcp = fcpEntry ? Math.round(fcpEntry.startTime) : null;
+
+    // Collect LCP, CLS from buffered observers
+    const collectEntries = (entryType: string): Promise<PerformanceEntry[]> =>
+      new Promise((resolve) => {
+        try {
+          const entries: PerformanceEntry[] = [];
+          const observer = new PerformanceObserver((list) => { entries.push(...list.getEntries()); });
+          observer.observe({ type: entryType, buffered: true });
+          setTimeout(() => { observer.disconnect(); resolve(entries); }, 0);
+        } catch { resolve([]); }
+      });
+
+    const [lcpEntries, layoutShiftEntries, eventEntries] = await Promise.all([
+      collectEntries('largest-contentful-paint'),
+      collectEntries('layout-shift'),
+      collectEntries('event'),
+    ]);
+
+    const lcp = lcpEntries.length > 0 ? Math.round((lcpEntries[lcpEntries.length - 1] as PerformanceEntry & { startTime: number }).startTime) : null;
+
+    let cls: number | null = null;
+    if (layoutShiftEntries.length > 0) {
+      let clsValue = 0;
+      for (const entry of layoutShiftEntries) {
+        const se = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
+        if (!se.hadRecentInput) clsValue += se.value;
+      }
+      cls = Math.round(clsValue * 1000) / 1000;
+    }
+
+    let inp: number | null = null;
+    if (eventEntries.length > 0) {
+      let worstDuration = 0;
+      for (const entry of eventEntries) {
+        const ee = entry as PerformanceEntry & { duration: number };
+        if (ee.duration > worstDuration) worstDuration = ee.duration;
+      }
+      inp = Math.round(worstDuration);
+    }
+
+    let pageSize: number | null = null;
+    const resourceEntries = performance.getEntriesByType('resource');
+    let totalSize = 0;
+    for (const entry of resourceEntries) {
+      totalSize += (entry as PerformanceResourceTiming).transferSize || 0;
+    }
+    if (totalSize > 0) pageSize = totalSize;
+
+    const vitals = { fcp, lcp, cls, inp, pageSize, url: window.location.href, title: document.title, timestamp: Date.now() };
+    const parts: string[] = [];
+    if (fcp !== null) parts.push(`FCP: ${fcp}ms`);
+    if (lcp !== null) parts.push(`LCP: ${lcp}ms`);
+    if (cls !== null) parts.push(`CLS: ${cls}`);
+    if (inp !== null) parts.push(`INP: ${inp}ms`);
+    if (pageSize !== null) parts.push(`Page size: ${Math.round(pageSize / 1024)}KB`);
+
+    ws.send(JSON.stringify({
+      success: true,
+      data: { vitals, summary: parts.join(', ') || 'No metrics available yet' },
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    ws.send(JSON.stringify({
+      success: false,
+      error: e instanceof Error ? e.message : 'Vitals collection failed',
+      timestamp: Date.now(),
+    }));
+  }
+}
+
+function handleRefreshCommand(ws: WebSocket): void {
+  try {
+    window.location.reload();
+    ws.send(JSON.stringify({ success: true, timestamp: Date.now() }));
+  } catch (e) {
+    ws.send(JSON.stringify({
+      success: false,
+      error: e instanceof Error ? e.message : 'Refresh failed',
+      timestamp: Date.now(),
+    }));
+  }
+}
+
+function handleScreenshotSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'screenshot-saved' }
+): void {
+  handleNotification(state, 'screenshot', command.path, SCREENSHOT_NOTIFICATION_MS);
+}
+
+function handleDesignReviewSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'design-review-saved' }
+): void {
+  state.designReviewInProgress = false;
+  handleNotification(state, 'designReview', command.reviewPath, DESIGN_REVIEW_NOTIFICATION_MS);
+}
+
+function handleDesignReviewErrorCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'design-review-error' }
+): void {
+  state.designReviewInProgress = false;
+  state.designReviewError = command.error || 'Unknown error';
+  console.error('[GlobalDevBar] Design review failed:', command.error);
+  // Clear error after notification duration
+  if (state.designReviewErrorTimeout) clearTimeout(state.designReviewErrorTimeout);
+  state.designReviewErrorTimeout = setTimeout(() => {
+    state.designReviewError = null;
+    state.render();
+  }, DESIGN_REVIEW_NOTIFICATION_MS);
+  state.render();
+}
+
+function handleApiKeyStatusCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'api-key-status' }
+): void {
+  // Properties are at top level of the response
+  const response = command as unknown as {
+    configured?: boolean;
+    model?: string;
+    pricing?: { input: number; output: number };
+  };
+  state.apiKeyStatus = {
+    configured: response.configured ?? false,
+    model: response.model,
+    pricing: response.pricing,
+  };
+  // Re-render to update the confirmation modal
+  state.render();
+}
+
+function handleOutlineSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'outline-saved' }
+): void {
+  handleNotification(state, 'outline', command.outlinePath, SCREENSHOT_NOTIFICATION_MS);
+}
+
+function handleOutlineErrorCommand(
+  command: SweetlinkCommand & { type: 'outline-error' }
+): void {
+  console.error('[GlobalDevBar] Outline save failed:', command.error);
+}
+
+function handleSchemaSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'schema-saved' }
+): void {
+  handleNotification(state, 'schema', command.schemaPath, SCREENSHOT_NOTIFICATION_MS);
+}
+
+function handleSchemaErrorCommand(
+  command: SweetlinkCommand & { type: 'schema-error' }
+): void {
+  console.error('[GlobalDevBar] Schema save failed:', command.error);
+}
+
+function handleConsoleLogsSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'console-logs-saved' }
+): void {
+  handleNotification(state, 'consoleLogs', command.consoleLogsPath, SCREENSHOT_NOTIFICATION_MS);
+}
+
+function handleConsoleLogsErrorCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'console-logs-error' }
+): void {
+  state.savingConsoleLogs = false;
+  console.error('[GlobalDevBar] Console logs save failed:', command.error);
+  state.render();
+}
+
+function handleA11ySavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'a11y-saved' }
+): void {
+  handleNotification(state, 'a11y', command.a11yPath, SCREENSHOT_NOTIFICATION_MS);
+}
+
+function handleA11yErrorCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'a11y-error' }
+): void {
+  state.savingA11yAudit = false;
+  console.error('[GlobalDevBar] A11y save failed:', command.error);
+  state.render();
+}
+
+function handleSettingsLoadedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'settings-loaded' }
+): void {
+  handleSettingsLoaded(state, command.settings as DevBarSettings | null);
+}
+
+function handleSettingsSavedCommand(
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'settings-saved' }
+): void {
+  state.debug.state('Settings saved to server', { path: command.settingsPath });
+}
+
+function handleSettingsErrorCommand(
+  command: SweetlinkCommand & { type: 'settings-error' }
+): void {
+  console.error('[GlobalDevBar] Settings operation failed:', command.error);
+}
+
+// ============================================================================
+// Main command dispatcher
+// ============================================================================
+
 /**
  * Handle an incoming Sweetlink command from the WebSocket.
  */
@@ -136,310 +521,79 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
   switch (command.type) {
-    case 'screenshot': {
-      const targetElement = command.selector
-        ? (document.querySelector(command.selector) as HTMLElement) || document.body
-        : document.body;
-      const html2canvas = await getHtml2Canvas();
-      const canvas = await html2canvas(targetElement, {
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-      });
-      ws.send(
-        JSON.stringify({
-          success: true,
-          data: {
-            screenshot: canvas.toDataURL('image/png'),
-            width: canvas.width,
-            height: canvas.height,
-            selector: command.selector || 'body',
-          },
-          timestamp: Date.now(),
-        })
-      );
+    case 'screenshot':
+      await handleScreenshotCommand(ws, command);
       break;
-    }
-    case 'get-logs': {
-      let logs = state.consoleLogs;
-      if (command.filter) {
-        const filter = command.filter.toLowerCase();
-        logs = logs.filter(
-          (log) => log.level.includes(filter) || log.message.toLowerCase().includes(filter)
-        );
-      }
-      ws.send(JSON.stringify({ success: true, data: logs, timestamp: Date.now() }));
+    case 'get-logs':
+      handleGetLogsCommand(state, ws, command);
       break;
-    }
-    case 'query-dom': {
-      if (command.selector) {
-        const elements = Array.from(document.querySelectorAll(command.selector));
-        const results = elements.map((el: Element) => {
-          if (command.property)
-            return (el as unknown as Record<string, unknown>)[command.property] ?? null;
-          return {
-            tagName: el.tagName,
-            className: el.className,
-            id: el.id,
-            textContent: el.textContent?.trim().slice(0, 100),
-          };
-        });
-        ws.send(
-          JSON.stringify({
-            success: true,
-            data: { count: results.length, results },
-            timestamp: Date.now(),
-          })
-        );
-      }
+    case 'query-dom':
+      handleQueryDomCommand(ws, command);
       break;
-    }
-    case 'exec-js': {
-      if (command.code && typeof command.code === 'string' && command.code.length <= 10000) {
-        try {
-          // Use indirect eval to avoid strict mode issues
-          const indirectEval = eval;
-          const result = indirectEval(command.code);
-          ws.send(JSON.stringify({ success: true, data: result, timestamp: Date.now() }));
-        } catch (e) {
-          ws.send(
-            JSON.stringify({
-              success: false,
-              error: e instanceof Error ? e.message : 'Execution failed',
-              timestamp: Date.now(),
-            })
-          );
-        }
-      }
+    case 'exec-js':
+      handleExecJsCommand(ws, command);
       break;
-    }
-    case 'get-a11y': {
-      try {
-        const result = await runA11yAudit(command.forceRefresh);
-        const violationsByImpact: Record<string, number> = { critical: 0, serious: 0, moderate: 0, minor: 0 };
-        for (const v of result.violations) {
-          violationsByImpact[v.impact] = (violationsByImpact[v.impact] || 0) + 1;
-        }
-        ws.send(JSON.stringify({
-          success: true,
-          data: {
-            result,
-            summary: {
-              totalViolations: result.violations.length,
-              totalPasses: result.passes.length,
-              totalIncomplete: result.incomplete.length,
-              byImpact: violationsByImpact,
-            },
-            url: window.location.href,
-            title: document.title,
-            timestamp: Date.now(),
-          },
-          timestamp: Date.now(),
-        }));
-      } catch (e) {
-        ws.send(JSON.stringify({
-          success: false,
-          error: e instanceof Error ? e.message : 'Accessibility audit failed',
-          timestamp: Date.now(),
-        }));
-      }
+    case 'get-a11y':
+      await handleGetA11yCommand(ws, command);
       break;
-    }
-    case 'get-outline': {
-      try {
-        const outline = extractDocumentOutline();
-        const markdown = outlineToMarkdown(outline);
-        ws.send(JSON.stringify({
-          success: true,
-          data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
-          timestamp: Date.now(),
-        }));
-      } catch (e) {
-        ws.send(JSON.stringify({
-          success: false,
-          error: e instanceof Error ? e.message : 'Outline extraction failed',
-          timestamp: Date.now(),
-        }));
-      }
+    case 'get-outline':
+      handleGetOutlineCommand(ws);
       break;
-    }
-    case 'get-schema': {
-      try {
-        const schema = extractPageSchema();
-        const markdown = schemaToMarkdown(schema);
-        ws.send(JSON.stringify({
-          success: true,
-          data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
-          timestamp: Date.now(),
-        }));
-      } catch (e) {
-        ws.send(JSON.stringify({
-          success: false,
-          error: e instanceof Error ? e.message : 'Schema extraction failed',
-          timestamp: Date.now(),
-        }));
-      }
+    case 'get-schema':
+      handleGetSchemaCommand(ws);
       break;
-    }
-    case 'get-vitals': {
-      try {
-        const paintEntries = performance.getEntriesByType('paint');
-        const fcpEntry = paintEntries.find((e) => e.name === 'first-contentful-paint');
-        const fcp = fcpEntry ? Math.round(fcpEntry.startTime) : null;
-
-        // Collect LCP, CLS from buffered observers
-        const collectEntries = (entryType: string): Promise<PerformanceEntry[]> =>
-          new Promise((resolve) => {
-            try {
-              const entries: PerformanceEntry[] = [];
-              const observer = new PerformanceObserver((list) => { entries.push(...list.getEntries()); });
-              observer.observe({ type: entryType, buffered: true });
-              setTimeout(() => { observer.disconnect(); resolve(entries); }, 0);
-            } catch { resolve([]); }
-          });
-
-        const [lcpEntries, layoutShiftEntries, eventEntries] = await Promise.all([
-          collectEntries('largest-contentful-paint'),
-          collectEntries('layout-shift'),
-          collectEntries('event'),
-        ]);
-
-        const lcp = lcpEntries.length > 0 ? Math.round((lcpEntries[lcpEntries.length - 1] as PerformanceEntry & { startTime: number }).startTime) : null;
-
-        let cls: number | null = null;
-        if (layoutShiftEntries.length > 0) {
-          let clsValue = 0;
-          for (const entry of layoutShiftEntries) {
-            const se = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
-            if (!se.hadRecentInput) clsValue += se.value;
-          }
-          cls = Math.round(clsValue * 1000) / 1000;
-        }
-
-        let inp: number | null = null;
-        if (eventEntries.length > 0) {
-          let worstDuration = 0;
-          for (const entry of eventEntries) {
-            const ee = entry as PerformanceEntry & { duration: number };
-            if (ee.duration > worstDuration) worstDuration = ee.duration;
-          }
-          inp = Math.round(worstDuration);
-        }
-
-        let pageSize: number | null = null;
-        const resourceEntries = performance.getEntriesByType('resource');
-        let totalSize = 0;
-        for (const entry of resourceEntries) {
-          totalSize += (entry as PerformanceResourceTiming).transferSize || 0;
-        }
-        if (totalSize > 0) pageSize = totalSize;
-
-        const vitals = { fcp, lcp, cls, inp, pageSize, url: window.location.href, title: document.title, timestamp: Date.now() };
-        const parts: string[] = [];
-        if (fcp !== null) parts.push(`FCP: ${fcp}ms`);
-        if (lcp !== null) parts.push(`LCP: ${lcp}ms`);
-        if (cls !== null) parts.push(`CLS: ${cls}`);
-        if (inp !== null) parts.push(`INP: ${inp}ms`);
-        if (pageSize !== null) parts.push(`Page size: ${Math.round(pageSize / 1024)}KB`);
-
-        ws.send(JSON.stringify({
-          success: true,
-          data: { vitals, summary: parts.join(', ') || 'No metrics available yet' },
-          timestamp: Date.now(),
-        }));
-      } catch (e) {
-        ws.send(JSON.stringify({
-          success: false,
-          error: e instanceof Error ? e.message : 'Vitals collection failed',
-          timestamp: Date.now(),
-        }));
-      }
+    case 'get-vitals':
+      await handleGetVitalsCommand(ws);
       break;
-    }
-    case 'refresh': {
-      try {
-        window.location.reload();
-        ws.send(JSON.stringify({ success: true, timestamp: Date.now() }));
-      } catch (e) {
-        ws.send(JSON.stringify({
-          success: false,
-          error: e instanceof Error ? e.message : 'Refresh failed',
-          timestamp: Date.now(),
-        }));
-      }
+    case 'refresh':
+      handleRefreshCommand(ws);
       break;
-    }
     case 'screenshot-saved':
-      handleNotification(state, 'screenshot', command.path, SCREENSHOT_NOTIFICATION_MS);
+      handleScreenshotSavedCommand(state, command);
       break;
     case 'design-review-saved':
-      state.designReviewInProgress = false;
-      handleNotification(state, 'designReview', command.reviewPath, DESIGN_REVIEW_NOTIFICATION_MS);
+      handleDesignReviewSavedCommand(state, command);
       break;
     case 'design-review-error':
-      state.designReviewInProgress = false;
-      state.designReviewError = command.error || 'Unknown error';
-      console.error('[GlobalDevBar] Design review failed:', command.error);
-      // Clear error after notification duration
-      if (state.designReviewErrorTimeout) clearTimeout(state.designReviewErrorTimeout);
-      state.designReviewErrorTimeout = setTimeout(() => {
-        state.designReviewError = null;
-        state.render();
-      }, DESIGN_REVIEW_NOTIFICATION_MS);
-      state.render();
+      handleDesignReviewErrorCommand(state, command);
       break;
-    case 'api-key-status': {
-      // Properties are at top level of the response
-      const response = command as unknown as {
-        configured?: boolean;
-        model?: string;
-        pricing?: { input: number; output: number };
-      };
-      state.apiKeyStatus = {
-        configured: response.configured ?? false,
-        model: response.model,
-        pricing: response.pricing,
-      };
-      // Re-render to update the confirmation modal
-      state.render();
+    case 'api-key-status':
+      handleApiKeyStatusCommand(state, command);
       break;
-    }
     case 'outline-saved':
-      handleNotification(state, 'outline', command.outlinePath, SCREENSHOT_NOTIFICATION_MS);
+      handleOutlineSavedCommand(state, command);
       break;
     case 'outline-error':
-      console.error('[GlobalDevBar] Outline save failed:', command.error);
+      handleOutlineErrorCommand(command);
       break;
     case 'schema-saved':
-      handleNotification(state, 'schema', command.schemaPath, SCREENSHOT_NOTIFICATION_MS);
+      handleSchemaSavedCommand(state, command);
       break;
     case 'schema-error':
-      console.error('[GlobalDevBar] Schema save failed:', command.error);
+      handleSchemaErrorCommand(command);
       break;
     case 'console-logs-saved':
-      handleNotification(state, 'consoleLogs', command.consoleLogsPath, SCREENSHOT_NOTIFICATION_MS);
+      handleConsoleLogsSavedCommand(state, command);
       break;
     case 'console-logs-error':
-      state.savingConsoleLogs = false;
-      console.error('[GlobalDevBar] Console logs save failed:', command.error);
-      state.render();
+      handleConsoleLogsErrorCommand(state, command);
       break;
     case 'a11y-saved':
-      handleNotification(state, 'a11y', command.a11yPath, SCREENSHOT_NOTIFICATION_MS);
+      handleA11ySavedCommand(state, command);
       break;
     case 'a11y-error':
-      state.savingA11yAudit = false;
-      console.error('[GlobalDevBar] A11y save failed:', command.error);
-      state.render();
+      handleA11yErrorCommand(state, command);
       break;
     case 'settings-loaded':
-      handleSettingsLoaded(state, command.settings as DevBarSettings | null);
+      handleSettingsLoadedCommand(state, command);
       break;
     case 'settings-saved':
-      state.debug.state('Settings saved to server', { path: command.settingsPath });
+      handleSettingsSavedCommand(state, command);
       break;
     case 'settings-error':
-      console.error('[GlobalDevBar] Settings operation failed:', command.error);
+      handleSettingsErrorCommand(command);
+      break;
+    default:
       break;
   }
 }

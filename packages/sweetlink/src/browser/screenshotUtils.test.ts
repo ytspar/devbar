@@ -6,7 +6,6 @@ import {
   DEVBAR_SCREENSHOT_QUALITY,
   delay,
   extractBase64FromDataUrl,
-  gatherScreenshotMetadata,
   getMediaTypeFromDataUrl,
   prepareForCapture,
   scaleCanvas,
@@ -218,40 +217,3 @@ describe('delay', () => {
   });
 });
 
-describe('gatherScreenshotMetadata', () => {
-  let mockCanvas: HTMLCanvasElement;
-
-  beforeEach(() => {
-    mockCanvas = {
-      width: 800,
-      height: 600,
-    } as HTMLCanvasElement;
-  });
-
-  it('captures basic metadata', () => {
-    const metadata = gatherScreenshotMetadata(mockCanvas);
-
-    expect(metadata.width).toBe(800);
-    expect(metadata.height).toBe(600);
-    expect(metadata.timestamp).toBeGreaterThan(0);
-    expect(metadata.url).toBeDefined();
-  });
-
-  it('captures viewport dimensions', () => {
-    const metadata = gatherScreenshotMetadata(mockCanvas);
-
-    expect(metadata.viewport).toBeDefined();
-    expect(metadata.viewport!.width).toBe(window.innerWidth);
-    expect(metadata.viewport!.height).toBe(window.innerHeight);
-  });
-
-  it('uses default selector when not provided', () => {
-    const metadata = gatherScreenshotMetadata(mockCanvas);
-    expect(metadata.selector).toBe('body');
-  });
-
-  it('uses custom selector when provided', () => {
-    const metadata = gatherScreenshotMetadata(mockCanvas, '#main-content');
-    expect(metadata.selector).toBe('#main-content');
-  });
-});

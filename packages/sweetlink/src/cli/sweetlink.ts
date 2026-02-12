@@ -13,13 +13,10 @@ import { WebSocket } from 'ws';
 import { detectCDP, getNetworkRequestsViaCDP } from '../cdp.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
-
-/** Default screenshot output directory (relative to project root) */
-const DEFAULT_SCREENSHOT_DIR = '.tmp/sweetlink-screenshots';
+import { DEFAULT_WS_PORT, WS_PORT_OFFSET } from '../types.js';
+import { SCREENSHOT_DIR } from '../urlUtils.js';
 
 /** Port scanning constants for cleanup */
-const DEFAULT_WS_PORT = 9223;
-const WS_PORT_OFFSET = 6223;
 const MAX_PORT_RETRIES = 10;
 const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
 
@@ -102,7 +99,7 @@ function ensureDir(filePath: string): void {
 function getDefaultScreenshotPath(): string {
   const projectRoot = findProjectRoot();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return path.join(projectRoot, DEFAULT_SCREENSHOT_DIR, `screenshot-${timestamp}.png`);
+  return path.join(projectRoot, SCREENSHOT_DIR, `screenshot-${timestamp}.png`);
 }
 
 /**

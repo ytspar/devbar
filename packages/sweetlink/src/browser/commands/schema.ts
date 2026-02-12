@@ -91,8 +91,21 @@ export function extractPageSchema(): PageSchema {
 /**
  * Convert a page schema to markdown format
  */
-export function schemaToMarkdown(schema: PageSchema): string {
+export function schemaToMarkdown(
+  schema: PageSchema,
+  extras?: { missingTags?: MissingTag[]; favicons?: MetaImage[] }
+): string {
   let md = '';
+
+  // Missing tags section (prepended when provided)
+  if (extras?.missingTags && extras.missingTags.length > 0) {
+    md += '## Missing Tags\n\n';
+    for (const tag of extras.missingTags) {
+      const icon = tag.severity === 'error' ? '\u2718' : '\u26a0';
+      md += `- ${icon} **${tag.tag}** (${tag.severity}) \u2014 ${tag.hint}\n`;
+    }
+    md += '\n';
+  }
 
   if (schema.jsonLd.length > 0) {
     md += '## JSON-LD\n\n';
@@ -135,6 +148,16 @@ export function schemaToMarkdown(schema: PageSchema): string {
       }
       md += '\n';
     });
+  }
+
+  // Favicons section (appended when provided)
+  if (extras?.favicons && extras.favicons.length > 0) {
+    md += '## Favicons\n\n';
+    for (const fav of extras.favicons) {
+      const size = fav.size ? ` (${fav.size})` : '';
+      md += `- **${fav.label}**${size}: ${fav.url}\n`;
+    }
+    md += '\n';
   }
 
   if (!md) {

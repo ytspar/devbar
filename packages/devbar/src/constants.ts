@@ -8,7 +8,7 @@ import type { ThemeMode } from './types.js';
 
 // Re-export shared constants from sweetlink's browser modules to avoid pulling in Node.js-only code
 export { MAX_CONSOLE_LOGS } from '@ytspar/sweetlink/browser/consoleCapture';
-export { DEVBAR_SCREENSHOT_QUALITY } from '@ytspar/sweetlink/browser/screenshotUtils';
+
 
 // ============================================================================
 // Reconnection Settings
@@ -285,9 +285,6 @@ type DevBarThemeLight = typeof DEVBAR_THEME_LIGHT;
 // ============================================================================
 // Shorthand Exports (for cleaner imports)
 // ============================================================================
-
-/** Shorthand for common colors (static dark theme - use CSS_COLORS for theming) */
-export const COLORS = DEVBAR_THEME.colors;
 
 /** Shorthand for font stack */
 export const FONT_MONO = DEVBAR_THEME.fonts.mono;

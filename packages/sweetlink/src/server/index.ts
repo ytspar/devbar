@@ -190,7 +190,7 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         // Return package info for direct HTTP requests (not WebSocket upgrades)
         res.writeHead(200, {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'http://localhost',
+          'Access-Control-Allow-Origin': '*',
         });
         res.end(
           JSON.stringify(
@@ -791,6 +791,9 @@ function setupServerHandlers(server: WebSocketServer) {
     const origin = req.headers.origin;
 
     // Validate origin - only accept localhost connections
+    if (!origin) {
+      console.warn(`[Sweetlink] Connection from ${clientId} has no Origin header (non-browser client)`);
+    }
     if (origin) {
       const isLocalhost =
         origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');

@@ -350,7 +350,7 @@ describe('createEmptyMessage', () => {
 
   it('uses gray text color', () => {
     const msg = createEmptyMessage('Empty');
-    expect(msg.style.color).toBe('#6b7280');
+    expect(msg.style.color).toBe('var(--devbar-color-text-muted)');
   });
 });
 
@@ -372,7 +372,7 @@ describe('createInfoBox', () => {
     // Content text
     const contentEl = box.children[1] as HTMLElement;
     expect(contentEl.textContent).toBe('Some details here');
-    expect(contentEl.style.color).toBe('#94a3b8');
+    expect(contentEl.style.color).toBe('var(--devbar-color-text-secondary)');
   });
 
   it('creates an info box with HTML element content', () => {

@@ -4,6 +4,11 @@
  * SVG icon creation utilities for the devbar UI.
  */
 
+/** Descriptor for additional SVG child elements (circles, polylines, etc.) */
+export type SvgChild =
+  | { type: 'circle'; cx: string; cy: string; r: string }
+  | { type: 'polyline'; points: string };
+
 /**
  * Create an SVG icon element with the given path data
  */
@@ -13,6 +18,9 @@ export function createSvgIcon(
     viewBox?: string;
     fill?: boolean;
     stroke?: boolean;
+    /** Stroke width (default: 2 when stroke is true) */
+    strokeWidth?: string;
+    children?: SvgChild[];
   }
 ): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -26,11 +34,32 @@ export function createSvgIcon(
   if (options.stroke) {
     svg.style.stroke = 'currentColor';
     svg.style.fill = 'none';
+    svg.setAttribute('stroke-width', options.strokeWidth || '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
   }
 
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathData);
-  svg.appendChild(path);
+  if (pathData) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    svg.appendChild(path);
+  }
+
+  if (options.children) {
+    for (const child of options.children) {
+      if (child.type === 'circle') {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', child.cx);
+        circle.setAttribute('cy', child.cy);
+        circle.setAttribute('r', child.r);
+        svg.appendChild(circle);
+      } else if (child.type === 'polyline') {
+        const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+        polyline.setAttribute('points', child.points);
+        svg.appendChild(polyline);
+      }
+    }
+  }
 
   return svg;
 }

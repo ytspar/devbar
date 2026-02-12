@@ -23,9 +23,7 @@
  */
 
 import { closeSweetlink, initSweetlink } from './server/index.js';
-
-/** Port offset from app port to calculate WebSocket port */
-const WS_PORT_OFFSET = 6223;
+import { WS_PORT_OFFSET } from './types.js';
 
 /** Default app port if not specified */
 const DEFAULT_APP_PORT = 3000;

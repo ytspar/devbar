@@ -6,7 +6,7 @@
 
 export { createCloseButton, createStyledButton, getButtonStyles } from './buttons.js';
 export { type CardConfig, createCard, getCardContent, setCardEmpty } from './cards.js';
-export { createSvgIcon } from './icons.js';
+export { createSvgIcon, type SvgChild } from './icons.js';
 export {
   createEmptyMessage,
   createInfoBox,

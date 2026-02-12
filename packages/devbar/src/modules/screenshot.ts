@@ -11,8 +11,10 @@ import {
   SCREENSHOT_SCALE,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
+import { a11yToMarkdown } from '../accessibility.js';
+import type { AxeResult } from '../accessibility.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
-import { extractPageSchema, schemaToMarkdown } from '../schema.js';
+import { checkMissingTags, extractFavicons, extractPageSchema, schemaToMarkdown } from '../schema.js';
 import { resolveSaveLocation } from '../settings.js';
 import {
   canvasToDataUrl,
@@ -22,7 +24,7 @@ import {
   downloadFile,
   prepareForCapture,
 } from '../utils.js';
-import type { DevBarState } from './types.js';
+import { closeAllModals, type DevBarState } from './types.js';
 
 /**
  * Generic save-or-download helper that encapsulates the shared pattern used by
@@ -296,12 +298,8 @@ export function showDesignReviewConfirmation(state: DevBarState): void {
   }
 
   // Show the confirmation modal
+  closeAllModals(state);
   state.showDesignReviewConfirm = true;
-  state.showOutlineModal = false;
-  state.showSchemaModal = false;
-  state.showA11yModal = false;
-  state.showSettingsPopover = false;
-  state.consoleFilter = null;
   state.render();
 }
 
@@ -358,11 +356,9 @@ export function proceedWithDesignReview(state: DevBarState): void {
  * Toggle the document outline modal.
  */
 export function handleDocumentOutline(state: DevBarState): void {
-  state.showOutlineModal = !state.showOutlineModal;
-  state.showSchemaModal = false;
-  state.showA11yModal = false;
-  state.showSettingsPopover = false;
-  state.consoleFilter = null;
+  const wasOpen = state.showOutlineModal;
+  closeAllModals(state);
+  state.showOutlineModal = !wasOpen;
   state.render();
 }
 
@@ -370,11 +366,9 @@ export function handleDocumentOutline(state: DevBarState): void {
  * Toggle the page schema modal.
  */
 export function handlePageSchema(state: DevBarState): void {
-  state.showSchemaModal = !state.showSchemaModal;
-  state.showOutlineModal = false;
-  state.showA11yModal = false;
-  state.showSettingsPopover = false;
-  state.consoleFilter = null;
+  const wasOpen = state.showSchemaModal;
+  closeAllModals(state);
+  state.showSchemaModal = !wasOpen;
   state.render();
 }
 
@@ -382,19 +376,19 @@ export function handlePageSchema(state: DevBarState): void {
  * Toggle the accessibility audit modal.
  */
 export function handleA11yAudit(state: DevBarState): void {
-  state.showA11yModal = !state.showA11yModal;
-  state.showOutlineModal = false;
-  state.showSchemaModal = false;
-  state.showSettingsPopover = false;
-  state.consoleFilter = null;
+  const wasOpen = state.showA11yModal;
+  closeAllModals(state);
+  state.showA11yModal = !wasOpen;
   state.render();
 }
 
 /**
  * Save the accessibility audit report to file via WebSocket.
  */
-export function handleSaveA11yAudit(state: DevBarState, markdown: string): void {
+export function handleSaveA11yAudit(state: DevBarState, result: AxeResult): void {
   if (state.savingA11yAudit) return;
+
+  const markdown = a11yToMarkdown(result);
 
   saveOrDownload(state, {
     type: 'save-a11y',
@@ -430,6 +424,21 @@ export function handleSaveOutline(state: DevBarState): void {
 }
 
 /**
+ * Convert console logs to markdown format
+ */
+export function consoleLogsToMarkdown(
+  logs: { level: string; message: string; timestamp: number }[]
+): string {
+  if (logs.length === 0) return '_No logs_';
+  return logs
+    .map((log) => {
+      const time = new Date(log.timestamp).toLocaleTimeString();
+      return `- **[${time}]** \`${log.level}\` ${log.message}`;
+    })
+    .join('\n');
+}
+
+/**
  * Save console logs to file via WebSocket.
  */
 export function handleSaveConsoleLogs(
@@ -438,12 +447,7 @@ export function handleSaveConsoleLogs(
 ): void {
   if (state.savingConsoleLogs) return;
 
-  // Format logs as markdown
-  const lines = filteredLogs.map((log) => {
-    const time = new Date(log.timestamp).toLocaleTimeString();
-    return `- **[${time}]** \`${log.level}\` ${log.message}`;
-  });
-  const markdown = lines.length > 0 ? lines.join('\n') : '_No logs_';
+  const markdown = consoleLogsToMarkdown(filteredLogs);
 
   saveOrDownload(state, {
     type: 'save-console-logs',
@@ -464,7 +468,9 @@ export function handleSaveSchema(state: DevBarState): void {
   if (state.savingSchema) return; // Prevent repeated clicks
 
   const schema = extractPageSchema();
-  const markdown = schemaToMarkdown(schema);
+  const missingTags = checkMissingTags(schema);
+  const favicons = extractFavicons();
+  const markdown = schemaToMarkdown(schema, { missingTags, favicons });
 
   saveOrDownload(state, {
     type: 'save-schema',

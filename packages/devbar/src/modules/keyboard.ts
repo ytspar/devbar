@@ -4,7 +4,7 @@
  * Extracted from GlobalDevBar to reduce file size.
  */
 
-import type { DevBarState } from './types.js';
+import { closeAllModals, type DevBarState } from './types.js';
 
 /**
  * Setup keyboard shortcuts for the DevBar.
@@ -17,23 +17,15 @@ export function setupKeyboardShortcuts(state: DevBarState): void {
   state.keydownHandler = (e: KeyboardEvent) => {
     // Close modals/popovers on Escape
     if (e.key === 'Escape') {
-      if (state.showSettingsPopover) {
-        state.showSettingsPopover = false;
-        state.render();
-        return;
-      }
       if (
+        state.showSettingsPopover ||
         state.consoleFilter ||
         state.showOutlineModal ||
         state.showSchemaModal ||
         state.showA11yModal ||
         state.showDesignReviewConfirm
       ) {
-        state.consoleFilter = null;
-        state.showOutlineModal = false;
-        state.showSchemaModal = false;
-        state.showA11yModal = false;
-        state.showDesignReviewConfirm = false;
+        closeAllModals(state);
         state.render();
         return;
       }

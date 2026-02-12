@@ -8,10 +8,8 @@
 import * as fs from 'fs';
 import puppeteer, {
   type Browser,
-  type ConsoleMessage,
   type HTTPRequest,
   type HTTPResponse,
-  type Metrics,
   type Page,
 } from 'puppeteer-core';
 import { parseViewport } from './viewportUtils.js';
@@ -28,7 +26,6 @@ const NETWORK_IDLE_TIMEOUT_MS = 10000;
 const NETWORK_IDLE_TIME_MS = 500;
 const SELECTOR_TIMEOUT_MS = 5000;
 const HOVER_TRANSITION_DELAY_MS = 300;
-const CONSOLE_LOG_COLLECT_DELAY_MS = 1000;
 const NETWORK_REQUEST_COLLECT_DELAY_MS = 2000;
 
 /**
@@ -196,83 +193,6 @@ export async function screenshotViaCDP(options: {
   }
 }
 
-/**
- * Get console logs from the page
- */
-export async function getConsoleLogsViaCDP(): Promise<
-  Array<{
-    type: string;
-    text: string;
-    location?: { url?: string; lineNumber?: number };
-    timestamp: number;
-  }>
-> {
-  const browser = await getCDPBrowser();
-
-  try {
-    const page = await findLocalDevPage(browser);
-
-    const logs: Array<{
-      type: string;
-      text: string;
-      location?: { url?: string; lineNumber?: number };
-      timestamp: number;
-    }> = [];
-
-    // Set up console log listener
-    page.on('console', (msg: ConsoleMessage) => {
-      logs.push({
-        type: msg.type(),
-        text: msg.text(),
-        location: msg.location(),
-        timestamp: Date.now(),
-      });
-    });
-
-    // Wait a bit to collect any immediate logs
-    await new Promise((resolve) => setTimeout(resolve, CONSOLE_LOG_COLLECT_DELAY_MS));
-
-    return logs;
-  } finally {
-    await browser.disconnect();
-  }
-}
-
-/**
- * Query DOM elements via CDP
- */
-export async function queryDOMViaCDP(selector: string, property?: string): Promise<unknown[]> {
-  const browser = await getCDPBrowser();
-
-  try {
-    const page = await findLocalDevPage(browser);
-
-    const result = await page.evaluate(
-      (sel: string, prop: string | undefined) => {
-        const elements = Array.from(document.querySelectorAll(sel));
-
-        return elements.map((el) => {
-          if (prop) {
-            return (el as unknown as Record<string, unknown>)[prop];
-          }
-
-          return {
-            tagName: el.tagName,
-            className: el.className,
-            id: el.id,
-            textContent: el.textContent?.trim().slice(0, 100),
-          };
-        });
-      },
-      selector,
-      property
-    );
-
-    return result;
-  } finally {
-    await browser.disconnect();
-  }
-}
 
 // Maximum allowed code length for CDP execution
 const MAX_CDP_CODE_LENGTH = 10000;
@@ -385,88 +305,3 @@ export async function getNetworkRequestsViaCDP(options?: { filter?: string }): P
   }
 }
 
-/**
- * Get page performance metrics
- */
-export async function getPerformanceMetricsViaCDP(): Promise<{
-  metrics: Metrics;
-  timings: {
-    domContentLoaded: number;
-    loadComplete: number;
-    domInteractive: number;
-    firstPaint: number | undefined;
-    firstContentfulPaint: number | undefined;
-  };
-}> {
-  const browser = await getCDPBrowser();
-
-  try {
-    const page = await findLocalDevPage(browser);
-
-    const metrics = await page.metrics();
-
-    const performanceTimings = await page.evaluate(() => {
-      const perfData = window.performance.timing;
-      const navigation = window.performance.getEntriesByType(
-        'navigation'
-      )[0] as PerformanceNavigationTiming;
-
-      return {
-        domContentLoaded:
-          navigation?.domContentLoadedEventEnd - navigation?.domContentLoadedEventStart,
-        loadComplete: navigation?.loadEventEnd - navigation?.loadEventStart,
-        domInteractive: perfData.domInteractive - perfData.navigationStart,
-        firstPaint: performance.getEntriesByType('paint').find((e) => e.name === 'first-paint')
-          ?.startTime,
-        firstContentfulPaint: performance
-          .getEntriesByType('paint')
-          .find((e) => e.name === 'first-contentful-paint')?.startTime,
-      };
-    });
-
-    return {
-      metrics,
-      timings: performanceTimings,
-    };
-  } finally {
-    await browser.disconnect();
-  }
-}
-
-/**
- * Test CDP connection and return browser info
- */
-export async function testCDPConnection(): Promise<{
-  connected: boolean;
-  browserVersion?: string;
-  pages?: Array<{ url: string; title: string }>;
-  error?: string;
-}> {
-  try {
-    const response = await fetch(`${CDP_URL}/json/version`);
-    const versionInfo = await response.json();
-
-    const browser = await getCDPBrowser();
-    const pages = await browser.pages();
-
-    const pageInfo = await Promise.all(
-      pages.map(async (page) => ({
-        url: page.url(),
-        title: await page.title(),
-      }))
-    );
-
-    await browser.disconnect();
-
-    return {
-      connected: true,
-      browserVersion: versionInfo.Browser,
-      pages: pageInfo,
-    };
-  } catch (error) {
-    return {
-      connected: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}

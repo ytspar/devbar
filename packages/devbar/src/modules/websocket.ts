@@ -129,6 +129,77 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
 }
 
 // ============================================================================
+// Handler factories — reduce repetition for saved/error command pairs
+// ============================================================================
+
+/**
+ * Create a handler for "*-saved" commands that show a notification.
+ * @param notificationType - The notification type key (e.g. 'outline', 'schema')
+ * @param pathField - The command field containing the saved file path
+ * @param durationMs - How long to show the notification
+ */
+function createSavedHandler<T extends SweetlinkCommand>(
+  notificationType: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
+  pathField: keyof T & string,
+  durationMs: number = SCREENSHOT_NOTIFICATION_MS,
+): (state: DevBarState, command: T) => void {
+  return (state: DevBarState, command: T) => {
+    handleNotification(state, notificationType, command[pathField] as string | undefined, durationMs);
+  };
+}
+
+/**
+ * Create a handler for "*-error" commands that log and optionally reset a saving flag.
+ * @param label - Human-readable label for the error log (e.g. 'Outline save')
+ * @param savingFlag - Optional state flag to reset to false on error
+ */
+function createErrorHandler<T extends SweetlinkCommand & { error?: string }>(
+  label: string,
+  savingFlag?: keyof DevBarState & string,
+): (state: DevBarState, command: T) => void {
+  return (state: DevBarState, command: T) => {
+    if (savingFlag) {
+      (state as unknown as Record<string, unknown>)[savingFlag] = false;
+    }
+    console.error(`[GlobalDevBar] ${label} failed:`, command.error);
+    if (savingFlag) {
+      state.render();
+    }
+  };
+}
+
+// Saved handlers (created via factory)
+const handleOutlineSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'outline-saved' }>(
+  'outline', 'outlinePath',
+);
+const handleSchemaSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'schema-saved' }>(
+  'schema', 'schemaPath',
+);
+const handleConsoleLogsSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'console-logs-saved' }>(
+  'consoleLogs', 'consoleLogsPath',
+);
+const handleA11ySavedCommand = createSavedHandler<SweetlinkCommand & { type: 'a11y-saved' }>(
+  'a11y', 'a11yPath',
+);
+const handleScreenshotSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'screenshot-saved' }>(
+  'screenshot', 'path',
+);
+
+// Error handlers (created via factory)
+const handleOutlineErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'outline-error' }>(
+  'Outline save',
+);
+const handleSchemaErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'schema-error' }>(
+  'Schema save',
+);
+const handleConsoleLogsErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'console-logs-error' }>(
+  'Console logs save', 'savingConsoleLogs',
+);
+const handleA11yErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'a11y-error' }>(
+  'A11y save', 'savingA11yAudit',
+);
+
+// ============================================================================
 // Per-command handler functions (private, called from handleSweetlinkCommand)
 // ============================================================================
 
@@ -381,13 +452,6 @@ function handleRefreshCommand(ws: WebSocket): void {
   }
 }
 
-function handleScreenshotSavedCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'screenshot-saved' }
-): void {
-  handleNotification(state, 'screenshot', command.path, SCREENSHOT_NOTIFICATION_MS);
-}
-
 function handleDesignReviewSavedCommand(
   state: DevBarState,
   command: SweetlinkCommand & { type: 'design-review-saved' }
@@ -428,64 +492,6 @@ function handleApiKeyStatusCommand(
     pricing: response.pricing,
   };
   // Re-render to update the confirmation modal
-  state.render();
-}
-
-function handleOutlineSavedCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'outline-saved' }
-): void {
-  handleNotification(state, 'outline', command.outlinePath, SCREENSHOT_NOTIFICATION_MS);
-}
-
-function handleOutlineErrorCommand(
-  command: SweetlinkCommand & { type: 'outline-error' }
-): void {
-  console.error('[GlobalDevBar] Outline save failed:', command.error);
-}
-
-function handleSchemaSavedCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'schema-saved' }
-): void {
-  handleNotification(state, 'schema', command.schemaPath, SCREENSHOT_NOTIFICATION_MS);
-}
-
-function handleSchemaErrorCommand(
-  command: SweetlinkCommand & { type: 'schema-error' }
-): void {
-  console.error('[GlobalDevBar] Schema save failed:', command.error);
-}
-
-function handleConsoleLogsSavedCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'console-logs-saved' }
-): void {
-  handleNotification(state, 'consoleLogs', command.consoleLogsPath, SCREENSHOT_NOTIFICATION_MS);
-}
-
-function handleConsoleLogsErrorCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'console-logs-error' }
-): void {
-  state.savingConsoleLogs = false;
-  console.error('[GlobalDevBar] Console logs save failed:', command.error);
-  state.render();
-}
-
-function handleA11ySavedCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'a11y-saved' }
-): void {
-  handleNotification(state, 'a11y', command.a11yPath, SCREENSHOT_NOTIFICATION_MS);
-}
-
-function handleA11yErrorCommand(
-  state: DevBarState,
-  command: SweetlinkCommand & { type: 'a11y-error' }
-): void {
-  state.savingA11yAudit = false;
-  console.error('[GlobalDevBar] A11y save failed:', command.error);
   state.render();
 }
 
@@ -564,13 +570,13 @@ async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkComm
       handleOutlineSavedCommand(state, command);
       break;
     case 'outline-error':
-      handleOutlineErrorCommand(command);
+      handleOutlineErrorCommand(state, command);
       break;
     case 'schema-saved':
       handleSchemaSavedCommand(state, command);
       break;
     case 'schema-error':
-      handleSchemaErrorCommand(command);
+      handleSchemaErrorCommand(state, command);
       break;
     case 'console-logs-saved':
       handleConsoleLogsSavedCommand(state, command);

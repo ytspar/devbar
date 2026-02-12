@@ -15,6 +15,12 @@ export const DEFAULT_WS_PORT = 9223;
 /** Port offset from app port to calculate WebSocket port */
 export const WS_PORT_OFFSET = 6223;
 
+/** Maximum ports to try when scanning for matching server */
+export const MAX_PORT_RETRIES = 10;
+
+/** Delay between port scan attempts (ms) */
+export const PORT_RETRY_DELAY_MS = 100;
+
 // ============================================================================
 // Console Log Types
 // ============================================================================

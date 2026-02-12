@@ -158,12 +158,20 @@ function createThemeSection(state: DevBarState): HTMLDivElement {
 type SettingsPositionValue = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
 
 function createDisplaySection(state: DevBarState): HTMLDivElement {
+  const displaySection = createSettingsSection('Display');
+
+  displaySection.appendChild(createPositionPicker(state));
+  displaySection.appendChild(createCompactModeToggle(state));
+  displaySection.appendChild(createAccentColorPicker(state));
+  displaySection.appendChild(createScreenshotQualitySlider(state));
+
+  return displaySection;
+}
+
+function createPositionPicker(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
   const color = CSS_COLORS.textSecondary;
 
-  const displaySection = createSettingsSection('Display');
-
-  // Position mini-map selector
   const positionRow = document.createElement('div');
   Object.assign(positionRow.style, { marginBottom: '10px' });
 
@@ -253,10 +261,14 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
   });
 
   positionRow.appendChild(miniMap);
-  displaySection.appendChild(positionRow);
+  return positionRow;
+}
 
-  // Compact mode toggle
-  displaySection.appendChild(
+function createCompactModeToggle(state: DevBarState): DocumentFragment {
+  const { accentColor } = state.options;
+  const fragment = document.createDocumentFragment();
+
+  fragment.appendChild(
     createToggleRow('Compact Mode', state.compactMode, accentColor, () => {
       state.toggleCompactMode();
     })
@@ -271,9 +283,14 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
     marginBottom: '8px',
   });
   shortcutHint.textContent = 'Keyboard: Cmd or Ctrl+Shift+M';
-  displaySection.appendChild(shortcutHint);
+  fragment.appendChild(shortcutHint);
 
-  // Accent color
+  return fragment;
+}
+
+function createAccentColorPicker(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+
   const accentRow = document.createElement('div');
   Object.assign(accentRow.style, { marginBottom: '6px' });
 
@@ -316,9 +333,13 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
   });
 
   accentRow.appendChild(colorSwatches);
-  displaySection.appendChild(accentRow);
+  return accentRow;
+}
 
-  // Screenshot quality slider
+function createScreenshotQualitySlider(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+  const color = CSS_COLORS.textSecondary;
+
   const qualityRow = document.createElement('div');
   Object.assign(qualityRow.style, { marginTop: '8px' });
 
@@ -439,9 +460,8 @@ function createDisplaySection(state: DevBarState): HTMLDivElement {
   };
   sliderWrap.appendChild(qualitySlider);
   qualityRow.appendChild(sliderWrap);
-  displaySection.appendChild(qualityRow);
 
-  return displaySection;
+  return qualityRow;
 }
 
 function createFeaturesSection(state: DevBarState): HTMLDivElement {

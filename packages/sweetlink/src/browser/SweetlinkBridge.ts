@@ -34,9 +34,7 @@ import {
 // Constants
 // ============================================================================
 
-import { DEFAULT_WS_PORT, WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET } from '../types.js';
-
-const DEFAULT_MAX_PORT_RETRIES = 10;
+import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, PORT_RETRY_DELAY_MS, WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET } from '../types.js';
 
 /** HMR settings */
 const DEFAULT_HMR_DEBOUNCE_MS = 300;
@@ -45,7 +43,6 @@ const DEFAULT_HMR_CAPTURE_DELAY_MS = 100;
 /** Reconnection settings */
 const RECONNECT_DELAY_MS = 2000;
 const VERIFICATION_TIMEOUT_MS = 1000;
-const PORT_RETRY_DELAY_MS = 100;
 const PORT_SEARCH_FAIL_RETRY_MS = 3000;
 
 export interface SweetlinkBridgeConfig {
@@ -97,7 +94,7 @@ export class SweetlinkBridge {
     // Skip on server-side
     if (typeof window === 'undefined') {
       this.basePort = DEFAULT_WS_PORT;
-      this.maxPortRetries = DEFAULT_MAX_PORT_RETRIES;
+      this.maxPortRetries = MAX_PORT_RETRIES;
       this.hmrScreenshots = false;
       this.hmrConfig = {
         debounceMs: DEFAULT_HMR_DEBOUNCE_MS,
@@ -116,7 +113,7 @@ export class SweetlinkBridge {
       config.basePort ??
       (this.currentAppPort > 0 ? this.currentAppPort + SWEETLINK_PORT_OFFSET : DEFAULT_WS_PORT);
 
-    this.maxPortRetries = config.maxPortRetries ?? DEFAULT_MAX_PORT_RETRIES;
+    this.maxPortRetries = config.maxPortRetries ?? MAX_PORT_RETRIES;
     this.hmrScreenshots = config.hmrScreenshots ?? false;
     this.hmrConfig = {
       debounceMs: config.hmrDebounceMs ?? DEFAULT_HMR_DEBOUNCE_MS,

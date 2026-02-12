@@ -147,7 +147,7 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
 // ============================================================================
 
 /** LocalStorage key for devbar settings fallback */
-export const SETTINGS_STORAGE_KEY = 'devbar-settings';
+const SETTINGS_STORAGE_KEY = 'devbar-settings';
 
 // ============================================================================
 // Settings Manager

@@ -298,7 +298,13 @@ export class ConsoleCapture {
   startErrorHandlers(): () => void {
     if (typeof window === 'undefined') return () => {};
 
-    const errorHandler = (event: ErrorEvent) => {
+    const errorHandler = (event: Event) => {
+      // Resource load errors (img 404, script 404, etc.) fire an Event on
+      // the target element that bubbles to window. They have no `message`
+      // and their target is the failing element, not the window.  Skip them
+      // to avoid re-render loops when the devbar itself shows broken images.
+      if (!(event instanceof ErrorEvent)) return;
+
       this.addLog({
         level: 'error',
         message: `Uncaught: ${event.message}`,
@@ -340,55 +346,3 @@ export class ConsoleCapture {
   }
 }
 
-// ============================================================================
-// Error Handler Utilities
-// ============================================================================
-
-/**
- * Create error event handler that captures to console logs
- */
-export function createErrorHandler(
-  logsRef: { logs: ConsoleLog[] },
-  maxLogs: number = MAX_CONSOLE_LOGS
-): (event: ErrorEvent) => void {
-  return (event: ErrorEvent) => {
-    logsRef.logs.push({
-      level: 'error',
-      message: `Uncaught: ${event.message}`,
-      timestamp: Date.now(),
-      source: event.filename,
-      stack: event.error?.stack,
-    });
-
-    if (logsRef.logs.length > maxLogs) {
-      logsRef.logs = logsRef.logs.slice(-maxLogs);
-    }
-  };
-}
-
-/**
- * Create unhandled rejection handler that captures to console logs
- */
-export function createRejectionHandler(
-  logsRef: { logs: ConsoleLog[] },
-  maxLogs: number = MAX_CONSOLE_LOGS
-): (event: PromiseRejectionEvent) => void {
-  return (event: PromiseRejectionEvent) => {
-    const reason = event.reason;
-    const message =
-      reason instanceof Error
-        ? `Unhandled rejection: ${reason.name}: ${reason.message}`
-        : `Unhandled rejection: ${String(reason)}`;
-
-    logsRef.logs.push({
-      level: 'error',
-      message,
-      timestamp: Date.now(),
-      stack: reason?.stack,
-    });
-
-    if (logsRef.logs.length > maxLogs) {
-      logsRef.logs = logsRef.logs.slice(-maxLogs);
-    }
-  };
-}

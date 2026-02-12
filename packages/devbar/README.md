@@ -59,6 +59,49 @@ if (import.meta.env.DEV) {
 }
 ```
 
+### In a Next.js Project
+
+Create a client component that dynamically imports the devbar:
+
+```tsx
+// src/providers/DevBar.tsx
+'use client';
+
+import { useEffect } from 'react';
+
+export function DevBar() {
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      import('@ytspar/devbar').then(({ initGlobalDevBar }) => {
+        initGlobalDevBar();
+      });
+    }
+  }, []);
+
+  return null;
+}
+```
+
+Add it to your root layout, outside the provider tree:
+
+```tsx
+// src/app/layout.tsx
+import { DevBar } from '@/providers/DevBar';
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <DevBar />
+      </body>
+    </html>
+  );
+}
+```
+
+The dynamic import ensures the devbar is fully tree-shaken from production builds.
+
 ### Positions
 
 The devbar can be placed in five positions:

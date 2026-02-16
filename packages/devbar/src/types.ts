@@ -89,8 +89,9 @@ export interface GlobalDevBarOptions {
 export interface DevBarControl {
   id: string;
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   active?: boolean;
   disabled?: boolean;
-  variant?: 'default' | 'warning';
+  variant?: 'default' | 'warning' | 'info';
+  group?: string;
 }

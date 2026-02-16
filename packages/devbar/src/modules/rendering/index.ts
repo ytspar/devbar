@@ -58,10 +58,11 @@ export function render(
   customControls: {
     id: string;
     label: string;
-    onClick: () => void;
+    onClick?: () => void;
     active?: boolean;
     disabled?: boolean;
-    variant?: 'default' | 'warning';
+    variant?: 'default' | 'warning' | 'info';
+    group?: string;
   }[]
 ): void {
   if (state.destroyed) return;

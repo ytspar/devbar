@@ -469,17 +469,86 @@ function createActionButtonsContainer(
 }
 
 /**
+ * Resolve the color for a custom control based on its variant.
+ */
+function getControlColor(variant: string | undefined, accentColor: string): string {
+  if (variant === 'warning') return BUTTON_COLORS.warning;
+  if (variant === 'info') return BUTTON_COLORS.info;
+  return accentColor;
+}
+
+/**
+ * Create a single custom control element (button or non-interactive badge).
+ */
+function createControlElement(
+  control: {
+    id: string;
+    label: string;
+    onClick?: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    variant?: 'default' | 'warning' | 'info';
+    group?: string;
+  },
+  accentColor: string
+): HTMLElement {
+  const color = getControlColor(control.variant, accentColor);
+  const isActive = control.active ?? false;
+  const isDisabled = control.disabled ?? false;
+  const isInteractive = !!control.onClick;
+
+  const el = document.createElement(isInteractive ? 'button' : 'span');
+  if (isInteractive) (el as HTMLButtonElement).type = 'button';
+
+  Object.assign(el.style, {
+    padding: '4px 10px',
+    backgroundColor: isActive ? withAlpha(color, 20) : 'transparent',
+    border: `1px solid ${isActive ? color : withAlpha(color, 38)}`,
+    borderRadius: '6px',
+    color: isActive ? color : withAlpha(color, 60),
+    fontSize: '0.625rem',
+    cursor: isInteractive ? (isDisabled ? 'not-allowed' : 'pointer') : 'default',
+    opacity: isDisabled ? '0.5' : '1',
+    transition: isInteractive ? 'all 150ms' : 'none',
+  });
+
+  el.textContent = control.label;
+
+  if (isInteractive) {
+    (el as HTMLButtonElement).disabled = isDisabled;
+    if (!isDisabled) {
+      el.onmouseenter = () => {
+        el.style.backgroundColor = withAlpha(color, 13);
+        el.style.borderColor = color;
+        el.style.color = color;
+      };
+      el.onmouseleave = () => {
+        el.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
+        el.style.borderColor = isActive ? color : withAlpha(color, 38);
+        el.style.color = isActive ? color : withAlpha(color, 60);
+      };
+      el.onclick = () => control.onClick!();
+    }
+  }
+
+  return el;
+}
+
+/**
  * Create the custom controls row for user-defined buttons.
+ * Controls with a `group` field are rendered under a group header label.
+ * Controls without `onClick` render as non-interactive badges (span, no hover).
  * Returns null if there are no custom controls.
  */
 function createCustomControlsRow(
   customControls: {
     id: string;
     label: string;
-    onClick: () => void;
+    onClick?: () => void;
     active?: boolean;
     disabled?: boolean;
-    variant?: 'default' | 'warning';
+    variant?: 'default' | 'warning' | 'info';
+    group?: string;
   }[],
   accentColor: string
 ): HTMLDivElement | null {
@@ -499,45 +568,38 @@ function createCustomControlsRow(
     fontSize: '0.6875rem',
   });
 
-  customControls.forEach((control) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
+  // Partition controls into ungrouped and grouped
+  const ungrouped = customControls.filter((c) => !c.group);
+  const groups = new Map<string, typeof customControls>();
+  for (const control of customControls) {
+    if (!control.group) continue;
+    const list = groups.get(control.group) ?? [];
+    list.push(control);
+    groups.set(control.group, list);
+  }
 
-    const color = control.variant === 'warning' ? BUTTON_COLORS.warning : accentColor;
-    const isActive = control.active ?? false;
-    const isDisabled = control.disabled ?? false;
+  // Render ungrouped controls first
+  for (const control of ungrouped) {
+    customRow.appendChild(createControlElement(control, accentColor));
+  }
 
-    Object.assign(btn.style, {
-      padding: '4px 10px',
-      backgroundColor: isActive ? withAlpha(color, 20) : 'transparent',
-      border: `1px solid ${isActive ? color : withAlpha(color, 38)}`,
-      borderRadius: '6px',
-      color: isActive ? color : withAlpha(color, 60),
-      fontSize: '0.625rem',
-      cursor: isDisabled ? 'not-allowed' : 'pointer',
-      opacity: isDisabled ? '0.5' : '1',
-      transition: 'all 150ms',
+  // Render each group with a small header label
+  for (const [groupName, controls] of groups) {
+    const groupLabel = document.createElement('span');
+    Object.assign(groupLabel.style, {
+      color: withAlpha(accentColor, 50),
+      fontSize: '0.5625rem',
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      marginLeft: ungrouped.length > 0 || [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
     });
+    groupLabel.textContent = groupName;
+    customRow.appendChild(groupLabel);
 
-    btn.textContent = control.label;
-    btn.disabled = isDisabled;
-
-    if (!isDisabled) {
-      btn.onmouseenter = () => {
-        btn.style.backgroundColor = withAlpha(color, 13);
-        btn.style.borderColor = color;
-        btn.style.color = color;
-      };
-      btn.onmouseleave = () => {
-        btn.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
-        btn.style.borderColor = isActive ? color : withAlpha(color, 38);
-        btn.style.color = isActive ? color : withAlpha(color, 60);
-      };
-      btn.onclick = () => control.onClick();
+    for (const control of controls) {
+      customRow.appendChild(createControlElement(control, accentColor));
     }
-
-    customRow.appendChild(btn);
-  });
+  }
 
   return customRow;
 }
@@ -551,10 +613,11 @@ export function renderExpanded(
   customControls: {
     id: string;
     label: string;
-    onClick: () => void;
+    onClick?: () => void;
     active?: boolean;
     disabled?: boolean;
-    variant?: 'default' | 'warning';
+    variant?: 'default' | 'warning' | 'info';
+    group?: string;
   }[]
 ): void {
   if (!state.container) return;

@@ -18,12 +18,17 @@ function errorResponse(error: string): SweetlinkResponse {
 
 /**
  * Check whether an error was caused by CSP blocking `unsafe-eval`.
+ * Chrome may throw EvalError, DOMException, or a generic Error depending on version.
  */
 function isCspEvalBlocked(error: unknown): boolean {
-  return (
-    error instanceof EvalError ||
-    (error instanceof DOMException && error.message.includes('unsafe-eval'))
-  );
+  if (error instanceof EvalError) return true;
+  if (
+    error instanceof Error &&
+    (error.message.includes('unsafe-eval') || error.message.includes('Content Security Policy'))
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**

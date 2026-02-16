@@ -384,6 +384,28 @@ async function queryDOM(options: { selector: string; property?: string }) {
     const response = await sendCommand(command);
 
     if (!response.success) {
+      // If CSP blocked, fall back to Playwright
+      if (isCspError(response.error)) {
+        console.log('[Sweetlink] CSP blocked query, falling back to Playwright...');
+        const escapedSelector = JSON.stringify(options.selector);
+        const queryCode = options.property
+          ? `Array.from(document.querySelectorAll(${escapedSelector})).map(el => el[${JSON.stringify(options.property)}])`
+          : `Array.from(document.querySelectorAll(${escapedSelector})).map((el, i) => ({ index: i, tagName: el.tagName, id: el.id, className: el.className, textContent: (el.textContent || '').substring(0, 100) }))`;
+
+        const results = (await execViaPlaywrightOrExit(queryCode)) as unknown[];
+        console.log(`[Sweetlink] ✓ Found ${results.length} elements (via Playwright)`);
+        if (options.property) {
+          console.log('\nValues:');
+          results.forEach((value: unknown, index: number) => {
+            console.log(`  [${index}] ${JSON.stringify(value)}`);
+          });
+        } else {
+          console.log('\nElements:');
+          console.log(JSON.stringify(results, null, 2));
+        }
+        return;
+      }
+
       console.error('[Sweetlink] Query failed:', response.error);
       process.exit(1);
     }
@@ -578,6 +600,92 @@ async function getLogs(options: {
   }
 }
 
+/**
+ * Check if a response error is a CSP eval block
+ */
+function isCspError(error?: string): boolean {
+  if (!error) return false;
+  return error.includes('unsafe-eval') || error.includes('Content Security Policy');
+}
+
+/**
+ * Execute JavaScript via Playwright (bypasses CSP).
+ * Playwright's page.evaluate runs via DevTools protocol, which is not subject to CSP.
+ */
+async function execViaPlaywright(code: string): Promise<unknown> {
+  let playwrightModule;
+  try {
+    playwrightModule = await import('playwright');
+  } catch {
+    throw new Error(
+      'Playwright is not installed. Install it to use CSP-bypassing fallback:\n  pnpm add playwright'
+    );
+  }
+
+  const CDP_URL = 'http://localhost:9222';
+  let browser;
+
+  // Try connecting to existing Chrome CDP first (reuse browser, don't close it)
+  try {
+    browser = await playwrightModule.chromium.connectOverCDP(CDP_URL);
+  } catch {
+    // No CDP available — launch a headless browser
+    browser = await playwrightModule.chromium.launch({ headless: true });
+  }
+
+  try {
+    const contexts = browser.contexts();
+    let page;
+
+    if (contexts.length > 0) {
+      const pages = contexts[0].pages();
+      page = pages.find(
+        (p: { url: () => string }) =>
+          p.url().includes('localhost:3000') || p.url().includes('127.0.0.1:3000')
+      );
+      if (!page && pages.length > 0) {
+        page = pages[0];
+      }
+    }
+
+    if (!page) {
+      const context = contexts[0] || (await browser.newContext());
+      page = await context.newPage();
+      await page.goto(process.env.SWEETLINK_DEV_URL || 'http://localhost:3000', {
+        waitUntil: 'domcontentloaded',
+      });
+    }
+
+    // page.evaluate bypasses CSP since it runs via DevTools protocol
+    const result = await page.evaluate((jsCode: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      return Function(`"use strict"; return (${jsCode})`)();
+    }, code);
+
+    return result;
+  } finally {
+    // For CDP connections this disconnects; for launched browsers this closes.
+    // Playwright's .close() handles both cases correctly.
+    await browser.close();
+  }
+}
+
+/**
+ * Run code via Playwright with standardized error handling.
+ * On failure, logs the error and exits the process.
+ */
+async function execViaPlaywrightOrExit(code: string): Promise<unknown> {
+  try {
+    return await execViaPlaywright(code);
+  } catch (error) {
+    console.error(
+      '[Sweetlink] Playwright fallback also failed:',
+      error instanceof Error ? error.message : error
+    );
+    process.exit(1);
+  }
+}
+
 async function execJS(options: { code: string }) {
   console.log('[Sweetlink] Executing JavaScript...');
 
@@ -590,6 +698,15 @@ async function execJS(options: { code: string }) {
     const response = await sendCommand(command);
 
     if (!response.success) {
+      // If CSP blocked execution, fall back to Playwright which bypasses CSP
+      if (isCspError(response.error)) {
+        console.log('[Sweetlink] CSP blocked eval, falling back to Playwright...');
+        const result = await execViaPlaywrightOrExit(options.code);
+        console.log('[Sweetlink] ✓ Result (via Playwright):');
+        console.log(JSON.stringify({ result, type: typeof result }, null, 2));
+        return;
+      }
+
       console.error('[Sweetlink] Execution failed:', response.error);
       process.exit(1);
     }
@@ -672,6 +789,25 @@ async function click(options: { selector?: string; text?: string; index?: number
     const response = await sendCommand(command);
 
     if (!response.success) {
+      // If CSP blocked execution, fall back to Playwright
+      if (isCspError(response.error)) {
+        console.log('[Sweetlink] CSP blocked eval, falling back to Playwright...');
+        const playwrightResult = await execViaPlaywrightOrExit(clickCode.trim());
+        const result = playwrightResult as { success?: boolean; clicked?: string; found?: number; error?: string } | null;
+        if (result && typeof result === 'object' && 'success' in result) {
+          if (!result.success) {
+            console.error(`[Sweetlink] ✗ ${result.error}`);
+            process.exit(1);
+          }
+          console.log(
+            `[Sweetlink] ✓ Clicked (via Playwright): ${result.clicked}${result.found && result.found > 1 ? ` (${result.found} matches, used index ${index})` : ''}`
+          );
+        } else {
+          console.log('[Sweetlink] ✓ Click executed (via Playwright)');
+        }
+        return;
+      }
+
       console.error('[Sweetlink] Click failed:', response.error);
       process.exit(1);
     }

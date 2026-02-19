@@ -1,6 +1,11 @@
 {
   "name": "@ytspar/devbar-monorepo",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ytspar/devbar.git"
+  },
   "description": "devbar development toolbar and sweetlink AI debugging toolkit",
   "workspaces": [
     "packages/*"

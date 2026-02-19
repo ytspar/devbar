@@ -293,16 +293,14 @@ export class ConsoleCapture {
   }
 
   /**
-   * Start listening for uncaught errors and unhandled rejections
+   * Start listening for uncaught errors, unhandled rejections,
+   * resource load failures, and CSP violations.
    */
   startErrorHandlers(): () => void {
     if (typeof window === 'undefined') return () => {};
 
+    // --- Uncaught JS errors (ErrorEvent on window, bubble phase) ----------
     const errorHandler = (event: Event) => {
-      // Resource load errors (img 404, script 404, etc.) fire an Event on
-      // the target element that bubbles to window. They have no `message`
-      // and their target is the failing element, not the window.  Skip them
-      // to avoid re-render loops when the devbar itself shows broken images.
       if (!(event instanceof ErrorEvent)) return;
 
       this.addLog({
@@ -314,6 +312,7 @@ export class ConsoleCapture {
       });
     };
 
+    // --- Unhandled promise rejections ------------------------------------
     const rejectionHandler = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       this.addLog({
@@ -326,12 +325,52 @@ export class ConsoleCapture {
       });
     };
 
+    // --- Resource load errors (404, CORS, network failures) --------------
+    // These fire a plain Event (not ErrorEvent) on the failing element in
+    // capture phase. We listen in capture phase because they don't bubble.
+    const resourceErrorHandler = (event: Event) => {
+      // Only handle resource errors, not JS errors (those are ErrorEvent)
+      if (event instanceof ErrorEvent) return;
+
+      const target = event.target as HTMLElement & { src?: string; href?: string; tagName?: string };
+      if (!target || !target.tagName) return;
+
+      // Skip devbar's own resources to avoid feedback loops
+      const url = target.src || target.href || '';
+      if (!url || url.includes('devbar') || url.includes('sweetlink')) return;
+
+      const tagName = target.tagName.toLowerCase();
+      // Only track meaningful resource types
+      if (!['img', 'script', 'link', 'audio', 'video', 'source'].includes(tagName)) return;
+
+      this.addLog({
+        level: 'error',
+        message: `Failed to load resource: ${url}`,
+        timestamp: Date.now(),
+        source: url,
+      });
+    };
+
+    // --- CSP violations --------------------------------------------------
+    const cspHandler = (event: SecurityPolicyViolationEvent) => {
+      this.addLog({
+        level: 'error',
+        message: `CSP violation: '${event.violatedDirective}' blocked ${event.blockedURI || '(inline)'}`,
+        timestamp: Date.now(),
+        source: event.sourceFile || undefined,
+      });
+    };
+
     window.addEventListener('error', errorHandler);
     window.addEventListener('unhandledrejection', rejectionHandler);
+    window.addEventListener('error', resourceErrorHandler, true); // capture phase
+    window.addEventListener('securitypolicyviolation', cspHandler);
 
     return () => {
       window.removeEventListener('error', errorHandler);
       window.removeEventListener('unhandledrejection', rejectionHandler);
+      window.removeEventListener('error', resourceErrorHandler, true);
+      window.removeEventListener('securitypolicyviolation', cspHandler);
     };
   }
 

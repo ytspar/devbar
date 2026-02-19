@@ -85,6 +85,7 @@ export { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, getSettingsManager } from './se
 const consoleCapture = new ConsoleCapture({ trackCounts: true });
 consoleCapture.importEarlyLogs();
 consoleCapture.start();
+consoleCapture.startErrorHandlers();
 
 // ============================================================================
 // GlobalDevBar Class

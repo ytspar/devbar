@@ -5,6 +5,7 @@
  */
 
 import type { ThemeMode } from './types.js';
+import { DEPARTURE_MONO_WOFF2_BASE64 } from './font-data.js';
 
 // Re-export shared constants from sweetlink's browser modules to avoid pulling in Node.js-only code
 export { MAX_CONSOLE_LOGS } from '@ytspar/sweetlink/browser/consoleCapture';
@@ -437,9 +438,7 @@ export function generateThemeCSSVars(theme: DevBarThemeInput = DEVBAR_THEME): st
 /* https://departuremono.com - SIL Open Font License */
 @font-face {
   font-family: 'Departure Mono';
-  src: url('/fonts/DepartureMono-Regular.woff2') format('woff2'),
-       url('/fonts/DepartureMono-Regular.woff') format('woff'),
-       url('https://github.com/rektdeckard/departure-mono/raw/main/fonts/DepartureMono-Regular.woff2') format('woff2');
+  src: url(data:font/woff2;base64,${DEPARTURE_MONO_WOFF2_BASE64}) format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;

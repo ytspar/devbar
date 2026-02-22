@@ -130,7 +130,7 @@ import type { SweetlinkCommand } from '../types.js';
 
 interface SweetlinkResponse {
   success: boolean;
-  data?: any; // eslint-disable-line @typescript-eslint/no-explicit-any -- shape varies per command
+  data?: unknown;
   error?: string;
   timestamp: number;
 }
@@ -253,7 +253,7 @@ async function screenshot(options: {
   url?: string;
   wait?: boolean;
   waitTimeout?: number;
-}) {
+}): Promise<void> {
   // Convert --width/--height to viewport format if provided
   if (options.width && !options.viewport) {
     const height = options.height || Math.round(options.width * 1.5); // Default aspect ratio
@@ -391,17 +391,18 @@ async function screenshot(options: {
     // Save screenshot
     const outputPath = options.output || getDefaultScreenshotPath();
     ensureDir(outputPath);
-    const base64Data = response.data.screenshot.replace(/^data:image\/png;base64,/, '');
+    const data = response.data as Record<string, unknown>;
+    const base64Data = (data.screenshot as string).replace(/^data:image\/png;base64,/, '');
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
-    reportScreenshotSuccess(outputPath, response.data.width, response.data.height, 'WebSocket (html2canvas)', response.data.selector);
+    reportScreenshotSuccess(outputPath, data.width as number, data.height as number, 'WebSocket (html2canvas)', data.selector as string | undefined);
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function queryDOM(options: { selector: string; property?: string }) {
+async function queryDOM(options: { selector: string; property?: string }): Promise<void> {
   console.log(`[Sweetlink] Querying DOM: ${options.selector}`);
 
   const command: SweetlinkCommand = {
@@ -440,18 +441,19 @@ async function queryDOM(options: { selector: string; property?: string }) {
       process.exit(1);
     }
 
-    console.log(`[Sweetlink] ✓ Found ${response.data.count} elements`);
+    const data = response.data as Record<string, unknown>;
+    console.log(`[Sweetlink] ✓ Found ${data.count} elements`);
 
     if (options.property) {
       // If querying a property, show the values
       console.log('\nValues:');
-      response.data.results.forEach((value: unknown, index: number) => {
+      (data.results as unknown[]).forEach((value: unknown, index: number) => {
         console.log(`  [${index}] ${JSON.stringify(value)}`);
       });
     } else {
       // Show element info
       console.log('\nElements:');
-      console.log(JSON.stringify(response.data.results, null, 2));
+      console.log(JSON.stringify(data.results, null, 2));
     }
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
@@ -511,7 +513,7 @@ async function getLogs(options: {
   format?: 'text' | 'json' | 'summary';
   dedupe?: boolean;
   output?: string;
-}) {
+}): Promise<void> {
   if (options.format === 'text') {
     console.log('[Sweetlink] Getting console logs...');
   }
@@ -652,7 +654,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
     );
   }
 
-  const CDP_URL = 'http://localhost:9222';
+  const CDP_URL = process.env.CHROME_CDP_URL || 'http://localhost:9222';
   let browser;
 
   // Try connecting to existing Chrome CDP first (reuse browser, don't close it)
@@ -669,9 +671,12 @@ async function execViaPlaywright(code: string): Promise<unknown> {
 
     if (contexts.length > 0) {
       const pages = contexts[0].pages();
+      const devUrl = new URL(process.env.SWEETLINK_DEV_URL || 'http://localhost:3000');
+      const devHost = devUrl.hostname;
+      const devPort = devUrl.port || (devUrl.protocol === 'https:' ? '443' : '80');
       page = pages.find(
         (p: { url: () => string }) =>
-          p.url().includes('localhost:3000') || p.url().includes('127.0.0.1:3000')
+          p.url().includes(`${devHost}:${devPort}`) || p.url().includes(`127.0.0.1:${devPort}`)
       );
       if (!page && pages.length > 0) {
         page = pages[0];
@@ -716,7 +721,7 @@ async function execViaPlaywrightOrExit(code: string): Promise<unknown> {
   }
 }
 
-async function execJS(options: { code: string }) {
+async function execJS(options: { code: string }): Promise<void> {
   console.log('[Sweetlink] Executing JavaScript...');
 
   const command: SweetlinkCommand = {
@@ -749,7 +754,7 @@ async function execJS(options: { code: string }) {
   }
 }
 
-async function click(options: { selector?: string; text?: string; index?: number }) {
+async function click(options: { selector?: string; text?: string; index?: number }): Promise<void> {
   const { selector, text, index = 0 } = options;
 
   if (!selector && !text) {
@@ -850,12 +855,13 @@ async function click(options: { selector?: string; text?: string; index?: number
     }
 
     if (typeof result === 'object' && 'success' in result) {
-      if (!result.success) {
-        console.error(`[Sweetlink] ✗ ${result.error}`);
+      const clickResult = result as { success?: boolean; clicked?: string; found?: number; error?: string };
+      if (!clickResult.success) {
+        console.error(`[Sweetlink] ✗ ${clickResult.error}`);
         process.exit(1);
       }
       console.log(
-        `[Sweetlink] ✓ Clicked: ${result.clicked}${result.found > 1 ? ` (${result.found} matches, used index ${index})` : ''}`
+        `[Sweetlink] ✓ Clicked: ${clickResult.clicked}${clickResult.found && clickResult.found > 1 ? ` (${clickResult.found} matches, used index ${index})` : ''}`
       );
     } else {
       // Result is just a value, not our expected object
@@ -867,7 +873,7 @@ async function click(options: { selector?: string; text?: string; index?: number
   }
 }
 
-async function refresh(options: { hard?: boolean }) {
+async function refresh(options: { hard?: boolean }): Promise<void> {
   console.log('[Sweetlink] Refreshing page...');
 
   const command: SweetlinkCommand = {
@@ -903,7 +909,7 @@ async function ruler(options: {
   showAlignment?: boolean;
   limit?: number;
   format?: 'text' | 'json';
-}) {
+}): Promise<void> {
   console.log('[Sweetlink] Pixel Ruler - Measuring elements...');
 
   // Determine selectors from preset or explicit
@@ -968,7 +974,7 @@ async function ruler(options: {
   }
 }
 
-async function getNetwork(options: { filter?: string }) {
+async function getNetwork(options: { filter?: string }): Promise<void> {
   console.log('[Sweetlink] Getting network requests (requires CDP)...');
 
   // Check if CDP is available
@@ -1165,7 +1171,7 @@ async function killProcessOnPort(port: number): Promise<boolean> {
 /**
  * Cleanup stale Sweetlink servers
  */
-async function cleanup(options: { force?: boolean; verbose?: boolean }) {
+async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise<void> {
   console.log('[Sweetlink] Scanning for stale servers...\n');
 
   const portsToScan = getPortsToScan();
@@ -1242,7 +1248,7 @@ async function cleanup(options: { force?: boolean; verbose?: boolean }) {
   }
 }
 
-async function getSchema(options: { format?: 'text' | 'json'; output?: string }) {
+async function getSchema(options: { format?: 'text' | 'json'; output?: string }): Promise<void> {
   console.log('[Sweetlink] Extracting page schema...');
 
   try {
@@ -1253,7 +1259,7 @@ async function getSchema(options: { format?: 'text' | 'json'; output?: string })
       process.exit(1);
     }
 
-    const { schema, markdown } = response.data;
+    const { schema, markdown } = response.data as Record<string, unknown>;
 
     if (options.format === 'json') {
       const output = JSON.stringify(schema, null, 2);
@@ -1267,7 +1273,7 @@ async function getSchema(options: { format?: 'text' | 'json'; output?: string })
     } else {
       if (options.output) {
         ensureDir(options.output);
-        fs.writeFileSync(options.output, markdown);
+        fs.writeFileSync(options.output, markdown as string);
         console.log(`[Sweetlink] ✓ Schema saved to: ${getRelativePath(options.output)}`);
       } else {
         console.log(markdown);
@@ -1279,7 +1285,7 @@ async function getSchema(options: { format?: 'text' | 'json'; output?: string })
   }
 }
 
-async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }) {
+async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }): Promise<void> {
   console.log('[Sweetlink] Extracting document outline...');
 
   try {
@@ -1290,7 +1296,7 @@ async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; outp
       process.exit(1);
     }
 
-    const { outline, markdown } = response.data;
+    const { outline, markdown } = response.data as Record<string, unknown>;
 
     if (options.format === 'json') {
       const output = JSON.stringify(outline, null, 2);
@@ -1305,7 +1311,7 @@ async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; outp
       // Both 'text' and 'markdown' use the markdown format
       if (options.output) {
         ensureDir(options.output);
-        fs.writeFileSync(options.output, markdown);
+        fs.writeFileSync(options.output, markdown as string);
         console.log(`[Sweetlink] ✓ Outline saved to: ${getRelativePath(options.output)}`);
       } else {
         console.log(markdown);
@@ -1317,7 +1323,7 @@ async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; outp
   }
 }
 
-async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
+async function getA11y(options: { format?: 'text' | 'json'; output?: string }): Promise<void> {
   console.log('[Sweetlink] Running accessibility audit...');
 
   try {
@@ -1328,7 +1334,9 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
       process.exit(1);
     }
 
-    const { result, summary } = response.data;
+    const data = response.data as Record<string, unknown>;
+    const result = data.result as Record<string, unknown>;
+    const summary = data.summary as Record<string, unknown>;
 
     if (options.format === 'json') {
       const output = JSON.stringify({ result, summary }, null, 2);
@@ -1341,14 +1349,16 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
       }
     } else {
       // Text format - human-readable output
+      const byImpact = summary.byImpact as Record<string, number>;
       console.log(`\n[Sweetlink] Accessibility Audit Results`);
       console.log(`  URL: ${result.url}`);
       console.log(`  Violations: ${summary.totalViolations}`);
       console.log(`  Passes: ${summary.totalPasses}`);
       console.log(`  Incomplete: ${summary.totalIncomplete}`);
-      console.log(`  By Impact: critical=${summary.byImpact.critical}, serious=${summary.byImpact.serious}, moderate=${summary.byImpact.moderate}, minor=${summary.byImpact.minor}`);
+      console.log(`  By Impact: critical=${byImpact.critical}, serious=${byImpact.serious}, moderate=${byImpact.moderate}, minor=${byImpact.minor}`);
 
-      if (result.violations.length > 0) {
+      const violations = result.violations as { impact: string; help: string; description: string; nodes: unknown[] }[];
+      if (violations.length > 0) {
         console.log('\n  Violations:');
         const impactOrder = ['critical', 'serious', 'moderate', 'minor'];
         const impactColors: Record<string, string> = {
@@ -1360,12 +1370,12 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
         const reset = '\x1b[0m';
 
         for (const impact of impactOrder) {
-          const violations = result.violations.filter(
-            (v: { impact: string }) => v.impact === impact
+          const filtered = violations.filter(
+            (v) => v.impact === impact
           );
-          if (violations.length === 0) continue;
+          if (filtered.length === 0) continue;
 
-          for (const v of violations) {
+          for (const v of filtered) {
             const color = impactColors[v.impact] || '';
             console.log(`    ${color}[${v.impact.toUpperCase()}]${reset} ${v.help}`);
             console.log(`      ${v.description}`);
@@ -1388,7 +1398,7 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }) {
   }
 }
 
-async function getVitals(options: { format?: 'text' | 'json' }) {
+async function getVitals(options: { format?: 'text' | 'json' }): Promise<void> {
   console.log('[Sweetlink] Collecting web vitals...');
 
   try {
@@ -1399,34 +1409,39 @@ async function getVitals(options: { format?: 'text' | 'json' }) {
       process.exit(1);
     }
 
-    const { vitals, summary } = response.data;
+    const { vitals, summary } = response.data as Record<string, unknown>;
+    const vitalsData = vitals as Record<string, unknown>;
 
     if (options.format === 'json') {
       console.log(JSON.stringify(vitals, null, 2));
     } else {
       console.log(`\n[Sweetlink] Web Vitals`);
-      console.log(`  URL: ${vitals.url}`);
+      console.log(`  URL: ${vitalsData.url}`);
       console.log(`  ${summary}`);
 
       // Detailed breakdown
-      if (vitals.fcp !== null) {
-        const color = vitals.fcp <= 1800 ? '\x1b[32m' : vitals.fcp <= 3000 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  FCP: ${color}${vitals.fcp}ms\x1b[0m`);
+      if (vitalsData.fcp !== null) {
+        const fcp = vitalsData.fcp as number;
+        const color = fcp <= 1800 ? '\x1b[32m' : fcp <= 3000 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  FCP: ${color}${fcp}ms\x1b[0m`);
       }
-      if (vitals.lcp !== null) {
-        const color = vitals.lcp <= 2500 ? '\x1b[32m' : vitals.lcp <= 4000 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  LCP: ${color}${vitals.lcp}ms\x1b[0m`);
+      if (vitalsData.lcp !== null) {
+        const lcp = vitalsData.lcp as number;
+        const color = lcp <= 2500 ? '\x1b[32m' : lcp <= 4000 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  LCP: ${color}${lcp}ms\x1b[0m`);
       }
-      if (vitals.cls !== null) {
-        const color = vitals.cls <= 0.1 ? '\x1b[32m' : vitals.cls <= 0.25 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  CLS: ${color}${vitals.cls}\x1b[0m`);
+      if (vitalsData.cls !== null) {
+        const cls = vitalsData.cls as number;
+        const color = cls <= 0.1 ? '\x1b[32m' : cls <= 0.25 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  CLS: ${color}${cls}\x1b[0m`);
       }
-      if (vitals.inp !== null) {
-        const color = vitals.inp <= 200 ? '\x1b[32m' : vitals.inp <= 500 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  INP: ${color}${vitals.inp}ms\x1b[0m`);
+      if (vitalsData.inp !== null) {
+        const inp = vitalsData.inp as number;
+        const color = inp <= 200 ? '\x1b[32m' : inp <= 500 ? '\x1b[33m' : '\x1b[31m';
+        console.log(`  INP: ${color}${inp}ms\x1b[0m`);
       }
-      if (vitals.pageSize !== null) {
-        const sizeKB = Math.round(vitals.pageSize / 1024);
+      if (vitalsData.pageSize !== null) {
+        const sizeKB = Math.round((vitalsData.pageSize as number) / 1024);
         console.log(`  Page size: ${sizeKB}KB`);
       }
     }
@@ -1436,7 +1451,7 @@ async function getVitals(options: { format?: 'text' | 'json' }) {
   }
 }
 
-function showHelp() {
+function showHelp(): void {
   console.log(`
 Sweetlink CLI - Autonomous Development Bridge
 

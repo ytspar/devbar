@@ -59,19 +59,22 @@ export async function getCDPBrowser(): Promise<Browser> {
 }
 
 /**
- * Find the local development page (localhost:3000)
+ * Find the local development page matching DEFAULT_DEV_URL
  */
 export async function findLocalDevPage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
+  const devUrl = new URL(DEFAULT_DEV_URL);
+  const devHost = devUrl.hostname;
+  const devPort = devUrl.port || (devUrl.protocol === 'https:' ? '443' : '80');
   let devPage = pages.find((p: Page) => {
     const url = p.url();
-    return url.includes('localhost:3000') || url.includes('127.0.0.1:3000');
+    return url.includes(`${devHost}:${devPort}`) || url.includes(`127.0.0.1:${devPort}`);
   });
 
-  // If no dev page found, navigate to localhost:3000
+  // If no dev page found, navigate to configured dev URL
   if (!devPage) {
     console.log(
-      `[Sweetlink CDP] No localhost:3000 page found, navigating to ${DEFAULT_DEV_URL}...`
+      `[Sweetlink CDP] No ${devHost}:${devPort} page found, navigating to ${DEFAULT_DEV_URL}...`
     );
 
     // Use the first page or create a new one

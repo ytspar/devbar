@@ -50,6 +50,11 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
     savingSchema: false,
     showOutlineModal: false,
     showSchemaModal: false,
+    showA11yModal: false,
+    a11yLoading: false,
+    savingA11yAudit: false,
+    lastA11yAudit: null,
+    a11yTimeout: null,
     savingConsoleLogs: false,
     lastConsoleLogs: null,
     consoleLogsTimeout: undefined,
@@ -99,6 +104,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
     connectWebSocket: vi.fn(),
     handleNotification: vi.fn(),
     applySettings: vi.fn(),
+    clearConsoleLogs: vi.fn(),
     ...overrides,
   } as any;
 }
@@ -457,5 +463,452 @@ describe('handleNotification', () => {
 
     vi.advanceTimersByTime(3000);
     expect(state.lastConsoleLogs).toBeNull();
+  });
+
+  it('handles a11y type and resets savingA11yAudit', () => {
+    const state = createMockState({ savingA11yAudit: true } as any);
+    handleNotification(state, 'a11y', '/a11y-report.md', 3000);
+
+    expect(state.savingA11yAudit).toBe(false);
+    expect(state.lastA11yAudit).toBe('/a11y-report.md');
+    expect(state.render).toHaveBeenCalled();
+
+    vi.advanceTimersByTime(3000);
+    expect(state.lastA11yAudit).toBeNull();
+    expect(state.render).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears previous a11y timeout before setting new one', () => {
+    const state = createMockState({ savingA11yAudit: true } as any);
+    handleNotification(state, 'a11y', '/first-a11y.md', 3000);
+    handleNotification(state, 'a11y', '/second-a11y.md', 3000);
+
+    expect(state.lastA11yAudit).toBe('/second-a11y.md');
+
+    vi.advanceTimersByTime(3000);
+    expect(state.lastA11yAudit).toBeNull();
+  });
+
+  it('clears previous designReview timeout before setting new one', () => {
+    const state = createMockState();
+    handleNotification(state, 'designReview', '/first-review.md', 5000);
+    handleNotification(state, 'designReview', '/second-review.md', 5000);
+
+    expect(state.lastDesignReview).toBe('/second-review.md');
+
+    vi.advanceTimersByTime(5000);
+    expect(state.lastDesignReview).toBeNull();
+  });
+
+  it('clears previous outline timeout before setting new one', () => {
+    const state = createMockState({ savingOutline: true });
+    handleNotification(state, 'outline', '/first-outline.md', 3000);
+    handleNotification(state, 'outline', '/second-outline.md', 3000);
+
+    expect(state.lastOutline).toBe('/second-outline.md');
+
+    vi.advanceTimersByTime(3000);
+    expect(state.lastOutline).toBeNull();
+  });
+
+  it('clears previous schema timeout before setting new one', () => {
+    const state = createMockState({ savingSchema: true });
+    handleNotification(state, 'schema', '/first-schema.md', 3000);
+    handleNotification(state, 'schema', '/second-schema.md', 3000);
+
+    expect(state.lastSchema).toBe('/second-schema.md');
+
+    vi.advanceTimersByTime(3000);
+    expect(state.lastSchema).toBeNull();
+  });
+
+  it('clears previous consoleLogs timeout before setting new one', () => {
+    const state = createMockState({ savingConsoleLogs: true });
+    handleNotification(state, 'consoleLogs', '/first-logs.md', 3000);
+    handleNotification(state, 'consoleLogs', '/second-logs.md', 3000);
+
+    expect(state.lastConsoleLogs).toBe('/second-logs.md');
+
+    vi.advanceTimersByTime(3000);
+    expect(state.lastConsoleLogs).toBeNull();
+  });
+});
+
+describe('connectWebSocket - port scan exhaustion', () => {
+  let originalWebSocket: typeof WebSocket;
+
+  beforeEach(() => {
+    originalWebSocket = globalThis.WebSocket;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWebSocket;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('restarts from base port when all ports exhausted', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    // baseWsPort=9223, MAX_PORT_RETRIES=10, so max port is 9232
+    // Connect starting at port 9232 (baseWsPort + MAX_PORT_RETRIES - 1)
+    const state = createMockState({ baseWsPort: 9223, currentAppPort: 3000 });
+    connectWebSocket(state, 9232);
+
+    const ws = instances[0];
+    // Mismatch at the last port
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: 4000 }) });
+
+    expect(ws.close).toHaveBeenCalled();
+
+    // nextPort would be 9233, which is >= 9223 + 10 = 9233, so it restarts from base
+    // PORT_SCAN_RESTART_DELAY_MS = 3000
+    vi.advanceTimersByTime(3000);
+    expect(instances).toHaveLength(2);
+    expect(instances[1].url).toBe('ws://localhost:9223');
+  });
+
+  it('handles JSON parse error in onmessage gracefully', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const ws = instances[0];
+    // Send invalid JSON
+    ws.onmessage!({ data: 'not-valid-json' });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Error handling command:',
+      expect.any(SyntaxError),
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it('onerror handler logs the error', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Should not throw
+    ws.onerror!({});
+    expect(state.debug.ws).toHaveBeenCalledWith('WebSocket error');
+  });
+
+  it('handles server-info without projectDir', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ currentAppPort: 3000 });
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // server-info without projectDir field
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: 3000 }) });
+
+    expect(state.wsVerified).toBe(true);
+    expect(state.serverProjectDir).toBeNull();
+  });
+
+  it('reconnect delay is capped at MAX_RECONNECT_DELAY_MS', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ reconnectAttempts: 0 });
+    connectWebSocket(state);
+
+    // Verify
+    instances[0].onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Set attempts to 8, so delay = 1000 * 2^8 = 256000 > 30000 (MAX)
+    state.reconnectAttempts = 8;
+    instances[0].onclose!({});
+
+    expect(state.reconnectAttempts).toBe(9);
+
+    // After 30000ms (the cap), should reconnect
+    vi.advanceTimersByTime(30000);
+    expect(instances).toHaveLength(2);
+    expect(instances[1].url).toBe('ws://localhost:9223');
+  });
+
+  it('processes settings-loaded command after verification', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify first
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Send settings-loaded command
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'settings-loaded',
+        settings: { position: 'top-right', themeMode: 'dark' },
+      }),
+    });
+
+    // handleSettingsLoaded calls settingsManager.handleSettingsLoaded and applySettings
+    expect(state.settingsManager.handleSettingsLoaded).toHaveBeenCalledWith({
+      position: 'top-right',
+      themeMode: 'dark',
+    });
+    expect(state.applySettings).toHaveBeenCalledWith({
+      position: 'top-right',
+      themeMode: 'dark',
+    });
+  });
+
+  it('handles settings-loaded with null settings', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Send settings-loaded with null settings
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'settings-loaded', settings: null }),
+    });
+
+    // Should not call applySettings with null
+    expect(state.applySettings).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch commands when ws is not open', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Close the ws (simulate readyState change)
+    ws.readyState = MockWebSocket.CLOSED;
+
+    // Send a command - should not be processed since readyState is CLOSED
+    ws.onmessage!({ data: JSON.stringify({ type: 'get-logs' }) });
+    // No error should be thrown, and no ws.send should be called after the initial load-settings
+    const sendCallsAfterSetup = ws.send.mock.calls.filter(
+      (call: string[]) => !call[0].includes('browser-client-ready') && !call[0].includes('load-settings')
+    );
+    expect(sendCallsAfterSetup).toHaveLength(0);
+  });
+
+  it('handles screenshot-saved command and updates state', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+    // Reset render calls from verification
+    (state.render as any).mockClear();
+
+    // Send screenshot-saved
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'screenshot-saved', path: '/tmp/screenshot.png' }),
+    });
+
+    expect(state.lastScreenshot).toBe('/tmp/screenshot.png');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles design-review-error command', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ designReviewInProgress: true } as any);
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Send design-review-error
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'design-review-error', error: 'API key missing' }),
+    });
+
+    expect(state.designReviewInProgress).toBe(false);
+    expect(state.designReviewError).toBe('API key missing');
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Design review failed:',
+      'API key missing',
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles api-key-status command', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+    (state.render as any).mockClear();
+
+    // Send api-key-status
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'api-key-status',
+        configured: true,
+        model: 'claude-sonnet-4-20250514',
+        pricing: { input: 3, output: 15 },
+      }),
+    });
+
+    expect(state.apiKeyStatus).toEqual({
+      configured: true,
+      model: 'claude-sonnet-4-20250514',
+      pricing: { input: 3, output: 15 },
+    });
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles unknown command type gracefully (no-op)', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Send unknown command - should not throw
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'unknown-command-type' }),
+    });
+
+    // No error thrown, state unchanged
+    expect(state.lastScreenshot).toBeNull();
+  });
+
+  it('handles console-logs-error command and resets savingConsoleLogs', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ savingConsoleLogs: true });
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'console-logs-error', error: 'Disk full' }),
+    });
+
+    expect(state.savingConsoleLogs).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Console logs save failed:',
+      'Disk full',
+    );
+    expect(state.render).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles a11y-error command and resets savingA11yAudit', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ savingA11yAudit: true } as any);
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'a11y-error', error: 'axe-core failed' }),
+    });
+
+    expect(state.savingA11yAudit).toBe(false);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] A11y save failed:',
+      'axe-core failed',
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles settings-saved command', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    // Send settings-saved - should just log, not throw
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'settings-saved', settingsPath: '/proj/.devbar/settings.json' }),
+    });
+
+    expect(state.debug.state).toHaveBeenCalledWith(
+      'Settings saved to server',
+      { path: '/proj/.devbar/settings.json' },
+    );
+  });
+
+  it('handles settings-error command', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState();
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    // Verify
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'settings-error', error: 'Permission denied' }),
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Settings operation failed:',
+      'Permission denied',
+    );
+
+    consoleSpy.mockRestore();
   });
 });

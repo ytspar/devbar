@@ -7,7 +7,7 @@ import { DEFAULT_VIEWPORT, parseViewport } from './viewportUtils.js';
 // ============================================================================
 
 const DEFAULT_DEV_URL = process.env.SWEETLINK_DEV_URL || 'http://localhost:3000';
-const CDP_URL = 'http://localhost:9222';
+const CDP_URL = process.env.CHROME_CDP_URL || 'http://localhost:9222';
 const CDP_CONNECTION_TIMEOUT_MS = 2000;
 const NAVIGATION_TIMEOUT_MS = 30000;
 const SELECTOR_TIMEOUT_MS = 5000;

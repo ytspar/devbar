@@ -762,7 +762,7 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
 // Server Setup
 // ============================================================================
 
-function setupServerHandlers(server: WebSocketServer) {
+function setupServerHandlers(server: WebSocketServer): void {
   server.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
     const origin = req.headers.origin;

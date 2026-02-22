@@ -141,6 +141,29 @@ const SERVER_READY_TIMEOUT = 30000; // 30 seconds to wait for server
 const SERVER_POLL_INTERVAL = 500; // Poll every 500ms
 
 /**
+ * Check if the Sweetlink WebSocket server is alive.
+ * Uses the HTTP info endpoint (same port as WS) for a fast, non-blocking check.
+ * Returns true if the server responds with its package info, false otherwise.
+ */
+async function checkSweetlinkAlive(wsUrl: string = WS_URL): Promise<boolean> {
+  try {
+    // Convert ws:// URL to http:// for the health check
+    const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const response = await fetch(httpUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data?.name === '@ytspar/sweetlink';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Wait for a server to be ready by polling the URL
  * @param url Target URL to check
  * @param timeout Maximum time to wait in ms
@@ -264,6 +287,13 @@ async function screenshot(options: {
       '[Sweetlink] ⚠️  Warning: Using /tmp/ for output. Consider using .tmp/screenshots/ instead for project-relative paths.'
     );
     console.warn('[Sweetlink]    Example: --output .tmp/screenshots/my-screenshot.png');
+  }
+
+  // Pre-flight: verify Sweetlink server is alive before launching expensive Playwright
+  // This prevents launching a headless browser only to discover the dev server is dead.
+  const serverAlive = await checkSweetlinkAlive();
+  if (!serverAlive && !options.forceCDP) {
+    console.warn('[Sweetlink] Sweetlink server not responding — will use Playwright standalone');
   }
 
   // Check if CDP is available (unless force WS is specified)

@@ -869,7 +869,19 @@ export function closeSweetlink(): Promise<void> {
 
     console.log('[Sweetlink] Closing WebSocket server on port', activePort);
 
-    // Close all client connections first
+    // Broadcast shutdown notice to all connected clients before closing.
+    // CLI clients monitoring this connection can use this to abort in-flight work.
+    clients.forEach((info, client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(JSON.stringify({ type: 'server-shutdown', timestamp: Date.now() }));
+        } catch {
+          // Client may already be in a closing state — ignore
+        }
+      }
+    });
+
+    // Close all client connections
     clients.forEach((_, client) => client.close());
     clients.clear();
 

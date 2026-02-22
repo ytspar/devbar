@@ -13,6 +13,13 @@ const NAVIGATION_TIMEOUT_MS = 30000;
 const SELECTOR_TIMEOUT_MS = 5000;
 const HOVER_TRANSITION_DELAY_MS = 300;
 
+/** Hard timeout for the entire screenshot operation (browser launch + navigate + capture).
+ *  Prevents orphaned Playwright processes when the dev server dies mid-operation.
+ *  Configurable via SWEETLINK_OPERATION_TIMEOUT env var (in ms). */
+const OPERATION_TIMEOUT_MS = process.env.SWEETLINK_OPERATION_TIMEOUT
+  ? parseInt(process.env.SWEETLINK_OPERATION_TIMEOUT, 10)
+  : 60_000;
+
 // ============================================================================
 // Module loading
 // ============================================================================
@@ -128,7 +135,10 @@ export async function getBrowser(
 }
 
 /**
- * Take a screenshot using Playwright
+ * Take a screenshot using Playwright.
+ *
+ * Wrapped with a hard timeout (OPERATION_TIMEOUT_MS) to prevent orphaned
+ * processes when the dev server dies mid-operation.
  */
 export async function screenshotViaPlaywright(options: {
   selector?: string;
@@ -139,6 +149,35 @@ export async function screenshotViaPlaywright(options: {
   a11y?: boolean; // Placeholder for future
   url?: string;
   /** Enable progress logging (default: false) */
+  verbose?: boolean;
+  /** Override the operation timeout in ms (default: OPERATION_TIMEOUT_MS) */
+  timeout?: number;
+}): Promise<{ buffer: Buffer; width: number; height: number }> {
+  const timeoutMs = options.timeout ?? OPERATION_TIMEOUT_MS;
+
+  // Race the actual work against a hard timeout
+  return Promise.race([
+    screenshotViaPlaywrightCore(options),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(
+          `Playwright screenshot timed out after ${timeoutMs}ms. ` +
+          `The dev server may be unreachable. Set SWEETLINK_OPERATION_TIMEOUT to adjust.`
+        ));
+      }, timeoutMs);
+    }),
+  ]);
+}
+
+/** Core implementation — separated so the timeout wrapper can race against it. */
+async function screenshotViaPlaywrightCore(options: {
+  selector?: string;
+  output?: string;
+  fullPage?: boolean;
+  viewport?: string;
+  hover?: boolean;
+  a11y?: boolean;
+  url?: string;
   verbose?: boolean;
 }): Promise<{ buffer: Buffer; width: number; height: number }> {
   const verbose = options.verbose ?? false;
@@ -206,10 +245,6 @@ export async function screenshotViaPlaywright(options: {
       height: size?.height || 0,
     };
   } finally {
-    // Only close if we launched it new. If we connected to existing, maybe keep it?
-    // Actually, for a CLI tool, we should probably close the connection/browser we opened.
-    // If we connected to existing CDP, browser.close() might close the user's browser?
-    // chromium.connectOverCDP returns a Browser that, when closed, disconnects.
     if (verbose) console.log('[Sweetlink] Closing browser...');
     await browser.close();
     if (verbose) console.log('[Sweetlink] Browser closed.');

@@ -115,6 +115,22 @@ export class ConsoleCapture {
   }
 
   /**
+   * Trim logs to maxLogs and adjust counts for any evicted entries.
+   */
+  private trimLogs(): void {
+    if (this.logs.length <= this.maxLogs) return;
+    const evicted = this.logs.slice(0, this.logs.length - this.maxLogs);
+    this.logs = this.logs.slice(-this.maxLogs);
+    if (this.trackCounts) {
+      for (const log of evicted) {
+        if (log.level === 'error') this.errorCount--;
+        else if (log.level === 'warn') this.warningCount--;
+        else if (log.level === 'info') this.infoCount--;
+      }
+    }
+  }
+
+  /**
    * Start capturing console output
    */
   start(): void {
@@ -136,15 +152,14 @@ export class ConsoleCapture {
       };
 
       this.logs.push(log);
-      if (this.logs.length > this.maxLogs) {
-        this.logs = this.logs.slice(-this.maxLogs);
-      }
 
       if (this.trackCounts) {
         if (level === 'error') this.errorCount++;
         else if (level === 'warn') this.warningCount++;
         else if (level === 'info') this.infoCount++;
       }
+
+      this.trimLogs();
 
       if (this.onLog) {
         this.onLog(log);
@@ -260,7 +275,15 @@ export class ConsoleCapture {
    * Import logs from another source (e.g., early capture)
    */
   importLogs(logs: ConsoleLog[]): void {
-    this.logs = [...logs, ...this.logs].slice(-this.maxLogs);
+    if (this.trackCounts) {
+      for (const log of logs) {
+        if (log.level === 'error') this.errorCount++;
+        else if (log.level === 'warn') this.warningCount++;
+        else if (log.level === 'info') this.infoCount++;
+      }
+    }
+    this.logs = [...logs, ...this.logs];
+    this.trimLogs();
   }
 
   /**
@@ -285,10 +308,12 @@ export class ConsoleCapture {
    */
   addLog(log: ConsoleLog): void {
     this.logs.push(log);
-    if (this.logs.length > this.maxLogs) {
-      this.logs = this.logs.slice(-this.maxLogs);
+    if (this.trackCounts) {
+      if (log.level === 'error') this.errorCount++;
+      else if (log.level === 'warn') this.warningCount++;
+      else if (log.level === 'info') this.infoCount++;
     }
-    if (this.trackCounts && log.level === 'error') this.errorCount++;
+    this.trimLogs();
     this.notifyListeners();
   }
 

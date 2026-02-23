@@ -439,13 +439,12 @@ describe('ConsoleCapture - addLog', () => {
     expect(capture.getErrorCount()).toBe(1);
   });
 
-  it('does not increment warning or info counts via addLog', () => {
+  it('increments warning and info counts via addLog', () => {
     capture.addLog({ level: 'warn', message: 'w', timestamp: 1 });
     capture.addLog({ level: 'info', message: 'i', timestamp: 1 });
 
-    // addLog only tracks error counts (see source: only checks level === 'error')
-    expect(capture.getWarningCount()).toBe(0);
-    expect(capture.getInfoCount()).toBe(0);
+    expect(capture.getWarningCount()).toBe(1);
+    expect(capture.getInfoCount()).toBe(1);
   });
 
   it('respects maxLogs truncation', () => {

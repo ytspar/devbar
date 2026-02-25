@@ -44,6 +44,9 @@ test-results/
 credentials.json
 serviceAccountKey.json
 
+# Product Finalizer audit skip file (user-specific)
+.product-finalizer-skip.json
+
 # Claude Code local settings
 .claude/
 

@@ -5,6 +5,7 @@
  */
 
 import type { AxeResult, AxeViolation } from '@ytspar/sweetlink/types';
+import { PALETTE } from './constants.js';
 
 export type { AxeResult, AxeViolation };
 
@@ -148,12 +149,12 @@ export function groupViolationsByImpact(violations: AxeViolation[]): Map<string,
  */
 export function getImpactColor(impact: string): string {
   const colors: Record<string, string> = {
-    critical: '#ef4444', // red
-    serious: '#f97316', // orange
-    moderate: '#f59e0b', // amber
-    minor: '#84cc16', // lime
+    critical: PALETTE.red,
+    serious: PALETTE.orange,
+    moderate: PALETTE.amber,
+    minor: PALETTE.lime,
   };
-  return colors[impact] || '#6b7280';
+  return colors[impact] || PALETTE.gray;
 }
 
 /**
@@ -164,7 +165,7 @@ export function getBadgeColor(violations: AxeViolation[]): string {
   if (violations.some((v) => v.impact === 'serious')) return getImpactColor('serious');
   if (violations.some((v) => v.impact === 'moderate')) return getImpactColor('moderate');
   if (violations.some((v) => v.impact === 'minor')) return getImpactColor('minor');
-  return '#10b981'; // green - no violations
+  return PALETTE.emerald; // green - no violations
 }
 
 /**

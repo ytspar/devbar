@@ -4,6 +4,8 @@
  * Tracks network requests using PerformanceObserver and fetch interception.
  */
 
+import { PALETTE } from './constants.js';
+
 /**
  * Network request entry
  */
@@ -208,14 +210,14 @@ export function formatDuration(ms: number): string {
  */
 export function getInitiatorColor(type: string): string {
   const colors: Record<string, string> = {
-    script: '#f59e0b', // amber
-    link: '#3b82f6', // blue
-    css: '#a855f7', // purple
-    fetch: '#10b981', // emerald
-    xmlhttprequest: '#10b981', // emerald
-    img: '#ec4899', // pink
-    iframe: '#06b6d4', // cyan
-    other: '#6b7280', // gray
+    script: PALETTE.amber,
+    link: PALETTE.blue,
+    css: PALETTE.purple,
+    fetch: PALETTE.emerald,
+    xmlhttprequest: PALETTE.emerald,
+    img: PALETTE.pink,
+    iframe: PALETTE.cyan,
+    other: PALETTE.gray,
   };
   return colors[type] || colors.other;
 }

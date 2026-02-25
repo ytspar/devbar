@@ -4,6 +4,7 @@
  * Debug logging system for devbar lifecycle, state, and events.
  */
 
+import { PALETTE } from './constants.js';
 import type { DebugConfig } from './types.js';
 
 /**
@@ -88,28 +89,28 @@ export class DebugLogger {
   private log(category: string, message: string, data?: unknown): void {
     const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
     const categoryColors: Record<string, string> = {
-      lifecycle: '#10b981', // emerald
-      state: '#3b82f6', // blue
-      ws: '#a855f7', // purple
-      perf: '#f59e0b', // amber
+      lifecycle: PALETTE.emerald,
+      state: PALETTE.blue,
+      ws: PALETTE.purple,
+      perf: PALETTE.amber,
     };
-    const color = categoryColors[category] || '#6b7280';
+    const color = categoryColors[category] || PALETTE.gray;
 
     if (data !== undefined) {
       console.log(
         `%c${this.prefix}%c [${category}] %c${timestamp}%c ${message}`,
-        'color: #10b981; font-weight: bold',
+        `color: ${PALETTE.emerald}; font-weight: bold`,
         `color: ${color}`,
-        'color: #6b7280',
+        `color: ${PALETTE.gray}`,
         'color: inherit',
         data
       );
     } else {
       console.log(
         `%c${this.prefix}%c [${category}] %c${timestamp}%c ${message}`,
-        'color: #10b981; font-weight: bold',
+        `color: ${PALETTE.emerald}; font-weight: bold`,
         `color: ${color}`,
-        'color: #6b7280',
+        `color: ${PALETTE.gray}`,
         'color: inherit'
       );
     }

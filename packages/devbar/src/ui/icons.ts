@@ -4,6 +4,8 @@
  * SVG icon creation utilities for the devbar UI.
  */
 
+import { PALETTE } from '../constants.js';
+
 /** Descriptor for additional SVG child elements (circles, polylines, etc.) */
 export type SvgChild =
   | { type: 'circle'; cx: string; cy: string; r: string }
@@ -74,9 +76,9 @@ export const DEVBAR_LOGO_VIEWBOX = '0 0 580.43 167.62';
 /** devbar logo colors */
 export const DEVBAR_LOGO_COLORS = {
   /** Emerald green for dark mode */
-  dark: '#10b981',
+  dark: PALETTE.emerald,
   /** Darker emerald for light mode */
-  light: '#047857',
+  light: PALETTE.emeraldDark,
 } as const;
 
 /** devbar wordmark letter path data */

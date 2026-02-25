@@ -5,6 +5,7 @@
  * and localStorage fallback.
  */
 
+import { PALETTE } from './constants.js';
 import type { ThemeMode } from './types.js';
 
 // ============================================================================
@@ -93,16 +94,16 @@ export interface DevBarSettings {
 // ============================================================================
 
 /** Default accent color (emerald) */
-const DEFAULT_ACCENT_COLOR = '#10b981';
+const DEFAULT_ACCENT_COLOR = PALETTE.emerald;
 
 /** Preset accent colors for the color picker */
 export const ACCENT_COLOR_PRESETS = [
-  { name: 'Emerald', value: '#10b981' },
-  { name: 'Blue', value: '#3b82f6' },
-  { name: 'Purple', value: '#a855f7' },
-  { name: 'Pink', value: '#ec4899' },
-  { name: 'Amber', value: '#f59e0b' },
-  { name: 'Cyan', value: '#06b6d4' },
+  { name: 'Emerald', value: PALETTE.emerald },
+  { name: 'Blue', value: PALETTE.blue },
+  { name: 'Purple', value: PALETTE.purple },
+  { name: 'Pink', value: PALETTE.pink },
+  { name: 'Amber', value: PALETTE.amber },
+  { name: 'Cyan', value: PALETTE.cyan },
 ] as const;
 
 /**

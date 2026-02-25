@@ -78,11 +78,13 @@ export type TailwindBreakpoint = keyof typeof TAILWIND_BREAKPOINTS;
 // ============================================================================
 
 /** Core color palette - all other color constants reference these */
-const PALETTE = {
+export const PALETTE = {
   emerald: '#10b981',
   emeraldHover: '#059669',
   emeraldGlow: 'rgba(16, 185, 129, 0.4)',
+  emeraldDark: '#047857',
   red: '#ef4444',
+  orange: '#f97316',
   amber: '#f59e0b',
   blue: '#3b82f6',
   purple: '#a855f7',
@@ -103,6 +105,7 @@ export const BUTTON_COLORS = {
   outline: PALETTE.cyan,
   schema: PALETTE.amber,
   a11y: PALETTE.pink,
+  ruler: PALETTE.lime,
   error: PALETTE.red,
   warning: PALETTE.amber,
   info: PALETTE.blue,

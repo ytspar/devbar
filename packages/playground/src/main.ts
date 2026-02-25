@@ -17,6 +17,7 @@ import {
 } from '@ytspar/devbar';
 import { createDemoContent } from './demo-content.js';
 import {
+  createChangelogSection,
   createFeaturesSection,
   createLandingHero,
   createPackagesSection,
@@ -72,6 +73,7 @@ if (app) {
   app.appendChild(createSweetlinkSection());
   app.appendChild(createPackagesSection());
   app.appendChild(createQuickStartSection());
+  app.appendChild(createChangelogSection());
 
   // Interactive demo
   app.appendChild(createDemoContent());

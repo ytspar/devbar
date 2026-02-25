@@ -146,6 +146,61 @@ function cachedFetch<T>(url: string, key: string): Promise<T> {
 }
 
 /**
+ * Format a date string as relative time (e.g., "2 days ago")
+ */
+function formatRelativeDate(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+  return `${Math.floor(diffDays / 365)}y ago`;
+}
+
+/**
+ * Format a date string as "Feb 25, 2026"
+ */
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Fetch npm package metadata (time field only, cached to avoid large payloads)
+ */
+interface NpmTimeline {
+  'dist-tags': { latest: string };
+  time: Record<string, string>;
+}
+
+function fetchNpmTimeline(pkg: string): Promise<NpmTimeline> {
+  const cacheKey = `timeline:${pkg}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) return Promise.resolve(JSON.parse(cached) as NpmTimeline);
+
+  return fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg)}`)
+    .then((r) => {
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json() as Promise<NpmTimeline>;
+    })
+    .then((data) => {
+      // Store only the fields we need (time + dist-tags), not full version metadata
+      const slim: NpmTimeline = {
+        'dist-tags': data['dist-tags'],
+        time: data.time,
+      };
+      sessionStorage.setItem(cacheKey, JSON.stringify(slim));
+      return slim;
+    });
+}
+
+/**
  * Fetch live badge data from npm and GitHub APIs
  */
 function fetchBadgeData(): void {
@@ -253,8 +308,25 @@ export function createLandingHero(): HTMLElement {
   badges.appendChild(createCoverageBadge());
   hero.appendChild(badges);
 
-  // Fetch live data for badges and coverage
+  // Release info — "Last published 2d ago · v1.7.1  Changelog ↓"
+  const releaseInfo = document.createElement('div');
+  releaseInfo.className = 'landing-release-info';
+  const releaseMeta = document.createElement('span');
+  releaseMeta.className = 'release-meta';
+  releaseMeta.id = 'release-meta';
+  releaseMeta.textContent = '\u00B7 \u00B7 \u00B7'; // placeholder dots
+  releaseInfo.appendChild(releaseMeta);
+
+  const changelogLink = document.createElement('a');
+  changelogLink.href = '#changelog';
+  changelogLink.className = 'release-changelog-link';
+  changelogLink.textContent = 'Changelog \u2193';
+  releaseInfo.appendChild(changelogLink);
+  hero.appendChild(releaseInfo);
+
+  // Fetch live data for badges, coverage, and release date
   fetchBadgeData();
+  fetchReleaseInfo();
 
   // Quick install — entire card is clickable to copy
   const install = document.createElement('div');
@@ -296,6 +368,409 @@ export function createLandingHero(): HTMLElement {
   hero.appendChild(install);
 
   return hero;
+}
+
+/**
+ * Fetch and display release info in the hero section
+ */
+function fetchReleaseInfo(): void {
+  fetchNpmTimeline('@ytspar/devbar').then((data) => {
+    const latest = data['dist-tags'].latest;
+    const dateStr = data.time[latest];
+    if (!dateStr) return;
+
+    const el = document.getElementById('release-meta');
+    if (el) {
+      el.textContent = `Published ${formatRelativeDate(dateStr)} \u00B7 v${latest}`;
+    }
+  }).catch(() => {});
+}
+
+/**
+ * Changelog entry for rendering
+ */
+interface ChangelogEntry {
+  pkg: string;
+  version: string;
+  date: string;
+}
+
+/**
+ * Human-curated release notes keyed by package → version.
+ * Only meaningful releases are listed; patch republishes are omitted.
+ */
+const RELEASE_NOTES: Record<string, Record<string, string>> = {
+  devbar: {
+    '1.7.1': 'Ruler tool for measuring element dimensions on-page',
+    '1.6.4': 'Console log sync, CLI shutdown coordination',
+    '1.6.0': 'Inline DepartureMono font, capture browser-level errors',
+    '1.5.3': 'CSP bypass via Playwright fallback for exec/click/query',
+    '1.5.0': 'Control groups, info variant, and non-interactive badges',
+    '1.4.0': 'DRY modal copy/download, pre-release audit, expanded tests',
+    '1.3.0': 'Accessibility audit, document outline, schema extraction',
+    '1.2.0': 'Screenshot quality slider, settings crash fix',
+    '1.1.0': 'Screenshot improvements, browser download mode',
+    '1.0.0': 'Initial release — breakpoints, vitals, console, screenshots',
+  },
+  sweetlink: {
+    '1.9.0': 'Wait-for selector, async exec, return statement auto-wrap',
+    '1.8.1': 'Console log buffer sync, 209 new tests',
+    '1.8.0': 'CLI shutdown synchronization with dev server lifecycle',
+    '1.6.0': 'Console log eviction sync, browser error capture',
+    '1.5.0': 'CSP eval-blocked detection + Playwright fallback',
+    '1.4.0': 'Dead code removal, deduplicated constants, 85 new tests',
+    '1.3.0': 'CDP and ruler test suites, ruler/playwright sub-exports',
+    '1.2.0': 'Outline and schema tools moved from devbar, modal UX',
+    '1.1.0': 'Auto-detect save location, browser download mode',
+    '1.0.0': 'Initial release — screenshots, logs, HMR capture, CLI',
+  },
+};
+
+/**
+ * Create the changelog/releases section
+ */
+export function createChangelogSection(): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'landing-changelog';
+  section.id = 'changelog';
+
+  const heading = createTextElement('h2', 'section-heading', 'Releases');
+  section.appendChild(heading);
+
+  // Release graph container (populated async)
+  const graphWrap = document.createElement('div');
+  graphWrap.className = 'release-graph-wrap';
+  graphWrap.id = 'release-graph';
+  section.appendChild(graphWrap);
+
+  // Graph legend
+  const legend = document.createElement('div');
+  legend.className = 'release-graph-legend';
+  for (const item of [
+    { cls: 'legend-devbar-stable', label: 'devbar stable' },
+    { cls: 'legend-devbar-canary', label: 'devbar canary' },
+    { cls: 'legend-sweetlink-stable', label: 'sweetlink stable' },
+    { cls: 'legend-sweetlink-canary', label: 'sweetlink canary' },
+  ]) {
+    const el = document.createElement('span');
+    el.className = `release-graph-legend-item ${item.cls}`;
+    el.textContent = item.label;
+    legend.appendChild(el);
+  }
+  section.appendChild(legend);
+
+  // Changelog list container (populated async)
+  const list = document.createElement('div');
+  list.className = 'changelog-list';
+  list.id = 'changelog-list';
+
+  const loading = document.createElement('div');
+  loading.className = 'changelog-loading';
+  loading.textContent = 'Loading release history\u2026';
+  list.appendChild(loading);
+
+  section.appendChild(list);
+
+  // Footer link to GitHub
+  const footer = document.createElement('div');
+  footer.className = 'changelog-footer';
+  const ghLink = document.createElement('a');
+  ghLink.href = 'https://github.com/ytspar/devbar/commits/main';
+  ghLink.target = '_blank';
+  ghLink.rel = 'noopener noreferrer';
+  ghLink.className = 'changelog-gh-link';
+  ghLink.textContent = 'Full history on GitHub \u2192';
+  footer.appendChild(ghLink);
+  section.appendChild(footer);
+
+  // Fetch release data from npm
+  populateChangelog();
+
+  return section;
+}
+
+/**
+ * Classify a version string: stable, canary, or prerelease (alpha/beta/rc)
+ */
+function classifyVersion(version: string): 'stable' | 'canary' | 'prerelease' {
+  if (version.includes('canary')) return 'canary';
+  if (version.includes('-')) return 'prerelease';
+  return 'stable';
+}
+
+/**
+ * Parse semver major.minor.patch from a version string (ignores prerelease suffix)
+ */
+function parseSemver(version: string): number {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return 0;
+  return parseInt(match[1]) * 10000 + parseInt(match[2]) * 100 + parseInt(match[3]);
+}
+
+/**
+ * Render an SVG release history graph into #release-graph.
+ * X axis = time, Y axis = version (semver), dots = releases, color = type.
+ */
+function renderReleaseGraph(
+  devbarTime: Record<string, string>,
+  sweetlinkTime: Record<string, string>,
+): void {
+  const container = document.getElementById('release-graph');
+  if (!container) return;
+
+  interface Point {
+    pkg: 'devbar' | 'sweetlink';
+    version: string;
+    kind: 'stable' | 'canary' | 'prerelease';
+    date: Date;
+    semver: number;
+  }
+
+  const points: Point[] = [];
+
+  for (const [time, label] of [[devbarTime, 'devbar'], [sweetlinkTime, 'sweetlink']] as const) {
+    for (const [ver, dateStr] of Object.entries(time)) {
+      if (ver === 'created' || ver === 'modified') continue;
+      // Skip v0.0.x — initial placeholder publishes that compress the Y scale
+      if (ver.startsWith('0.0.')) continue;
+      points.push({
+        pkg: label,
+        version: ver,
+        kind: classifyVersion(ver),
+        date: new Date(dateStr),
+        semver: parseSemver(ver),
+      });
+    }
+  }
+
+  if (points.length === 0) return;
+
+  // Dimensions
+  const width = 1060;
+  const height = 240;
+  const pad = { top: 20, right: 30, bottom: 32, left: 50 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+
+  // Scales
+  const dates = points.map((p) => p.date.getTime());
+  const minDate = Math.min(...dates);
+  const maxDate = Math.max(...dates);
+  const dateRange = maxDate - minDate || 1;
+  const xScale = (d: Date) => pad.left + ((d.getTime() - minDate) / dateRange) * plotW;
+
+  const semvers = points.map((p) => p.semver);
+  const minSv = Math.min(...semvers);
+  const maxSv = Math.max(...semvers);
+  const svRange = maxSv - minSv || 1;
+  const yScale = (sv: number) => pad.top + plotH - ((sv - minSv) / svRange) * plotH;
+
+  // Colors
+  const colors: Record<string, Record<string, string>> = {
+    devbar: { stable: '#10b981', canary: 'rgba(16,185,129,0.35)', prerelease: 'rgba(16,185,129,0.5)' },
+    sweetlink: { stable: '#a855f7', canary: 'rgba(168,85,247,0.35)', prerelease: 'rgba(168,85,247,0.5)' },
+  };
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('class', 'release-graph-svg');
+
+  // Grid lines (horizontal)
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (plotH / 4) * i;
+    const line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', String(pad.left));
+    line.setAttribute('x2', String(width - pad.right));
+    line.setAttribute('y1', String(y));
+    line.setAttribute('y2', String(y));
+    line.setAttribute('class', 'release-graph-grid');
+    svg.appendChild(line);
+  }
+
+  // X-axis date labels
+  const labelCount = 6;
+  for (let i = 0; i <= labelCount; i++) {
+    const t = minDate + (dateRange / labelCount) * i;
+    const x = xScale(new Date(t));
+    const text = document.createElementNS(NS, 'text');
+    text.setAttribute('x', String(x));
+    text.setAttribute('y', String(height - 6));
+    text.setAttribute('class', 'release-graph-label');
+    text.textContent = new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    svg.appendChild(text);
+  }
+
+  // Y-axis version labels — pick min, mid, max from unique sorted semvers
+  const uniqueSv = Array.from(new Set(semvers)).sort((a, b) => a - b);
+  const yLabelSvs = [
+    uniqueSv[0],
+    uniqueSv[Math.floor(uniqueSv.length / 2)],
+    uniqueSv[uniqueSv.length - 1],
+  ];
+  for (const sv of yLabelSvs) {
+    const major = Math.floor(sv / 10000);
+    const minor = Math.floor((sv % 10000) / 100);
+    const patch = sv % 100;
+    const text = document.createElementNS(NS, 'text');
+    text.setAttribute('x', String(pad.left - 8));
+    text.setAttribute('y', String(yScale(sv) + 3));
+    text.setAttribute('class', 'release-graph-label release-graph-label-y');
+    text.textContent = `v${major}.${minor}.${patch}`;
+    svg.appendChild(text);
+  }
+
+  // Sort so canary/prerelease render behind stable
+  const sortOrder = { canary: 0, prerelease: 1, stable: 2 };
+  points.sort((a, b) => sortOrder[a.kind] - sortOrder[b.kind]);
+
+  // Tooltip group (appended last so it renders on top)
+  const tooltipGroup = document.createElementNS(NS, 'g');
+  tooltipGroup.setAttribute('class', 'release-graph-tooltip-group');
+
+  // Plot dots
+  for (const p of points) {
+    const cx = xScale(p.date);
+    const cy = yScale(p.semver);
+    const r = p.kind === 'stable' ? 4 : 2.5;
+    const color = colors[p.pkg]?.[p.kind] ?? '#666';
+
+    const circle = document.createElementNS(NS, 'circle');
+    circle.setAttribute('cx', String(cx));
+    circle.setAttribute('cy', String(cy));
+    circle.setAttribute('r', String(r));
+    circle.setAttribute('fill', color);
+    if (p.kind === 'stable') {
+      circle.setAttribute('class', 'release-graph-dot-stable');
+    }
+    svg.appendChild(circle);
+
+    // Invisible hover target (larger)
+    const hitArea = document.createElementNS(NS, 'circle');
+    hitArea.setAttribute('cx', String(cx));
+    hitArea.setAttribute('cy', String(cy));
+    hitArea.setAttribute('r', '8');
+    hitArea.setAttribute('fill', 'transparent');
+    hitArea.setAttribute('class', 'release-graph-hit');
+
+    // Tooltip on hover
+    const tipBg = document.createElementNS(NS, 'rect');
+    const tipText = document.createElementNS(NS, 'text');
+    const label = `${p.pkg} v${p.version}`;
+    tipText.textContent = label;
+    tipText.setAttribute('x', String(cx));
+    tipText.setAttribute('y', String(cy - 14));
+    tipText.setAttribute('class', 'release-graph-tip-text');
+
+    // Estimate text width (monospace ~7px per char at 10px font)
+    const tw = label.length * 6.2 + 12;
+    tipBg.setAttribute('x', String(cx - tw / 2));
+    tipBg.setAttribute('y', String(cy - 26));
+    tipBg.setAttribute('width', String(tw));
+    tipBg.setAttribute('height', '16');
+    tipBg.setAttribute('rx', '3');
+    tipBg.setAttribute('class', 'release-graph-tip-bg');
+
+    const tipGroup = document.createElementNS(NS, 'g');
+    tipGroup.setAttribute('class', 'release-graph-tip');
+    tipGroup.appendChild(tipBg);
+    tipGroup.appendChild(tipText);
+    tooltipGroup.appendChild(tipGroup);
+
+    hitArea.addEventListener('mouseenter', () => {
+      tipGroup.classList.add('visible');
+    });
+    hitArea.addEventListener('mouseleave', () => {
+      tipGroup.classList.remove('visible');
+    });
+    svg.appendChild(hitArea);
+  }
+
+  svg.appendChild(tooltipGroup);
+  while (container.firstChild) container.removeChild(container.firstChild);
+  container.appendChild(svg);
+}
+
+/**
+ * Fetch both packages' timelines and render the changelog
+ */
+function populateChangelog(): void {
+  Promise.all([
+    fetchNpmTimeline('@ytspar/devbar').catch(() => null),
+    fetchNpmTimeline('@ytspar/sweetlink').catch(() => null),
+  ]).then(([devbarData, sweetlinkData]) => {
+    // Render the release graph (includes ALL versions — stable, canary, prerelease)
+    renderReleaseGraph(
+      devbarData?.time ?? {},
+      sweetlinkData?.time ?? {},
+    );
+
+    // Extract curated stable entries for the table below
+    const devbarEntries = devbarData ? extractEntries('devbar', devbarData.time) : [];
+    const sweetlinkEntries = sweetlinkData ? extractEntries('sweetlink', sweetlinkData.time) : [];
+    // Only show versions that have curated release notes
+    const all = [...devbarEntries, ...sweetlinkEntries]
+      .filter((e) => RELEASE_NOTES[e.pkg]?.[e.version])
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const container = document.getElementById('changelog-list');
+    if (!container) return;
+
+    // Clear loading state
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    if (all.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'changelog-loading';
+      empty.textContent = 'No release data available';
+      container.appendChild(empty);
+      return;
+    }
+
+    for (const entry of all) {
+      const row = document.createElement('div');
+      row.className = 'changelog-entry';
+
+      const version = document.createElement('a');
+      version.className = 'changelog-version';
+      version.href = `https://www.npmjs.com/package/@ytspar/${entry.pkg}/v/${entry.version}`;
+      version.target = '_blank';
+      version.rel = 'noopener noreferrer';
+      version.textContent = `v${entry.version}`;
+
+      const pkg = document.createElement('span');
+      pkg.className = `changelog-pkg changelog-pkg-${entry.pkg}`;
+      pkg.textContent = entry.pkg;
+
+      const desc = document.createElement('span');
+      desc.className = 'changelog-desc';
+      desc.textContent = RELEASE_NOTES[entry.pkg]?.[entry.version] ?? '';
+
+      const date = document.createElement('span');
+      date.className = 'changelog-date';
+      date.textContent = formatDate(entry.date);
+
+      row.appendChild(version);
+      row.appendChild(pkg);
+      row.appendChild(desc);
+      row.appendChild(date);
+      container.appendChild(row);
+    }
+  });
+}
+
+/**
+ * Extract version entries from npm time data.
+ * Skips "created", "modified", and pre-release versions (canary, alpha, beta, rc).
+ */
+function extractEntries(pkg: string, time: Record<string, string>): ChangelogEntry[] {
+  const entries: ChangelogEntry[] = [];
+  for (const [key, dateStr] of Object.entries(time)) {
+    if (key === 'created' || key === 'modified') continue;
+    if (key.includes('-')) continue; // skip canary, alpha, beta, rc
+    entries.push({ pkg, version: key, date: dateStr });
+  }
+  return entries;
 }
 
 /**

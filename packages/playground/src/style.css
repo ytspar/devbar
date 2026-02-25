@@ -919,6 +919,34 @@ body.theme-light {
   color: rgba(16, 185, 129, 0.15);
 }
 
+/* Release info — below badges, above install */
+.landing-release-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+}
+
+.release-meta {
+  color: var(--devbar-color-text-muted);
+}
+
+.release-changelog-link {
+  color: var(--devbar-color-primary);
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: var(--devbar-font-medium);
+  transition: text-shadow var(--devbar-transition-fast);
+}
+
+.release-changelog-link:hover {
+  text-shadow: 0 0 8px var(--devbar-color-primary-glow);
+}
+
 .landing-install {
   display: inline-flex;
   align-items: center;
@@ -1144,6 +1172,227 @@ body.theme-light {
   color: var(--devbar-color-text);
 }
 
+/* Changelog / Releases Section */
+.landing-changelog {
+  max-width: 1100px;
+  margin: 0 auto 4rem;
+  padding: 0 2rem;
+}
+
+/* Release history graph */
+.release-graph-wrap {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--devbar-color-border);
+  padding: 0.5rem 0.5rem 0;
+  overflow: hidden;
+}
+
+.release-graph-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.release-graph-grid {
+  stroke: var(--devbar-color-border-subtle);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 4;
+}
+
+.release-graph-label {
+  font-family: var(--devbar-font-mono);
+  font-size: 9px;
+  fill: var(--devbar-color-text-muted);
+  text-anchor: middle;
+}
+
+.release-graph-label-y {
+  text-anchor: end;
+  font-size: 8px;
+}
+
+.release-graph-dot-stable {
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+.release-graph-hit {
+  cursor: pointer;
+}
+
+.release-graph-tip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.release-graph-tip.visible {
+  opacity: 1;
+}
+
+.release-graph-tip-bg {
+  fill: var(--devbar-color-bg-card);
+  stroke: var(--devbar-color-border);
+  stroke-width: 0.5;
+}
+
+.release-graph-tip-text {
+  font-family: var(--devbar-font-mono);
+  font-size: 10px;
+  fill: var(--devbar-color-text);
+  text-anchor: middle;
+  dominant-baseline: auto;
+}
+
+/* Graph legend */
+.release-graph-legend {
+  display: flex;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.release-graph-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--devbar-color-text-muted);
+}
+
+.release-graph-legend-item::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-devbar-stable::before {
+  background: #10b981;
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.6);
+}
+
+.legend-devbar-canary::before {
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.legend-sweetlink-stable::before {
+  background: #a855f7;
+  box-shadow: 0 0 4px rgba(168, 85, 247, 0.6);
+}
+
+.legend-sweetlink-canary::before {
+  background: rgba(168, 85, 247, 0.35);
+}
+
+.changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--devbar-color-border);
+  border-top: none;
+}
+
+.changelog-loading {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--devbar-color-text-muted);
+  font-size: var(--devbar-text-sm);
+  letter-spacing: 0.05em;
+}
+
+.changelog-entry {
+  display: grid;
+  grid-template-columns: 4.5rem 6.5rem 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.625rem 1.25rem;
+  border-top: 1px solid var(--devbar-color-border-subtle);
+  transition: background-color var(--devbar-transition-fast);
+}
+
+.changelog-entry:first-child {
+  border-top: 1px solid var(--devbar-color-border);
+}
+
+.changelog-entry:hover {
+  background-color: rgba(16, 185, 129, 0.04);
+}
+
+.changelog-version {
+  font-family: var(--devbar-font-mono);
+  font-size: var(--devbar-text-sm);
+  font-weight: var(--devbar-font-semibold);
+  color: var(--devbar-color-text);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--devbar-transition-fast);
+}
+
+.changelog-version:hover {
+  color: var(--devbar-color-primary);
+}
+
+.changelog-pkg {
+  font-size: 0.6rem;
+  font-weight: var(--devbar-font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 2px 6px;
+  border: 1px solid;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.changelog-pkg-devbar {
+  color: var(--devbar-color-primary);
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.changelog-pkg-sweetlink {
+  color: var(--devbar-color-purple);
+  border-color: rgba(168, 85, 247, 0.3);
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.changelog-desc {
+  font-size: var(--devbar-text-sm);
+  color: var(--devbar-color-text-secondary);
+  line-height: var(--devbar-leading-normal);
+  min-width: 0;
+}
+
+.changelog-date {
+  font-size: var(--devbar-text-xs);
+  color: var(--devbar-color-text-muted);
+  text-align: right;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.changelog-footer {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.changelog-gh-link {
+  color: var(--devbar-color-text-muted);
+  text-decoration: none;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: color var(--devbar-transition-fast);
+}
+
+.changelog-gh-link:hover {
+  color: var(--devbar-color-primary);
+  text-shadow: 0 0 8px var(--devbar-color-primary-glow);
+}
+
 /* Entrance animations -- staggered reveals on page load */
 @keyframes fadeUp {
   from {
@@ -1161,6 +1410,7 @@ body.theme-light {
 .sweetlink-features,
 .landing-packages,
 .landing-quickstart,
+.landing-changelog,
 .demo-container {
   animation: fadeUp 0.5s ease-out both;
 }
@@ -1177,8 +1427,11 @@ body.theme-light {
 .landing-quickstart {
   animation-delay: 0.24s;
 }
+.landing-changelog {
+  animation-delay: 0.30s;
+}
 .demo-container {
-  animation-delay: 0.3s;
+  animation-delay: 0.36s;
 }
 
 /* CRT scanline overlay -- subtle atmospheric texture */
@@ -1311,8 +1564,23 @@ body::after {
 
   .landing-features,
   .landing-packages,
-  .landing-quickstart {
+  .landing-quickstart,
+  .landing-changelog {
     padding: 0 1rem;
+  }
+
+  .changelog-entry {
+    grid-template-columns: 4rem 5.5rem 1fr;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .changelog-desc {
+    display: none;
+  }
+
+  .changelog-date {
+    grid-column: 3;
   }
 }
 
@@ -1323,6 +1591,7 @@ body::after {
   .sweetlink-features,
   .landing-packages,
   .landing-quickstart,
+  .landing-changelog,
   .demo-container {
     animation: none;
   }

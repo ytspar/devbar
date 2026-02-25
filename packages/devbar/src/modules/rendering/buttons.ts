@@ -423,10 +423,10 @@ export function createRulerButton(state: DevBarState): HTMLButtonElement {
     btn.textContent = '\u2716';
     btn.style.fontSize = '0.5rem';
   } else {
-    // Ruler icon — a diagonal ruler with notches
+    // Ruler icon — diagonal ruler body with tick marks (Lucide style)
     btn.appendChild(
       createSvgIcon(
-        'M3 21l1.65-1.65M7.5 17.5L6 19M10 15l-1.5 1.5M12.5 12.5L11 14M15 10l-1.5 1.5M17.5 7.5L16 9M21 3l-9 9',
+        'M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0zM14.5 12.5l2-2M11.5 9.5l2-2M8.5 6.5l2-2M17.5 15.5l2-2',
         { stroke: true, strokeWidth: '2' }
       )
     );

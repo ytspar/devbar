@@ -50,9 +50,34 @@ function execViaScriptTag(code: string): unknown {
 }
 
 /**
+ * Check if code contains a bare `return` statement (not inside a function).
+ * If so, wrap in an IIFE so the return is valid.
+ */
+function maybeWrapReturn(code: string): string {
+  // Detect bare return: a line starting with `return` (ignoring leading whitespace)
+  if (/^\s*return\b/m.test(code)) {
+    return `(function(){ ${code} })()`;
+  }
+  return code;
+}
+
+/**
+ * If the result is a thenable (Promise), await it with a timeout.
+ */
+async function maybeAwaitResult(result: unknown, timeoutMs = 10000): Promise<unknown> {
+  if (result && typeof result === 'object' && 'then' in result && typeof (result as { then: unknown }).then === 'function') {
+    return Promise.race([
+      (result as Promise<unknown>),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Async result timed out after ' + timeoutMs + 'ms')), timeoutMs)),
+    ]);
+  }
+  return result;
+}
+
+/**
  * Handle exec-js command with security guards
  */
-export function handleExecJS(command: ExecJsCommand): SweetlinkResponse {
+export async function handleExecJS(command: ExecJsCommand): Promise<SweetlinkResponse> {
   // Security: Block in production environments
   const isNodeProd = typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
   const isViteProd =
@@ -75,17 +100,21 @@ export function handleExecJS(command: ExecJsCommand): SweetlinkResponse {
   }
 
   try {
+    const code = maybeWrapReturn(command.code);
     let result: unknown;
     try {
       // eslint-disable-next-line no-eval
-      result = (0, eval)(command.code);
+      result = (0, eval)(code);
     } catch (evalError) {
       if (isCspEvalBlocked(evalError)) {
-        result = execViaScriptTag(command.code);
+        result = execViaScriptTag(code);
       } else {
         throw evalError;
       }
     }
+
+    // Await Promises (e.g. fetch().then(...)) with a timeout
+    result = await maybeAwaitResult(result);
 
     return {
       success: true,

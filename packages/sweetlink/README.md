@@ -178,6 +178,9 @@ pnpm sweetlink query --selector "h1"
 
 # Get element property
 pnpm sweetlink query --selector ".card" --property "offsetWidth"
+
+# Wait for element to exist before querying (handles hydration)
+pnpm sweetlink query --selector "img" --wait-for "img[src*='hero']"
 ```
 
 ### Console Logs
@@ -235,12 +238,23 @@ pnpm sweetlink refresh --hard
 ### JavaScript Execution
 
 ```bash
-# Execute JavaScript
+# Execute JavaScript expression
 pnpm sweetlink exec --code "document.title"
 
 # Count elements
 pnpm sweetlink exec --code "document.querySelectorAll('.card').length"
+
+# Bare return statements are auto-wrapped in an IIFE
+pnpm sweetlink exec --code "const x = 1 + 2; return x;"
+
+# Promises are automatically awaited (10s timeout)
+pnpm sweetlink exec --code "fetch('/api/health').then(r => r.status)"
+
+# Wait for element to exist before executing
+pnpm sweetlink exec --code "document.querySelectorAll('img').length" --wait-for "img[src*='hero']"
 ```
+
+> **Framework hydration note**: With Next.js App Router, Vite, and other frameworks that hydrate incrementally, DOM elements may exist in the HTML but not be queryable immediately after page load. Use `--wait-for` to poll until the target element is present.
 
 ### Click Elements
 

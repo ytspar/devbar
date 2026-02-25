@@ -71,137 +71,137 @@ describe('handleGetLogs', () => {
 });
 
 describe('handleExecJS', () => {
-  it('executes simple expressions', () => {
+  it('executes simple expressions', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: '1 + 2' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toBe(3);
     expect(d(response).type).toBe('number');
   });
 
-  it('executes string expressions', () => {
+  it('executes string expressions', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: '"hello".toUpperCase()' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toBe('HELLO');
     expect(d(response).type).toBe('string');
   });
 
-  it('executes object expressions', () => {
+  it('executes object expressions', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: '({ a: 1, b: 2 })' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toEqual({ a: 1, b: 2 });
     expect(d(response).type).toBe('object');
   });
 
-  it('returns error when code is missing', () => {
+  it('returns error when code is missing', async () => {
     const command: ExecJsCommand = { type: 'exec-js' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBe('Code is required');
   });
 
-  it('handles syntax errors gracefully', () => {
+  it('handles syntax errors gracefully', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'invalid syntax {{' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBeDefined();
   });
 
-  it('handles runtime errors gracefully', () => {
+  it('handles runtime errors gracefully', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'nonExistentVariable.property' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBeDefined();
   });
 
-  it('includes timestamp in response', () => {
+  it('includes timestamp in response', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'true' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.timestamp).toBeGreaterThan(0);
   });
 
-  it('returns error when code is not a string', () => {
+  it('returns error when code is not a string', async () => {
     const command = { type: 'exec-js', code: 123 } as unknown as ExecJsCommand;
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBe('Code must be a string');
   });
 
-  it('returns error when code exceeds maximum length', () => {
+  it('returns error when code exceeds maximum length', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'x'.repeat(10001) };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toContain('exceeds maximum length');
     expect(response.error).toContain('10000');
   });
 
-  it('accepts code at exactly the maximum length', () => {
+  it('accepts code at exactly the maximum length', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: `${'1+'.repeat(4999)}1` };
     // 4999 * 2 + 1 = 9999, which is under 10000
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     // Should succeed (it is valid JS)
     expect(response.success).toBe(true);
   });
 
-  it('handles boolean results', () => {
+  it('handles boolean results', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'true' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toBe(true);
     expect(d(response).type).toBe('boolean');
   });
 
-  it('handles undefined results', () => {
+  it('handles undefined results', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'undefined' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toBeUndefined();
     expect(d(response).type).toBe('undefined');
   });
 
-  it('handles null results', () => {
+  it('handles null results', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'null' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toBeNull();
     expect(d(response).type).toBe('object');
   });
 
-  it('handles array results', () => {
+  it('handles array results', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: '[1, 2, 3]' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(true);
     expect(d(response).result).toEqual([1, 2, 3]);
     expect(d(response).type).toBe('object');
   });
 
-  it('returns error message from Error instances', () => {
+  it('returns error message from Error instances', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'throw new TypeError("bad type")' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBe('bad type');
   });
 
-  it('returns generic message for non-Error throws', () => {
+  it('returns generic message for non-Error throws', async () => {
     const command: ExecJsCommand = { type: 'exec-js', code: 'throw "string error"' };
-    const response = handleExecJS(command);
+    const response = await handleExecJS(command);
 
     expect(response.success).toBe(false);
     expect(response.error).toBe('Execution failed');

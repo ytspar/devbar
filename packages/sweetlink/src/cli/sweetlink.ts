@@ -239,6 +239,45 @@ async function sendCommand(command: SweetlinkCommand): Promise<SweetlinkResponse
   });
 }
 
+const WAIT_FOR_POLL_INTERVAL = 200; // ms between DOM polls
+const WAIT_FOR_DEFAULT_TIMEOUT = 10000; // 10s default
+
+/**
+ * Poll the DOM via WebSocket until a selector matches at least one element.
+ * Used by --wait-for to handle hydration timing issues with frameworks like Next.js.
+ */
+async function waitForSelector(
+  selector: string,
+  timeout: number = WAIT_FOR_DEFAULT_TIMEOUT
+): Promise<void> {
+  const startTime = Date.now();
+  console.log(`[Sweetlink] Waiting for selector: ${selector}`);
+
+  while (Date.now() - startTime < timeout) {
+    try {
+      const response = await sendCommand({
+        type: 'query-dom',
+        selector,
+      });
+
+      if (response.success) {
+        const data = response.data as Record<string, unknown>;
+        const count = data.count as number;
+        if (count > 0) {
+          console.log(`[Sweetlink] ✓ Selector found (${count} element${count > 1 ? 's' : ''}, ${Date.now() - startTime}ms)`);
+          return;
+        }
+      }
+    } catch {
+      // Server not ready yet, keep polling
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, WAIT_FOR_POLL_INTERVAL));
+  }
+
+  throw new Error(`Timeout: selector "${selector}" not found after ${timeout}ms`);
+}
+
 async function screenshot(options: {
   selector?: string;
   output?: string;
@@ -402,7 +441,16 @@ async function screenshot(options: {
   }
 }
 
-async function queryDOM(options: { selector: string; property?: string }): Promise<void> {
+async function queryDOM(options: { selector: string; property?: string; waitFor?: string; waitTimeout?: number }): Promise<void> {
+  // Wait for selector if requested (handles hydration timing)
+  if (options.waitFor) {
+    await waitForSelector(options.waitFor, options.waitTimeout);
+    // If --wait-for matches --selector and no --property, the poll already found elements — skip redundant query
+    if (options.waitFor === options.selector && !options.property) {
+      return;
+    }
+  }
+
   console.log(`[Sweetlink] Querying DOM: ${options.selector}`);
 
   const command: SweetlinkCommand = {
@@ -721,7 +769,12 @@ async function execViaPlaywrightOrExit(code: string): Promise<unknown> {
   }
 }
 
-async function execJS(options: { code: string }): Promise<void> {
+async function execJS(options: { code: string; waitFor?: string; waitTimeout?: number }): Promise<void> {
+  // Wait for selector if requested (handles hydration timing)
+  if (options.waitFor) {
+    await waitForSelector(options.waitFor, options.waitTimeout);
+  }
+
   console.log('[Sweetlink] Executing JavaScript...');
 
   const command: SweetlinkCommand = {
@@ -1495,10 +1548,13 @@ Commands:
     Options:
       --selector <css-selector>   CSS selector to query (required)
       --property <name>           Property to get from elements
+      --wait-for <css-selector>   Wait for selector to exist before querying (handles hydration)
+      --wait-timeout <ms>         Max wait time for --wait-for (default: 10000ms)
 
     Examples:
       pnpm sweetlink query --selector "h1"
       pnpm sweetlink query --selector ".card" --property "offsetWidth"
+      pnpm sweetlink query --selector "img" --wait-for "img[src*='hero']"
 
   logs [options]
     Get console logs from the browser
@@ -1526,12 +1582,20 @@ Commands:
   exec --code <javascript>
     Execute JavaScript in the browser context
 
+    Code is evaluated as an expression. Bare \`return\` statements are auto-wrapped in an IIFE.
+    Promises (e.g. fetch().then(...)) are automatically awaited with a 10s timeout.
+
     Options:
       --code <javascript>         JavaScript code to execute (required)
+      --wait-for <css-selector>   Wait for selector to exist before executing (handles hydration)
+      --wait-timeout <ms>         Max wait time for --wait-for (default: 10000ms)
 
     Examples:
       pnpm sweetlink exec --code "document.title"
       pnpm sweetlink exec --code "document.querySelectorAll('.card').length"
+      pnpm sweetlink exec --code "const x = 1 + 2; return x;"
+      pnpm sweetlink exec --code "fetch('/api/health').then(r => r.status)"
+      pnpm sweetlink exec --code "document.querySelectorAll('img').length" --wait-for "img[src*='hero']"
 
   click [options]
     Click an element in the browser
@@ -1753,9 +1817,14 @@ function hasFlag(flag: string): boolean {
           console.error('[Sweetlink] Error: --selector is required for query command');
           process.exit(1);
         }
+        if (hasFlag('--url')) {
+          console.warn('[Sweetlink] Warning: --url is not supported for query (uses WebSocket bridge on current page)');
+        }
         await queryDOM({
           selector,
           property: getArg('--property'),
+          waitFor: getArg('--wait-for'),
+          waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
         });
         break;
       }
@@ -1777,7 +1846,14 @@ function hasFlag(flag: string): boolean {
           console.error('[Sweetlink] Error: --code is required for exec command');
           process.exit(1);
         }
-        await execJS({ code });
+        if (hasFlag('--url')) {
+          console.warn('[Sweetlink] Warning: --url is not supported for exec (uses WebSocket bridge on current page)');
+        }
+        await execJS({
+          code,
+          waitFor: getArg('--wait-for'),
+          waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+        });
         break;
       }
 

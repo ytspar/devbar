@@ -76,6 +76,7 @@ vi.mock('./buttons.js', () => {
     createOutlineButton: vi.fn(() => makeBtn('Document Outline')),
     createSchemaButton: vi.fn(() => makeBtn('Page Schema')),
     createA11yButton: vi.fn(() => makeBtn('Accessibility Audit')),
+    createRulerButton: vi.fn(() => makeBtn('Ruler')),
     createSettingsButton: vi.fn(() => makeBtn('Settings')),
     createCompactToggleButton: vi.fn(() => makeBtn('compact-toggle')),
     createConsoleBadge: vi.fn((_state: any, type: string, count: number, _color: string) => {
@@ -106,11 +107,12 @@ import {
   createOutlineButton,
   createSchemaButton,
   createA11yButton,
+  createRulerButton,
   createSettingsButton,
   createCompactToggleButton,
   createConsoleBadge,
 } from './buttons.js';
-import { createConnectionIndicator, captureDotPosition } from './common.js';
+import { createConnectionIndicator } from './common.js';
 import { getResponsiveMetricVisibility } from '../performance.js';
 
 // ---------------------------------------------------------------------------
@@ -497,6 +499,13 @@ describe('renderExpanded', () => {
     renderExpanded(state, []);
 
     expect(createA11yButton).toHaveBeenCalledWith(state);
+  });
+
+  it('always includes ruler button', () => {
+    const state = createMockState();
+    renderExpanded(state, []);
+
+    expect(createRulerButton).toHaveBeenCalledWith(state);
   });
 
   it('always includes settings button', () => {

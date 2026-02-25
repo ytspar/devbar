@@ -13,6 +13,7 @@ import {
   handlePageSchema,
   showDesignReviewConfirmation,
 } from '../screenshot.js';
+import { activateRulerMode } from '../ruler.js';
 import {
   attachButtonTooltip,
   attachTextTooltip,
@@ -376,6 +377,57 @@ export function createA11yButton(state: DevBarState): HTMLButtonElement {
       createSvgIcon(
         'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z',
         { fill: true }
+      )
+    );
+  }
+
+  return btn;
+}
+
+export function createRulerButton(state: DevBarState): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', 'Ruler');
+
+  const isActive = state.rulerMode;
+
+  attachButtonTooltip(state, btn, BUTTON_COLORS.ruler, (_tooltip, h) => {
+    if (isActive) {
+      h.addTitle('Ruler Mode Active');
+      h.addDescription('Click elements to pin measurements. Press Esc or click here to exit.');
+    } else {
+      h.addTitle('Ruler');
+      h.addDescription('Measure element dimensions and positions on page.');
+    }
+  });
+
+  Object.assign(btn.style, getButtonStyles(BUTTON_COLORS.ruler, isActive, false));
+  btn.onclick = () => {
+    if (state.rulerMode) {
+      // Deactivate
+      state.rulerMode = false;
+      if (state.rulerCleanup) {
+        state.rulerCleanup();
+        state.rulerCleanup = null;
+      }
+    } else {
+      // Activate
+      closeAllModals(state);
+      state.rulerMode = true;
+      state.rulerCleanup = activateRulerMode(state);
+    }
+    state.render();
+  };
+
+  if (isActive) {
+    btn.textContent = '\u2716';
+    btn.style.fontSize = '0.5rem';
+  } else {
+    // Ruler icon — a diagonal ruler with notches
+    btn.appendChild(
+      createSvgIcon(
+        'M3 21l1.65-1.65M7.5 17.5L6 19M10 15l-1.5 1.5M12.5 12.5L11 14M15 10l-1.5 1.5M17.5 7.5L16 9M21 3l-9 9',
+        { stroke: true, strokeWidth: '2' }
       )
     );
   }

@@ -136,6 +136,12 @@ export class GlobalDevBar {
   savingA11yAudit = false;
   a11yTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Ruler
+  rulerMode = false;
+  rulerOverlay: HTMLDivElement | null = null;
+  rulerPinnedElements: HTMLDivElement[] = [];
+  rulerCleanup: (() => void) | null = null;
+
   // Track active HTML tooltips for cleanup on re-render
   activeTooltips = new Set<HTMLDivElement>();
 

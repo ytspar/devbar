@@ -120,6 +120,12 @@ export interface DevBarState {
   themeMediaQuery: MediaQueryList | null;
   themeMediaHandler: ((e: MediaQueryListEvent) => void) | null;
 
+  // Ruler
+  rulerMode: boolean;
+  rulerOverlay: HTMLDivElement | null;
+  rulerPinnedElements: HTMLDivElement[];
+  rulerCleanup: (() => void) | null;
+
   // UI State
   collapsed: boolean;
   compactMode: boolean;
@@ -163,4 +169,13 @@ export function closeAllModals(state: DevBarState): void {
   state.showSettingsPopover = false;
   state.showDesignReviewConfirm = false;
   state.consoleFilter = null;
+  if (state.rulerMode) {
+    state.rulerMode = false;
+    if (state.rulerCleanup) {
+      state.rulerCleanup();
+      state.rulerCleanup = null;
+    }
+    state.rulerOverlay = null;
+    state.rulerPinnedElements = [];
+  }
 }

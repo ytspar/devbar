@@ -15,6 +15,24 @@ import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
+import type {
+  ScreenshotData,
+  QueryData,
+  LogsData,
+  ExecData,
+  ClickData,
+  RefreshData,
+  RulerData,
+  NetworkData,
+  SchemaData,
+  OutlineData,
+  A11yData,
+  VitalsData,
+  CleanupData,
+  WaitData,
+  StatusData,
+} from './outputSchemas.js';
+import { emitJson, printOutputSchema } from './outputSchemas.js';
 const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
 
 /**
@@ -292,7 +310,7 @@ async function screenshot(options: {
   url?: string;
   wait?: boolean;
   waitTimeout?: number;
-}): Promise<void> {
+}): Promise<ScreenshotData> {
   // Convert --width/--height to viewport format if provided
   if (options.width && !options.viewport) {
     const height = options.height || Math.round(options.width * 1.5); // Default aspect ratio
@@ -363,7 +381,7 @@ async function screenshot(options: {
 
       reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (Auto-launch/CDP)', options.selector);
 
-      return;
+      return { path: getRelativePath(outputPath), width: result.width, height: result.height, method: 'Playwright (Auto-launch/CDP)', selector: options.selector };
     } catch (error) {
       if (options.forceCDP) {
         console.error(
@@ -413,7 +431,7 @@ async function screenshot(options: {
           });
 
           reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (auto-escalation from WebSocket failure)', options.selector);
-          return;
+          return { path: getRelativePath(outputPath), width: result.width, height: result.height, method: 'Playwright (auto-escalation)', selector: options.selector };
         } catch (playwrightError) {
           console.error(
             '[Sweetlink] Playwright fallback also failed:',
@@ -435,19 +453,21 @@ async function screenshot(options: {
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
     reportScreenshotSuccess(outputPath, data.width as number, data.height as number, 'WebSocket (html2canvas)', data.selector as string | undefined);
+
+    return { path: getRelativePath(outputPath), width: data.width as number, height: data.height as number, method: 'WebSocket (html2canvas)', selector: data.selector as string | undefined };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function queryDOM(options: { selector: string; property?: string; waitFor?: string; waitTimeout?: number }): Promise<void> {
+async function queryDOM(options: { selector: string; property?: string; waitFor?: string; waitTimeout?: number }): Promise<QueryData> {
   // Wait for selector if requested (handles hydration timing)
   if (options.waitFor) {
     await waitForSelector(options.waitFor, options.waitTimeout);
     // If --wait-for matches --selector and no --property, the poll already found elements — skip redundant query
     if (options.waitFor === options.selector && !options.property) {
-      return;
+      return { count: 1, results: [], property: undefined };
     }
   }
 
@@ -482,7 +502,7 @@ async function queryDOM(options: { selector: string; property?: string; waitFor?
           console.log('\nElements:');
           console.log(JSON.stringify(results, null, 2));
         }
-        return;
+        return { count: results.length, results, property: options.property };
       }
 
       console.error('[Sweetlink] Query failed:', response.error);
@@ -503,6 +523,8 @@ async function queryDOM(options: { selector: string; property?: string; waitFor?
       console.log('\nElements:');
       console.log(JSON.stringify(data.results, null, 2));
     }
+
+    return { count: data.count as number, results: data.results as unknown[], property: options.property };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -561,7 +583,7 @@ async function getLogs(options: {
   format?: 'text' | 'json' | 'summary';
   dedupe?: boolean;
   output?: string;
-}): Promise<void> {
+}): Promise<LogsData> {
   if (options.format === 'text') {
     console.log('[Sweetlink] Getting console logs...');
   }
@@ -583,9 +605,10 @@ async function getLogs(options: {
 
     // JSON format - compact, parseable output
     if (options.format === 'json') {
+      const processedLogs = options.dedupe ? deduplicateLogs(logs) : logs;
       const jsonData = options.dedupe
-        ? { deduped: true, logs: deduplicateLogs(logs) }
-        : { deduped: false, logs };
+        ? { deduped: true, logs: processedLogs }
+        : { deduped: false, logs: processedLogs };
       const jsonStr = JSON.stringify(jsonData, null, 2);
       if (options.output) {
         ensureDir(options.output);
@@ -594,7 +617,7 @@ async function getLogs(options: {
       } else {
         console.log(jsonStr);
       }
-      return;
+      return { total: logs.length, format: 'json', deduped: !!options.dedupe, logs: processedLogs, outputPath: options.output };
     }
 
     // Summary format - deduplicated with counts, optimized for LLM context
@@ -623,7 +646,7 @@ async function getLogs(options: {
       } else {
         console.log(summaryStr);
       }
-      return;
+      return { total: logs.length, format: 'summary', deduped: true, logs: deduped, outputPath: options.output };
     }
 
     // Default text format
@@ -674,6 +697,8 @@ async function getLogs(options: {
     } else {
       console.log('  No logs found');
     }
+
+    return { total: logs.length, format: 'text', deduped: !!options.dedupe, logs: displayLogs || logs, outputPath: undefined };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -769,7 +794,7 @@ async function execViaPlaywrightOrExit(code: string): Promise<unknown> {
   }
 }
 
-async function execJS(options: { code: string; waitFor?: string; waitTimeout?: number }): Promise<void> {
+async function execJS(options: { code: string; waitFor?: string; waitTimeout?: number }): Promise<ExecData> {
   // Wait for selector if requested (handles hydration timing)
   if (options.waitFor) {
     await waitForSelector(options.waitFor, options.waitTimeout);
@@ -792,7 +817,7 @@ async function execJS(options: { code: string; waitFor?: string; waitTimeout?: n
         const result = await execViaPlaywrightOrExit(options.code);
         console.log('[Sweetlink] ✓ Result (via Playwright):');
         console.log(JSON.stringify({ result, type: typeof result }, null, 2));
-        return;
+        return { result };
       }
 
       console.error('[Sweetlink] Execution failed:', response.error);
@@ -801,13 +826,15 @@ async function execJS(options: { code: string; waitFor?: string; waitTimeout?: n
 
     console.log('[Sweetlink] ✓ Result:');
     console.log(JSON.stringify(response.data, null, 2));
+
+    return { result: response.data };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function click(options: { selector?: string; text?: string; index?: number }): Promise<void> {
+async function click(options: { selector?: string; text?: string; index?: number }): Promise<ClickData> {
   const { selector, text, index = 0 } = options;
 
   if (!selector && !text) {
@@ -890,10 +917,11 @@ async function click(options: { selector?: string; text?: string; index?: number
           console.log(
             `[Sweetlink] ✓ Clicked (via Playwright): ${result.clicked}${result.found && result.found > 1 ? ` (${result.found} matches, used index ${index})` : ''}`
           );
+          return { clicked: result.clicked || 'unknown', found: result.found || 1, index };
         } else {
           console.log('[Sweetlink] ✓ Click executed (via Playwright)');
+          return { clicked: 'unknown', found: 1, index };
         }
-        return;
       }
 
       console.error('[Sweetlink] Click failed:', response.error);
@@ -904,7 +932,7 @@ async function click(options: { selector?: string; text?: string; index?: number
     if (result === undefined || result === null) {
       // This shouldn't happen with trimmed code, but handle gracefully
       console.log('[Sweetlink] ✓ Click executed');
-      return;
+      return { clicked: 'unknown', found: 1, index };
     }
 
     if (typeof result === 'object' && 'success' in result) {
@@ -916,9 +944,11 @@ async function click(options: { selector?: string; text?: string; index?: number
       console.log(
         `[Sweetlink] ✓ Clicked: ${clickResult.clicked}${clickResult.found && clickResult.found > 1 ? ` (${clickResult.found} matches, used index ${index})` : ''}`
       );
+      return { clicked: clickResult.clicked || 'unknown', found: clickResult.found || 1, index };
     } else {
       // Result is just a value, not our expected object
       console.log(`[Sweetlink] ✓ Click executed`);
+      return { clicked: 'unknown', found: 1, index };
     }
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
@@ -926,7 +956,7 @@ async function click(options: { selector?: string; text?: string; index?: number
   }
 }
 
-async function refresh(options: { hard?: boolean }): Promise<void> {
+async function refresh(options: { hard?: boolean }): Promise<RefreshData> {
   console.log('[Sweetlink] Refreshing page...');
 
   const command: SweetlinkCommand = {
@@ -945,6 +975,8 @@ async function refresh(options: { hard?: boolean }): Promise<void> {
     }
 
     console.log(`[Sweetlink] ✓ Page refreshed${options.hard ? ' (hard reload)' : ''}`);
+
+    return { hard: !!options.hard };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -962,7 +994,7 @@ async function ruler(options: {
   showAlignment?: boolean;
   limit?: number;
   format?: 'text' | 'json';
-}): Promise<void> {
+}): Promise<RulerData> {
   console.log('[Sweetlink] Pixel Ruler - Measuring elements...');
 
   // Determine selectors from preset or explicit
@@ -1021,13 +1053,15 @@ async function ruler(options: {
         console.log(`\n[Sweetlink Ruler] ✓ Screenshot with overlay: ${result.screenshotPath}`);
       }
     }
+
+    return { summary: result.summary, alignment: result.alignment, results: result.results, screenshotPath: result.screenshotPath };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function getNetwork(options: { filter?: string }): Promise<void> {
+async function getNetwork(options: { filter?: string }): Promise<NetworkData> {
   console.log('[Sweetlink] Getting network requests (requires CDP)...');
 
   // Check if CDP is available
@@ -1072,6 +1106,8 @@ async function getNetwork(options: { filter?: string }): Promise<void> {
     } else {
       console.log('  No requests found');
     }
+
+    return { total: requests.length, requests };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -1224,7 +1260,7 @@ async function killProcessOnPort(port: number): Promise<boolean> {
 /**
  * Cleanup stale Sweetlink servers
  */
-async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise<void> {
+async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise<CleanupData> {
   console.log('[Sweetlink] Scanning for stale servers...\n');
 
   const portsToScan = getPortsToScan();
@@ -1235,7 +1271,7 @@ async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise
 
   if (foundServers.length === 0) {
     console.log('[Sweetlink] No stale servers found.');
-    return;
+    return { found: 0, closed: 0, failed: 0 };
   }
 
   console.log(`[Sweetlink] Found ${foundServers.length} server(s):\n`);
@@ -1299,9 +1335,11 @@ async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise
     }
     process.exit(1);
   }
+
+  return { found: foundServers.length, closed: closedCount, failed: failedCount };
 }
 
-async function getSchema(options: { format?: 'text' | 'json'; output?: string }): Promise<void> {
+async function getSchema(options: { format?: 'text' | 'json'; output?: string }): Promise<SchemaData> {
   console.log('[Sweetlink] Extracting page schema...');
 
   try {
@@ -1332,13 +1370,15 @@ async function getSchema(options: { format?: 'text' | 'json'; output?: string })
         console.log(markdown);
       }
     }
+
+    return { schema, markdown: markdown as string, outputPath: options.output };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }): Promise<void> {
+async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }): Promise<OutlineData> {
   console.log('[Sweetlink] Extracting document outline...');
 
   try {
@@ -1370,13 +1410,15 @@ async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; outp
         console.log(markdown);
       }
     }
+
+    return { outline, markdown: markdown as string, outputPath: options.output };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function getA11y(options: { format?: 'text' | 'json'; output?: string }): Promise<void> {
+async function getA11y(options: { format?: 'text' | 'json'; output?: string }): Promise<A11yData> {
   console.log('[Sweetlink] Running accessibility audit...');
 
   try {
@@ -1445,13 +1487,15 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }): 
         console.log(`\n[Sweetlink] ✓ A11y report saved to: ${getRelativePath(options.output)}`);
       }
     }
+
+    return { result, summary, outputPath: options.output };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function getVitals(options: { format?: 'text' | 'json' }): Promise<void> {
+async function getVitals(options: { format?: 'text' | 'json' }): Promise<VitalsData> {
   console.log('[Sweetlink] Collecting web vitals...');
 
   try {
@@ -1498,6 +1542,8 @@ async function getVitals(options: { format?: 'text' | 'json' }): Promise<void> {
         console.log(`  Page size: ${sizeKB}KB`);
       }
     }
+
+    return { vitals, summary: summary as string };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -1747,6 +1793,10 @@ Commands:
       pnpm sweetlink cleanup                 # Graceful shutdown
       pnpm sweetlink cleanup --force         # Force kill if needed
 
+Global Flags:
+  --json                  Output structured JSON (envelope with ok, command, data, duration)
+  --output-schema         Print TypeScript types for --json output, then exit
+
 Screenshot Strategy:
   Tier 1 (Default): html2canvas WebSocket - 131KB, always use first
   Tier 2 (Escalation): CDP - 2.0MB native Chrome, use to confirm visual discrepancies
@@ -1771,7 +1821,8 @@ Documentation:
 
 // CLI argument parsing
 const args = process.argv.slice(2);
-const commandType = args[0];
+// Skip global flags to find the actual command
+const commandType = args.find(a => !a.startsWith('--')) || args[0];
 
 if (!commandType || commandType === '--help' || commandType === '-h') {
   showHelp();
@@ -1788,11 +1839,55 @@ function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
 
+// Handle --output-schema before main switch
+if (hasFlag('--output-schema')) {
+  // If commandType is a known command, print just that schema; otherwise print all
+  const knownCommands = ['screenshot', 'query', 'logs', 'exec', 'click', 'refresh', 'ruler', 'measure', 'network', 'schema', 'outline', 'a11y', 'accessibility', 'vitals', 'cleanup', 'wait', 'status'];
+  const schemaCommand = knownCommands.includes(commandType)
+    ? (commandType === 'measure' ? 'ruler' : commandType === 'accessibility' ? 'a11y' : commandType)
+    : undefined;
+  printOutputSchema(schemaCommand);
+  process.exit(0);
+}
+
+const jsonMode = hasFlag('--json');
+
 (async () => {
+  const startTime = Date.now();
+
+  // In --json mode, suppress console.log/warn (preserve stderr for debugging)
+  if (jsonMode) {
+    console.log = () => {};
+    console.warn = () => {};
+  }
+
+  // Capture the last console.error message for error envelopes
+  let lastErrorMsg = '';
+  const origError = console.error;
+  if (jsonMode) {
+    console.error = (...errorArgs: unknown[]) => {
+      lastErrorMsg = errorArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+      origError(...errorArgs);
+    };
+  }
+
+  // Intercept process.exit in json mode to emit error envelope
+  const origExit = process.exit;
+  if (jsonMode) {
+    process.exit = ((code?: number) => {
+      if (code && code !== 0) {
+        emitJson({ ok: false, command: commandType, data: null, error: lastErrorMsg || `Process exited with code ${code}`, duration: Date.now() - startTime });
+      }
+      origExit(code);
+    }) as typeof process.exit;
+  }
+
   try {
+    let result: unknown;
+
     switch (commandType) {
       case 'screenshot':
-        await screenshot({
+        result = await screenshot({
           selector: getArg('--selector'),
           output: getArg('--output'),
           fullPage: hasFlag('--full-page'),
@@ -1820,7 +1915,7 @@ function hasFlag(flag: string): boolean {
         if (hasFlag('--url')) {
           console.warn('[Sweetlink] Warning: --url is not supported for query (uses WebSocket bridge on current page)');
         }
-        await queryDOM({
+        result = await queryDOM({
           selector,
           property: getArg('--property'),
           waitFor: getArg('--wait-for'),
@@ -1831,7 +1926,7 @@ function hasFlag(flag: string): boolean {
 
       case 'logs': {
         const format = getArg('--format') as 'text' | 'json' | 'summary' | undefined;
-        await getLogs({
+        result = await getLogs({
           filter: getArg('--filter'),
           format: format || 'text',
           dedupe: hasFlag('--dedupe'),
@@ -1849,7 +1944,7 @@ function hasFlag(flag: string): boolean {
         if (hasFlag('--url')) {
           console.warn('[Sweetlink] Warning: --url is not supported for exec (uses WebSocket bridge on current page)');
         }
-        await execJS({
+        result = await execJS({
           code,
           waitFor: getArg('--wait-for'),
           waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
@@ -1858,7 +1953,7 @@ function hasFlag(flag: string): boolean {
       }
 
       case 'click':
-        await click({
+        result = await click({
           selector: getArg('--selector'),
           text: getArg('--text'),
           index: getArg('--index') ? parseInt(getArg('--index')!, 10) : undefined,
@@ -1866,13 +1961,13 @@ function hasFlag(flag: string): boolean {
         break;
 
       case 'network':
-        await getNetwork({
+        result = await getNetwork({
           filter: getArg('--filter'),
         });
         break;
 
       case 'refresh':
-        await refresh({
+        result = await refresh({
           hard: hasFlag('--hard'),
         });
         break;
@@ -1887,7 +1982,7 @@ function hasFlag(flag: string): boolean {
           }
         });
 
-        await ruler({
+        result = await ruler({
           selectors: rulerSelectors.length > 0 ? rulerSelectors : undefined,
           preset: getArg('--preset') as 'card-header' | 'navigation' | undefined,
           url: getArg('--url'),
@@ -1908,9 +2003,11 @@ function hasFlag(flag: string): boolean {
         const waitTimeout = getArg('--timeout')
           ? parseInt(getArg('--timeout')!, 10)
           : SERVER_READY_TIMEOUT;
+        const waitStart = Date.now();
         try {
           await waitForServer(waitUrl, waitTimeout);
           console.log('[Sweetlink] ✓ Server is ready');
+          result = { url: waitUrl, ready: true, elapsed: Date.now() - waitStart } satisfies WaitData;
         } catch (error) {
           console.error(
             '[Sweetlink] ✗ Server not available:',
@@ -1936,6 +2033,7 @@ function hasFlag(flag: string): boolean {
           clearTimeout(timeoutId);
           if (response.ok || response.status === 304) {
             console.log(`[Sweetlink] ✓ Server at ${healthCheckUrl} is running`);
+            result = { url: statusUrl, running: true, statusCode: response.status } satisfies StatusData;
           } else {
             console.log(`[Sweetlink] ⚠ Server responded with status ${response.status}`);
             process.exit(1);
@@ -1948,14 +2046,14 @@ function hasFlag(flag: string): boolean {
       }
 
       case 'schema':
-        await getSchema({
+        result = await getSchema({
           format: getArg('--format') as 'text' | 'json' | undefined,
           output: getArg('--output'),
         });
         break;
 
       case 'outline':
-        await getOutline({
+        result = await getOutline({
           format: getArg('--format') as 'text' | 'json' | 'markdown' | undefined,
           output: getArg('--output'),
         });
@@ -1963,20 +2061,20 @@ function hasFlag(flag: string): boolean {
 
       case 'a11y':
       case 'accessibility':
-        await getA11y({
+        result = await getA11y({
           format: getArg('--format') as 'text' | 'json' | undefined,
           output: getArg('--output'),
         });
         break;
 
       case 'vitals':
-        await getVitals({
+        result = await getVitals({
           format: getArg('--format') as 'text' | 'json' | undefined,
         });
         break;
 
       case 'cleanup':
-        await cleanup({
+        result = await cleanup({
           force: hasFlag('--force'),
           verbose: hasFlag('--verbose'),
         });
@@ -1987,7 +2085,16 @@ function hasFlag(flag: string): boolean {
         console.log('Run "pnpm sweetlink --help" for usage information');
         process.exit(1);
     }
+
+    if (jsonMode && result !== undefined) {
+      emitJson({ ok: true, command: commandType, data: result, duration: Date.now() - startTime });
+    }
   } catch (error) {
+    if (jsonMode) {
+      const msg = error instanceof Error ? error.message : String(error);
+      emitJson({ ok: false, command: commandType, data: null, error: msg, duration: Date.now() - startTime });
+      origExit(1);
+    }
     console.error('[Sweetlink] Fatal error:', error);
     process.exit(1);
   }

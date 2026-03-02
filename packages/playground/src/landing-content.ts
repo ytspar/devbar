@@ -4,6 +4,8 @@
  * Creates the hero section and documentation overview using devbar styling.
  */
 
+import { PALETTE } from '@ytspar/devbar';
+
 /**
  * Helper to create a text element
  */
@@ -567,8 +569,8 @@ function renderReleaseGraph(
 
   // Colors
   const colors: Record<string, Record<string, string>> = {
-    devbar: { stable: '#10b981', canary: 'rgba(16,185,129,0.35)', prerelease: 'rgba(16,185,129,0.5)' },
-    sweetlink: { stable: '#a855f7', canary: 'rgba(168,85,247,0.35)', prerelease: 'rgba(168,85,247,0.5)' },
+    devbar: { stable: PALETTE.emerald, canary: 'rgba(16,185,129,0.35)', prerelease: 'rgba(16,185,129,0.5)' },
+    sweetlink: { stable: PALETTE.purple, canary: 'rgba(168,85,247,0.35)', prerelease: 'rgba(168,85,247,0.5)' },
   };
 
   const NS = 'http://www.w3.org/2000/svg';

@@ -30,6 +30,7 @@ export {
   getTheme,
   getThemeColors,
   injectThemeCSS,
+  PALETTE,
   STORAGE_KEYS,
   setStoredThemeMode,
   TAILWIND_BREAKPOINTS,

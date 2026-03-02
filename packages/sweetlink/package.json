@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/sweetlink",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Autonomous development toolkit for AI agents - screenshots, DOM queries, console logs, and JavaScript execution via WebSocket and Chrome DevTools Protocol",
   "keywords": [
     "autonomous-development",
@@ -126,7 +126,7 @@
   "dependencies": {
     "dotenv": "^17.2.4",
     "html2canvas-pro": "^2.0.0",
-    "puppeteer-core": "^24.37.2",
+    "puppeteer-core": "^24.37.5",
     "ws": "^8.18.3"
   },
   "devDependencies": {

@@ -1,0 +1,28 @@
+{
+  "devbar": {
+    "1.7.5": "Correct ruler icon SVG, PALETTE color system centralization",
+    "1.7.1": "Ruler tool for measuring element dimensions on-page",
+    "1.6.4": "Console log sync, CLI shutdown coordination",
+    "1.6.0": "Inline DepartureMono font, capture browser-level errors",
+    "1.5.3": "CSP bypass via Playwright fallback for exec/click/query",
+    "1.5.0": "Control groups, info variant, and non-interactive badges",
+    "1.4.0": "DRY modal copy/download, pre-release audit, expanded tests",
+    "1.3.0": "Accessibility audit, document outline, schema extraction",
+    "1.2.0": "Screenshot quality slider, settings crash fix",
+    "1.1.0": "Screenshot improvements, browser download mode",
+    "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
+  },
+  "sweetlink": {
+    "1.10.0": "--json and --output-schema flags for structured CLI output",
+    "1.9.0": "Wait-for selector, async exec, return statement auto-wrap",
+    "1.8.1": "Console log buffer sync, 209 new tests",
+    "1.8.0": "CLI shutdown synchronization with dev server lifecycle",
+    "1.6.0": "Console log eviction sync, browser error capture",
+    "1.5.0": "CSP eval-blocked detection + Playwright fallback",
+    "1.4.0": "Dead code removal, deduplicated constants, 85 new tests",
+    "1.3.0": "CDP and ruler test suites, ruler/playwright sub-exports",
+    "1.2.0": "Outline and schema tools moved from devbar, modal UX",
+    "1.1.0": "Auto-detect save location, browser download mode",
+    "1.0.0": "Initial release — screenshots, logs, HMR capture, CLI"
+  }
+}

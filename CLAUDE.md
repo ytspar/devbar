@@ -45,6 +45,7 @@ Both `devbar` and `sweetlink` are published to npm. The devbar package depends o
 - If sweetlink changed → bump sweetlink version
 - If devbar changed → bump devbar version
 - If sweetlink version bumped AND devbar depends on it → also bump devbar (so it picks up the new `workspace:^` resolution)
+- **Update release notes** in `packages/playground/src/release-notes.json` for every new version (publishing will fail without this)
 
 ## devbar.dev Website Deployment
 

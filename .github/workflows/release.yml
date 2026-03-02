@@ -73,6 +73,16 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Validate release notes
+        env:
+          SL_VERSION: ${{ inputs.sweetlink_version }}
+          DB_VERSION: ${{ inputs.devbar_version }}
+        run: |
+          ARGS=""
+          if [ -n "$SL_VERSION" ]; then ARGS="$ARGS sweetlink=$SL_VERSION"; fi
+          if [ -n "$DB_VERSION" ]; then ARGS="$ARGS devbar=$DB_VERSION"; fi
+          node scripts/check-release-notes.mjs --check $ARGS
+
       # ── Sweetlink ──────────────────────────────────────────────
       - name: Publish sweetlink
         if: inputs.sweetlink_version != ''

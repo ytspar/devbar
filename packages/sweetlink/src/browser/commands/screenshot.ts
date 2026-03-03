@@ -52,19 +52,39 @@ export async function handleScreenshot(command: ScreenshotCommand): Promise<Swee
     }
 
     const { default: html2canvas } = await import('html2canvas-pro');
+
     const canvas = await html2canvas(element as HTMLElement, {
       ...BASE_CAPTURE_OPTIONS,
+      width: window.innerWidth,
+      windowWidth: window.innerWidth,
       ...command.options,
     });
 
-    const dataUrl = canvas.toDataURL('image/png');
+    // Crop to viewport when not in full-page mode for small file sizes.
+    // html2canvas always renders the full element height, so we crop after capture.
+    let finalCanvas: HTMLCanvasElement = canvas;
+    if (!command.options?.fullPage) {
+      const scale = (command.options?.scale as number) || 1;
+      const cropHeight = Math.min(canvas.height, Math.round(window.innerHeight * scale));
+      const cropWidth = Math.min(canvas.width, Math.round(window.innerWidth * scale));
+      const cropped = document.createElement('canvas');
+      cropped.width = cropWidth;
+      cropped.height = cropHeight;
+      const ctx = cropped.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(canvas, 0, 0, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        finalCanvas = cropped;
+      }
+    }
+
+    const dataUrl = finalCanvas.toDataURL('image/png');
 
     return {
       success: true,
       data: {
         screenshot: dataUrl,
-        width: canvas.width,
-        height: canvas.height,
+        width: finalCanvas.width,
+        height: finalCanvas.height,
         selector: command.selector || 'body',
       },
       timestamp: Date.now(),

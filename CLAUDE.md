@@ -18,7 +18,7 @@ pnpm build                # Build all packages (sweetlink → devbar → playgro
 pnpm test                 # Run all tests (vitest)
 pnpm test:watch           # Watch mode
 pnpm test:coverage        # With coverage report
-pnpm dev                  # Start playground dev server (http://localhost:5174)
+pnpm dev                  # Start playground dev server (http://localhost:5173)
 pnpm lint                 # Biome lint check
 pnpm lint:fix             # Biome auto-fix
 ```

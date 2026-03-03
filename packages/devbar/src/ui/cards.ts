@@ -39,7 +39,7 @@ const CONTENT_PADDING = 16;
 const BORDER_COLOR = CSS_COLORS.border;
 
 /** Muted border for empty state */
-const BORDER_COLOR_MUTED = 'rgba(16, 185, 129, 0.1)';
+const BORDER_COLOR_MUTED = CSS_COLORS.borderSubtle;
 
 /**
  * Create a notched card with wing header

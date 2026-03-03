@@ -23,6 +23,11 @@ vi.mock('../../constants.js', () => ({
     border: 'rgba(16, 185, 129, 0.2)',
     primary: '#10b981',
   },
+  DEVBAR_THEME: {
+    shadows: {
+      dropLg: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    },
+  },
   FONT_MONO: 'monospace',
   withAlpha: (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`,
 }));

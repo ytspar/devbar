@@ -128,7 +128,7 @@ function setCoverageBlocks(pct: number): void {
   const filled = Math.round(pct / 10);
   const children = container.children;
   for (let i = 0; i < children.length; i++) {
-    children[i].className = i < filled ? 'block-filled' : 'block-empty';
+    children[i]!.className = i < filled ? 'block-filled' : 'block-empty';
   }
 }
 
@@ -482,7 +482,7 @@ function classifyVersion(version: string): 'stable' | 'canary' | 'prerelease' {
 function parseSemver(version: string): number {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
   if (!match) return 0;
-  return parseInt(match[1]) * 10000 + parseInt(match[2]) * 100 + parseInt(match[3]);
+  return parseInt(match[1]!) * 10000 + parseInt(match[2]!) * 100 + parseInt(match[3]!);
 }
 
 /**
@@ -582,9 +582,9 @@ function renderReleaseGraph(
   // Y-axis version labels — pick min, mid, max from unique sorted semvers
   const uniqueSv = Array.from(new Set(semvers)).sort((a, b) => a - b);
   const yLabelSvs = [
-    uniqueSv[0],
-    uniqueSv[Math.floor(uniqueSv.length / 2)],
-    uniqueSv[uniqueSv.length - 1],
+    uniqueSv[0]!,
+    uniqueSv[Math.floor(uniqueSv.length / 2)]!,
+    uniqueSv[uniqueSv.length - 1]!,
   ];
   for (const sv of yLabelSvs) {
     const major = Math.floor(sv / 10000);
@@ -868,18 +868,18 @@ function tokenizeTS(code: string): Token[] {
     }
 
     // Numbers
-    if (/\d/.test(code[i])) {
+    if (/\d/.test(code[i]!)) {
       let j = i;
-      while (j < code.length && /[\d.]/.test(code[j])) j++;
+      while (j < code.length && /[\d.]/.test(code[j]!)) j++;
       tokens.push({ type: 'number', value: code.slice(i, j) });
       i = j;
       continue;
     }
 
     // Words (keywords, identifiers)
-    if (/[a-zA-Z_$]/.test(code[i])) {
+    if (/[a-zA-Z_$]/.test(code[i]!)) {
       let j = i;
-      while (j < code.length && /[a-zA-Z0-9_$]/.test(code[j])) j++;
+      while (j < code.length && /[a-zA-Z0-9_$]/.test(code[j]!)) j++;
       const word = code.slice(i, j);
 
       // Check if followed by ( for function calls
@@ -900,14 +900,14 @@ function tokenizeTS(code: string): Token[] {
     }
 
     // Operators
-    if (/[{}()[\];:,.<>=+\-*/&|!?]/.test(code[i])) {
-      tokens.push({ type: 'operator', value: code[i] });
+    if (/[{}()[\];:,.<>=+\-*/&|!?]/.test(code[i]!)) {
+      tokens.push({ type: 'operator', value: code[i]! });
       i++;
       continue;
     }
 
     // Whitespace and other
-    tokens.push({ type: 'text', value: code[i] });
+    tokens.push({ type: 'text', value: code[i]! });
     i++;
   }
 

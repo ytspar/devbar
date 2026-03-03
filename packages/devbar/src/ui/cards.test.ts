@@ -94,8 +94,8 @@ describe('createCard', () => {
     it('uses muted border colors', () => {
       const card = createCard({ title: 'Empty', isEmpty: true });
       const section = card.querySelector('section') as HTMLElement;
-      // Muted border
-      expect(section.style.borderLeft).toContain('rgba(16, 185, 129, 0.1)');
+      // Muted border uses CSS variable
+      expect(section.style.borderLeft).toContain('var(--devbar-color-border-subtle)');
     });
 
     it('has dimmed opacity for empty state', () => {
@@ -150,9 +150,9 @@ describe('setCardEmpty', () => {
 
     // Check borders changed to muted
     const section = card.querySelector('section') as HTMLElement;
-    expect(section.style.borderLeft).toContain('rgba(16, 185, 129, 0.1)');
-    expect(section.style.borderRight).toContain('rgba(16, 185, 129, 0.1)');
-    expect(section.style.borderBottom).toContain('rgba(16, 185, 129, 0.1)');
+    expect(section.style.borderLeft).toContain('var(--devbar-color-border-subtle)');
+    expect(section.style.borderRight).toContain('var(--devbar-color-border-subtle)');
+    expect(section.style.borderBottom).toContain('var(--devbar-color-border-subtle)');
   });
 
   it('transitions card from empty to normal state', () => {
@@ -177,10 +177,10 @@ describe('setCardEmpty', () => {
     const leftWing = header.children[0] as HTMLElement;
     const rightWing = header.children[2] as HTMLElement;
 
-    expect(leftWing.style.borderTop).toContain('rgba(16, 185, 129, 0.1)');
-    expect(leftWing.style.borderLeft).toContain('rgba(16, 185, 129, 0.1)');
-    expect(rightWing.style.borderTop).toContain('rgba(16, 185, 129, 0.1)');
-    expect(rightWing.style.borderRight).toContain('rgba(16, 185, 129, 0.1)');
+    expect(leftWing.style.borderTop).toContain('var(--devbar-color-border-subtle)');
+    expect(leftWing.style.borderLeft).toContain('var(--devbar-color-border-subtle)');
+    expect(rightWing.style.borderTop).toContain('var(--devbar-color-border-subtle)');
+    expect(rightWing.style.borderRight).toContain('var(--devbar-color-border-subtle)');
   });
 
   it('is idempotent (setting same state twice is a no-op)', () => {

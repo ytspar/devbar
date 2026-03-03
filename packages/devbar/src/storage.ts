@@ -4,6 +4,8 @@
  * Utilities for inspecting and managing browser storage (localStorage, sessionStorage, cookies).
  */
 
+import { formatBytes } from './utils.js';
+
 /**
  * Storage item with parsed value
  */
@@ -99,7 +101,7 @@ export function getCookies(): CookieItem[] {
       const [name, ...valueParts] = cookie.trim().split('=');
       const value = valueParts.join('=');
       return {
-        name: name.trim(),
+        name: name!.trim(),
         value: decodeURIComponent(value || ''),
         size: new Blob([value || '']).size,
       };
@@ -197,14 +199,6 @@ export function formatStorageSummary(data: StorageData): string {
   return parts.join(' | ') || 'No storage data';
 }
 
-// formatBytes imported from network.ts would create a circular dep risk,
-// so we keep a minimal private copy here.
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * Beautify JSON string for display

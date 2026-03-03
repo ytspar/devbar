@@ -49,6 +49,7 @@ serviceAccountKey.json
 
 # Claude Code local settings
 .claude/
+claude-skills/
 
 # E2E test snapshots (platform-specific)
 e2e/*-snapshots/

@@ -1,5 +1,3 @@
-// Browser entry point for @sweetlink/dev-toolkit/browser
-// Vanilla JS version (no React dependency)
+// Browser entry point for @ytspar/sweetlink/browser
+// Vanilla JS — no framework dependencies
 export { SweetlinkBridge, type SweetlinkBridgeConfig } from './browser/SweetlinkBridge';
-
-// React version available via separate import: '@ytspar/sweetlink/browser/react'

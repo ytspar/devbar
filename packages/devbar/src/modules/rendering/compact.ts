@@ -2,7 +2,7 @@
  * Compact state rendering for the DevBar.
  */
 
-import { BUTTON_COLORS, FONT_MONO, withAlpha } from '../../constants.js';
+import { BUTTON_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../../constants.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';
@@ -36,7 +36,7 @@ export function renderCompact(state: DevBarState): void {
     border: `1px solid ${accentColor}`,
     borderRadius: '20px',
     color: accentColor,
-    boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px ${withAlpha(accentColor, 10)}`,
+    boxShadow: `${DEVBAR_THEME.shadows.dropToolbar}, 0 0 0 1px ${withAlpha(accentColor, 10)}`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     padding: '6px 10px',

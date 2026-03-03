@@ -229,32 +229,109 @@ async function waitForServer(
   );
 }
 
-async function sendCommand(command: SweetlinkCommand): Promise<SweetlinkResponse> {
+async function sendCommand(command: SweetlinkCommand, timeoutMs: number = DEFAULT_TIMEOUT): Promise<SweetlinkResponse> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
 
-    const timeout = setTimeout(() => {
+    const timer = setTimeout(() => {
       ws.close();
       reject(new Error('Command timeout - is the dev server running?'));
-    }, DEFAULT_TIMEOUT);
+    }, timeoutMs);
 
     ws.on('open', () => {
       ws.send(JSON.stringify(command));
     });
 
     ws.on('message', (data: Buffer) => {
-      clearTimeout(timeout);
+      clearTimeout(timer);
       const response = JSON.parse(data.toString()) as SweetlinkResponse;
       ws.close();
       resolve(response);
     });
 
     ws.on('error', (error) => {
-      clearTimeout(timeout);
+      clearTimeout(timer);
       ws.close();
       reject(error);
     });
   });
+}
+
+/**
+ * Compare two URLs ignoring trailing slashes.
+ * Exported-style name for testability (re-implemented in tests).
+ */
+function urlsMatch(a: string, b: string): boolean {
+  return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+}
+
+const NAVIGATE_POLL_INTERVAL = 500; // ms between reconnection polls
+const NAVIGATE_DEFAULT_TIMEOUT = 10000; // 10s default
+
+/**
+ * Navigate the connected browser to a URL via WebSocket exec-js.
+ * After navigation the page reloads, dropping the WS connection.
+ * We poll with short-timeout exec-js commands until devbar reconnects.
+ *
+ * @returns true if the browser is on the target URL, false if no browser
+ *          is connected or reconnection timed out.
+ */
+async function navigateBrowser(
+  url: string,
+  timeout: number = NAVIGATE_DEFAULT_TIMEOUT
+): Promise<boolean> {
+  // 1. Check current URL
+  try {
+    const response = await sendCommand(
+      { type: 'exec-js', code: 'window.location.href' },
+      3000
+    );
+    if (response.success && response.data != null) {
+      const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
+      if (urlsMatch(currentUrl, url)) {
+        console.log(`[Sweetlink] Browser already on ${url}`);
+        return true;
+      }
+    }
+  } catch {
+    // No browser connected — caller should escalate
+    return false;
+  }
+
+  // 2. Navigate
+  console.log(`[Sweetlink] Navigating browser to ${url}`);
+  try {
+    // Fire-and-forget: the page will unload, so the response may never arrive
+    await sendCommand(
+      { type: 'exec-js', code: `window.location.href = ${JSON.stringify(url)}` },
+      3000
+    ).catch(() => {});
+  } catch {
+    // Expected — page unloaded before response
+  }
+
+  // 3. Poll for reconnection
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    await new Promise((resolve) => setTimeout(resolve, NAVIGATE_POLL_INTERVAL));
+    try {
+      const response = await sendCommand(
+        { type: 'exec-js', code: 'window.location.href' },
+        3000
+      );
+      if (response.success) {
+        // Give devbar time to fully initialize after page load
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log(`[Sweetlink] Browser reconnected on new page`);
+        return true;
+      }
+    } catch {
+      // Still reconnecting — keep polling
+    }
+  }
+
+  console.warn(`[Sweetlink] Browser did not reconnect within ${timeout}ms`);
+  return false;
 }
 
 const WAIT_FOR_POLL_INTERVAL = 200; // ms between DOM polls
@@ -294,6 +371,35 @@ async function waitForSelector(
   }
 
   throw new Error(`Timeout: selector "${selector}" not found after ${timeout}ms`);
+}
+
+/**
+ * Run Playwright screenshot, report success, and return a ScreenshotData result.
+ * Consolidates the repeated ensureDir + screenshotViaPlaywright + reportSuccess + return pattern.
+ */
+async function takePlaywrightScreenshot(
+  options: {
+    selector?: string;
+    output?: string;
+    fullPage?: boolean;
+    viewport?: string;
+    hover?: boolean;
+    url?: string;
+  },
+  method: string
+): Promise<ScreenshotData> {
+  const outputPath = options.output || getDefaultScreenshotPath();
+  ensureDir(outputPath);
+  const result = await screenshotViaPlaywright({
+    selector: options.selector,
+    output: outputPath,
+    fullPage: options.fullPage,
+    viewport: options.viewport,
+    hover: options.hover,
+    url: options.url,
+  });
+  reportScreenshotSuccess(outputPath, result.width, result.height, method, options.selector);
+  return { path: getRelativePath(outputPath), width: result.width, height: result.height, method, selector: options.selector };
 }
 
 async function screenshot(options: {
@@ -357,6 +463,15 @@ async function screenshot(options: {
   // Hover requires CDP/Playwright
   const requiresCDP = options.forceCDP || options.hover;
 
+  const playwrightOpts = {
+    selector: options.selector,
+    output: options.output,
+    fullPage: options.fullPage,
+    viewport: options.viewport,
+    hover: options.hover,
+    url: options.url,
+  };
+
   // If we need CDP/Playwright (for hover or force-cdp), or if CDP is available, use Playwright
   // Playwright will auto-launch if CDP is not available
   const shouldTryPlaywright = requiresCDP || (!options.forceWS && (await detectCDP()));
@@ -364,24 +479,8 @@ async function screenshot(options: {
   if (shouldTryPlaywright) {
     console.log('[Sweetlink] Using Playwright for screenshot');
 
-    // Determine output path - use default if not specified
-    const outputPath = options.output || getDefaultScreenshotPath();
-    ensureDir(outputPath);
-
     try {
-      // Use Playwright (which handles CDP connection OR launches new browser)
-      const result = await screenshotViaPlaywright({
-        selector: options.selector,
-        output: outputPath,
-        fullPage: options.fullPage,
-        viewport: options.viewport,
-        hover: options.hover,
-        url: options.url,
-      });
-
-      reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (Auto-launch/CDP)', options.selector);
-
-      return { path: getRelativePath(outputPath), width: result.width, height: result.height, method: 'Playwright (Auto-launch/CDP)', selector: options.selector };
+      return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (Auto-launch/CDP)');
     } catch (error) {
       if (options.forceCDP) {
         console.error(
@@ -397,6 +496,20 @@ async function screenshot(options: {
   }
 
   // Fall back to WebSocket method
+  // Navigate the connected browser if --url is provided
+  if (options.url) {
+    const navigated = await navigateBrowser(options.url);
+    if (!navigated) {
+      if (options.forceWS) {
+        console.error('[Sweetlink] Could not navigate browser to', options.url);
+        process.exit(1);
+      }
+      // Auto-escalate to Playwright (opens browser, navigates, screenshots)
+      console.log('[Sweetlink] No browser for navigation — escalating to Playwright');
+      return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (auto-escalation)');
+    }
+  }
+
   console.log('[Sweetlink] Using WebSocket for screenshot');
 
   const command: SweetlinkCommand = {
@@ -405,6 +518,7 @@ async function screenshot(options: {
     options: {
       fullPage: options.fullPage,
       a11y: options.a11y,
+      scale: 0.5,
     },
   };
 
@@ -417,21 +531,8 @@ async function screenshot(options: {
       if (response.error?.includes('No browser client connected')) {
         console.log('[Sweetlink] No browser client - auto-escalating to Playwright');
 
-        const outputPath = options.output || getDefaultScreenshotPath();
-        ensureDir(outputPath);
-
         try {
-          const result = await screenshotViaPlaywright({
-            selector: options.selector,
-            output: outputPath,
-            fullPage: options.fullPage,
-            viewport: options.viewport,
-            hover: options.hover,
-            url: options.url,
-          });
-
-          reportScreenshotSuccess(outputPath, result.width, result.height, 'Playwright (auto-escalation from WebSocket failure)', options.selector);
-          return { path: getRelativePath(outputPath), width: result.width, height: result.height, method: 'Playwright (auto-escalation)', selector: options.selector };
+          return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (auto-escalation)');
         } catch (playwrightError) {
           console.error(
             '[Sweetlink] Playwright fallback also failed:',
@@ -578,6 +679,48 @@ function deduplicateLogs(logs: LogEntry[]): DedupedLog[] {
   });
 }
 
+/**
+ * Render console logs to stdout in human-readable text format with ANSI colors.
+ */
+function renderLogsAsText(logs: LogEntry[], dedupedLogs: DedupedLog[] | null): void {
+  const LEVEL_COLORS: Record<string, string> = {
+    error: '\x1b[31m',
+    warn: '\x1b[33m',
+    info: '\x1b[36m',
+    log: '\x1b[37m',
+  };
+  const reset = '\x1b[0m';
+
+  console.log(
+    `[Sweetlink] ✓ Found ${logs.length} log entries${dedupedLogs ? ` (${dedupedLogs.length} unique)` : ''}`
+  );
+
+  if (logs.length === 0) {
+    console.log('  No logs found');
+    return;
+  }
+
+  console.log('\nConsole Logs:');
+
+  if (dedupedLogs) {
+    dedupedLogs.forEach((log) => {
+      const levelColor = LEVEL_COLORS[log.level] || '\x1b[37m';
+      const countStr = log.count > 1 ? ` (×${log.count})` : '';
+      console.log(
+        `  ${levelColor}[${log.level.toUpperCase()}]${reset}${countStr} - ${log.message}`
+      );
+    });
+  } else {
+    logs.forEach((log) => {
+      const levelColor = LEVEL_COLORS[log.level] || '\x1b[37m';
+      const time = new Date(log.timestamp).toLocaleTimeString();
+      console.log(
+        `  ${levelColor}[${log.level.toUpperCase()}]${reset} ${time} - ${log.message}`
+      );
+    });
+  }
+}
+
 async function getLogs(options: {
   filter?: string;
   format?: 'text' | 'json' | 'summary';
@@ -651,52 +794,7 @@ async function getLogs(options: {
 
     // Default text format
     const displayLogs = options.dedupe ? deduplicateLogs(logs) : null;
-
-    console.log(
-      `[Sweetlink] ✓ Found ${logs.length} log entries${options.dedupe ? ` (${displayLogs!.length} unique)` : ''}`
-    );
-
-    if (logs.length > 0) {
-      console.log('\nConsole Logs:');
-
-      if (options.dedupe && displayLogs) {
-        displayLogs.forEach((log) => {
-          const levelColor =
-            {
-              error: '\x1b[31m',
-              warn: '\x1b[33m',
-              info: '\x1b[36m',
-              log: '\x1b[37m',
-            }[log.level] || '\x1b[37m';
-
-          const reset = '\x1b[0m';
-          const countStr = log.count > 1 ? ` (×${log.count})` : '';
-
-          console.log(
-            `  ${levelColor}[${log.level.toUpperCase()}]${reset}${countStr} - ${log.message}`
-          );
-        });
-      } else {
-        logs.forEach((log) => {
-          const levelColor =
-            {
-              error: '\x1b[31m',
-              warn: '\x1b[33m',
-              info: '\x1b[36m',
-              log: '\x1b[37m',
-            }[log.level] || '\x1b[37m';
-
-          const reset = '\x1b[0m';
-          const time = new Date(log.timestamp).toLocaleTimeString();
-
-          console.log(
-            `  ${levelColor}[${log.level.toUpperCase()}]${reset} ${time} - ${log.message}`
-          );
-        });
-      }
-    } else {
-      console.log('  No logs found');
-    }
+    renderLogsAsText(logs, displayLogs);
 
     return { total: logs.length, format: 'text', deduped: !!options.dedupe, logs: displayLogs || logs, outputPath: undefined };
   } catch (error) {
@@ -743,7 +841,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
     let page;
 
     if (contexts.length > 0) {
-      const pages = contexts[0].pages();
+      const pages = contexts[0]!.pages();
       const devUrl = new URL(process.env.SWEETLINK_DEV_URL || 'http://localhost:3000');
       const devHost = devUrl.hostname;
       const devPort = devUrl.port || (devUrl.protocol === 'https:' ? '443' : '80');
@@ -834,6 +932,41 @@ async function execJS(options: { code: string; waitFor?: string; waitTimeout?: n
   }
 }
 
+/**
+ * Generate JavaScript code that finds elements and clicks the one at the given index.
+ * Parameterized by the element-finding strategy: text content search or CSS selector.
+ */
+function generateClickCode(strategy: { type: 'text'; text: string; selector: string } | { type: 'selector'; selector: string }, index: number): string {
+  // The element-finding expression differs, but the bounds-check + click + return is shared
+  const escapedSelector = JSON.stringify(strategy.selector);
+  let findExpression: string;
+  let notFoundMsg: string;
+
+  if (strategy.type === 'text') {
+    const escapedText = JSON.stringify(strategy.text);
+    findExpression = `Array.from(document.querySelectorAll(${escapedSelector})).filter(el => el.textContent?.includes(${escapedText}))`;
+    notFoundMsg = `"No element found with text: " + ${escapedText}`;
+  } else {
+    findExpression = `Array.from(document.querySelectorAll(${escapedSelector}))`;
+    notFoundMsg = `"No element found matching: " + ${escapedSelector}`;
+  }
+
+  return `
+      (() => {
+        const elements = ${findExpression};
+        if (elements.length === 0) {
+          return { success: false, error: ${notFoundMsg} };
+        }
+        const target = elements[${index}];
+        if (!target) {
+          return { success: false, error: "Index ${index} out of bounds, found " + elements.length + " elements" };
+        }
+        target.click();
+        return { success: true, clicked: target.tagName + (target.className ? "." + target.className.split(" ")[0] : ""), found: elements.length };
+      })()
+    `;
+}
+
 async function click(options: { selector?: string; text?: string; index?: number }): Promise<ClickData> {
   const { selector, text, index = 0 } = options;
 
@@ -846,46 +979,12 @@ async function click(options: { selector?: string; text?: string; index?: number
   let description: string;
 
   if (text) {
-    // Find element by text content
     const baseSelector = selector || '*';
-    // Escape for JSON to safely embed in JavaScript
-    const escapedText = JSON.stringify(text);
-    const escapedSelector = JSON.stringify(baseSelector);
     description = selector ? `"${text}" within ${selector}` : `"${text}"`;
-    clickCode = `
-      (() => {
-        const searchText = ${escapedText};
-        const elements = Array.from(document.querySelectorAll(${escapedSelector}))
-          .filter(el => el.textContent?.includes(searchText));
-        if (elements.length === 0) {
-          return { success: false, error: "No element found with text: " + searchText };
-        }
-        const target = elements[${index}];
-        if (!target) {
-          return { success: false, error: "Index ${index} out of bounds, found " + elements.length + " elements" };
-        }
-        target.click();
-        return { success: true, clicked: target.tagName + (target.className ? "." + target.className.split(" ")[0] : ""), found: elements.length };
-      })()
-    `;
+    clickCode = generateClickCode({ type: 'text', text, selector: baseSelector }, index);
   } else {
-    // Find element by selector
-    const escapedSelector = JSON.stringify(selector);
     description = `${selector}${index > 0 ? ` [${index}]` : ''}`;
-    clickCode = `
-      (() => {
-        const elements = document.querySelectorAll(${escapedSelector});
-        if (elements.length === 0) {
-          return { success: false, error: "No element found matching: " + ${escapedSelector} };
-        }
-        const target = elements[${index}];
-        if (!target) {
-          return { success: false, error: "Index ${index} out of bounds, found " + elements.length + " elements" };
-        }
-        target.click();
-        return { success: true, clicked: target.tagName + (target.className ? "." + target.className.split(" ")[0] : ""), found: elements.length };
-      })()
-    `;
+    clickCode = generateClickCode({ type: 'selector', selector: selector! }, index);
   }
 
   console.log(`[Sweetlink] Clicking: ${description}`);
@@ -1228,14 +1327,14 @@ async function findLsofPath(): Promise<string> {
  * Find and kill process using a specific port (fallback method)
  */
 async function killProcessOnPort(port: number): Promise<boolean> {
-  const { exec } = await import('child_process');
+  const { execFile } = await import('child_process');
   const { promisify } = await import('util');
-  const execAsync = promisify(exec);
+  const execFileAsync = promisify(execFile);
 
   const lsofPath = await findLsofPath();
 
   try {
-    const { stdout } = await execAsync(`${lsofPath} -ti :${port}`);
+    const { stdout } = await execFileAsync(lsofPath, ['-ti', `:${port}`]);
     const pids = stdout.trim().split('\n').filter(Boolean);
 
     if (pids.length === 0) {
@@ -1243,8 +1342,9 @@ async function killProcessOnPort(port: number): Promise<boolean> {
     }
 
     for (const pid of pids) {
+      if (!/^\d+$/.test(pid)) continue;
       try {
-        await execAsync(`/bin/kill -9 ${pid}`);
+        await execFileAsync('/bin/kill', ['-9', pid]);
         console.log(`  Killed process ${pid} on port ${port}`);
       } catch {
         // Process may have already exited
@@ -1550,59 +1650,67 @@ async function getVitals(options: { format?: 'text' | 'json' }): Promise<VitalsD
   }
 }
 
-function showHelp(): void {
-  console.log(`
-Sweetlink CLI - Autonomous Development Bridge
-
-Usage:
-  pnpm sweetlink <command> [options]
-
-Commands:
-
-  screenshot [options]
+// Per-command help text, keyed by canonical command name
+const COMMAND_HELP: Record<string, string> = {
+  screenshot: `  screenshot [options]
     Take a screenshot of the current page or element
 
-    TWO-TIER STRATEGY (see .claude/context/sweetlink-screenshot-workflow.md):
-      Tier 1 (Default): html2canvas WebSocket - 131KB, zero setup, use 95% of time
-      Tier 2 (Escalation): CDP - 2.0MB native Chrome, use only to confirm discrepancies
+    TWO-TIER STRATEGY:
+      Tier 1 (Default): html2canvas via WebSocket
+        - Captures viewport at 0.5x scale (PNG, typically 50-300KB)
+        - Zero setup, works with any devbar-enabled page
+        - Use --full-page to capture the entire scrollable page (larger files)
+
+      Tier 2 (Escalation): Playwright/CDP
+        - Pixel-perfect native Chrome rendering
+        - Respects --viewport/--width/--height for custom dimensions
+        - Use --force-cdp to force this method, or it auto-activates for --hover
+        - Auto-launches headless browser if no browser connected
 
     Options:
-      --url <url>                 Target URL to navigate to (default: http://localhost:3000)
+      --url <url>                 Navigate browser to URL before capturing (default: http://localhost:3000)
+                                  Navigates connected browser via WS; if none connected, opens one via Playwright
       --selector <css-selector>   CSS selector of element to screenshot
       --output <path>             Output file path (default: screenshot-<timestamp>.png)
-      --full-page                 Capture full page (not just viewport)
-      --width <pixels>            Viewport width (e.g., 768 for tablet, 375 for mobile)
-      --height <pixels>           Viewport height (default: width * 1.5)
-      --viewport <preset|WxH>     Viewport preset (mobile, tablet, desktop) or WIDTHxHEIGHT
-      --force-cdp                 Force CDP method (requires Chrome debugging)
-      --force-ws                  Force WebSocket method (default)
+      --full-page                 Capture full scrollable page (default: viewport only)
+      --width <pixels>            Viewport width for Playwright (e.g., 768 for tablet, 375 for mobile)
+      --height <pixels>           Viewport height for Playwright (default: width * 1.5)
+      --viewport <preset|WxH>     Viewport preset for Playwright (mobile, tablet, desktop) or WIDTHxHEIGHT
+      --force-cdp                 Force Playwright/CDP method
+      --force-ws                  Force WebSocket/html2canvas method (default)
       --no-wait                   Skip server readiness check (use if server is already running)
       --wait-timeout <ms>         Max time to wait for server (default: 30000ms)
 
-    Examples:
-      pnpm sweetlink screenshot                                            # Tier 1 (default)
-      pnpm sweetlink screenshot --url "http://localhost:3000/company/foo"  # Navigate to specific page
-      pnpm sweetlink screenshot --selector ".company-card"                 # Tier 1 with selector
-      pnpm sweetlink screenshot --width 768                                # Tablet viewport (768x1152)
-      pnpm sweetlink screenshot --width 375 --height 667                   # iPhone SE viewport
-      pnpm sweetlink screenshot --viewport tablet                          # Preset: 768x1024
-      pnpm sweetlink screenshot --force-cdp --full-page                    # Tier 2 (escalation)
+    Size comparison:
+      Tier 1 (WS, viewport):     ~50-300KB PNG at 0.5x scale
+      Tier 1 (WS, --full-page):  ~1-5MB PNG (entire page)
+      Tier 2 (Playwright):       ~200-800KB PNG at native resolution
 
-  query --selector <css-selector> [options]
+    Examples:
+      pnpm sweetlink screenshot                                            # Viewport screenshot (small)
+      pnpm sweetlink screenshot --url "http://localhost:3000/company/foo"  # Navigate then capture
+      pnpm sweetlink screenshot --selector ".company-card"                 # Element screenshot
+      pnpm sweetlink screenshot --full-page                                # Full scrollable page
+      pnpm sweetlink screenshot --force-cdp --viewport tablet              # Playwright at 768x1024
+      pnpm sweetlink screenshot --force-cdp --width 375 --height 667       # Playwright at iPhone SE`,
+
+  query: `  query --selector <css-selector> [options]
     Query DOM elements and return data
 
     Options:
       --selector <css-selector>   CSS selector to query (required)
       --property <name>           Property to get from elements
+      --url <url>                 Navigate browser to URL before querying
       --wait-for <css-selector>   Wait for selector to exist before querying (handles hydration)
       --wait-timeout <ms>         Max wait time for --wait-for (default: 10000ms)
 
     Examples:
       pnpm sweetlink query --selector "h1"
       pnpm sweetlink query --selector ".card" --property "offsetWidth"
-      pnpm sweetlink query --selector "img" --wait-for "img[src*='hero']"
+      pnpm sweetlink query --selector "h1" --url "http://localhost:3000/about"
+      pnpm sweetlink query --selector "img" --wait-for "img[src*='hero']"`,
 
-  logs [options]
+  logs: `  logs [options]
     Get console logs from the browser
 
     Options:
@@ -1623,9 +1731,9 @@ Commands:
       pnpm sweetlink logs --dedupe                    # Remove duplicates
       pnpm sweetlink logs --format json               # Full JSON output
       pnpm sweetlink logs --format summary            # LLM-optimized summary
-      pnpm sweetlink logs --format json --dedupe      # JSON with deduplication
+      pnpm sweetlink logs --format json --dedupe      # JSON with deduplication`,
 
-  exec --code <javascript>
+  exec: `  exec --code <javascript>
     Execute JavaScript in the browser context
 
     Code is evaluated as an expression. Bare \`return\` statements are auto-wrapped in an IIFE.
@@ -1633,17 +1741,19 @@ Commands:
 
     Options:
       --code <javascript>         JavaScript code to execute (required)
+      --url <url>                 Navigate browser to URL before executing
       --wait-for <css-selector>   Wait for selector to exist before executing (handles hydration)
       --wait-timeout <ms>         Max wait time for --wait-for (default: 10000ms)
 
     Examples:
       pnpm sweetlink exec --code "document.title"
       pnpm sweetlink exec --code "document.querySelectorAll('.card').length"
+      pnpm sweetlink exec --code "document.title" --url "http://localhost:3000/about"
       pnpm sweetlink exec --code "const x = 1 + 2; return x;"
       pnpm sweetlink exec --code "fetch('/api/health').then(r => r.status)"
-      pnpm sweetlink exec --code "document.querySelectorAll('img').length" --wait-for "img[src*='hero']"
+      pnpm sweetlink exec --code "document.querySelectorAll('img').length" --wait-for "img[src*='hero']"`,
 
-  click [options]
+  click: `  click [options]
     Click an element in the browser
 
     Options:
@@ -1658,9 +1768,9 @@ Commands:
       pnpm sweetlink click --selector "button.submit"
       pnpm sweetlink click --text "Submit"
       pnpm sweetlink click --selector "th" --text "Rank"
-      pnpm sweetlink click --selector ".tab" --index 2
+      pnpm sweetlink click --selector ".tab" --index 2`,
 
-  network [options] (requires CDP)
+  network: `  network [options] (requires CDP)
     Get network requests from the browser
 
     Options:
@@ -1668,9 +1778,9 @@ Commands:
 
     Examples:
       pnpm sweetlink network
-      pnpm sweetlink network --filter "/api/"
+      pnpm sweetlink network --filter "/api/"`,
 
-  refresh [options]
+  refresh: `  refresh [options]
     Refresh the browser page
 
     Options:
@@ -1678,9 +1788,9 @@ Commands:
 
     Examples:
       pnpm sweetlink refresh
-      pnpm sweetlink refresh --hard
+      pnpm sweetlink refresh --hard`,
 
-  schema [options]
+  schema: `  schema [options]
     Extract page schema (JSON-LD, Open Graph, Twitter, meta tags, microdata)
 
     Options:
@@ -1690,9 +1800,9 @@ Commands:
     Examples:
       pnpm sweetlink schema
       pnpm sweetlink schema --format json
-      pnpm sweetlink schema --output .tmp/schema.json --format json
+      pnpm sweetlink schema --output .tmp/schema.json --format json`,
 
-  outline [options]
+  outline: `  outline [options]
     Extract document outline (headings, sections, landmarks)
 
     Options:
@@ -1702,9 +1812,9 @@ Commands:
     Examples:
       pnpm sweetlink outline
       pnpm sweetlink outline --format json
-      pnpm sweetlink outline --output .tmp/outline.md
+      pnpm sweetlink outline --output .tmp/outline.md`,
 
-  a11y [options]
+  a11y: `  a11y [options]
     Run accessibility audit (requires axe-core via devbar)
 
     Options:
@@ -1714,9 +1824,9 @@ Commands:
     Examples:
       pnpm sweetlink a11y
       pnpm sweetlink a11y --format json
-      pnpm sweetlink a11y --output .tmp/a11y-report.json --format json
+      pnpm sweetlink a11y --output .tmp/a11y-report.json --format json`,
 
-  vitals [options]
+  vitals: `  vitals [options]
     Collect Core Web Vitals (FCP, LCP, CLS, INP, page size)
 
     Options:
@@ -1724,9 +1834,9 @@ Commands:
 
     Examples:
       pnpm sweetlink vitals
-      pnpm sweetlink vitals --format json
+      pnpm sweetlink vitals --format json`,
 
-  ruler [options]
+  ruler: `  ruler [options]
     Measure elements and inject visual overlay for alignment verification.
     Shows bounding boxes, center lines, dimensions, and alignment offsets.
 
@@ -1751,9 +1861,9 @@ Commands:
       pnpm sweetlink ruler --selector "article h2" --selector "article header > div:first-child"
       pnpm sweetlink ruler --preset card-header --output .tmp/ruler.png
       pnpm sweetlink ruler --preset card-header --format json
-      pnpm sweetlink ruler --selector ".logo" --selector ".nav-item" --show-position
+      pnpm sweetlink ruler --selector ".logo" --selector ".nav-item" --show-position`,
 
-  wait [options]
+  wait: `  wait [options]
     Wait for server to be ready (blocks until available or timeout)
     Eliminates need for external sleep commands in scripts.
 
@@ -1764,9 +1874,9 @@ Commands:
     Examples:
       pnpm sweetlink wait
       pnpm sweetlink wait --url "http://localhost:3000"
-      pnpm sweetlink wait --timeout 60000
+      pnpm sweetlink wait --timeout 60000`,
 
-  status [options]
+  status: `  status [options]
     Quick server status check (non-blocking, instant)
 
     Options:
@@ -1774,14 +1884,15 @@ Commands:
 
     Examples:
       pnpm sweetlink status
-      pnpm sweetlink status --url "http://localhost:8080"
+      pnpm sweetlink status --url "http://localhost:8080"`,
 
-  cleanup [options]
+  cleanup: `  cleanup [options]
     Find and close stale Sweetlink servers that weren't properly shut down.
     Useful when ports are stuck after crashes or forced process kills.
 
     Options:
       --force                     Force kill processes if graceful shutdown fails
+      --verbose                   Show detailed scan progress
 
     What it does:
       1. Scans common Sweetlink port ranges (9223-9233, 11396-11406, etc.)
@@ -1791,8 +1902,26 @@ Commands:
 
     Examples:
       pnpm sweetlink cleanup                 # Graceful shutdown
-      pnpm sweetlink cleanup --force         # Force kill if needed
+      pnpm sweetlink cleanup --force         # Force kill if needed`,
 
+  setup: `  setup
+    Install Claude Code integration (screenshot skill and context files).
+    Creates symlinks in your .claude/ directory so Claude can use the /screenshot
+    skill and sweetlink agent guide automatically.
+
+    Re-run after upgrading sweetlink to pick up any skill updates.
+
+    Examples:
+      pnpm sweetlink setup`,
+};
+
+// Aliases that map to canonical command names
+const COMMAND_ALIASES: Record<string, string> = {
+  measure: 'ruler',
+  accessibility: 'a11y',
+};
+
+const GLOBAL_HELP = `
 Global Flags:
   --json                  Output structured JSON (envelope with ok, command, data, duration)
   --output-schema         Print TypeScript types for --json output, then exit
@@ -1813,10 +1942,35 @@ Environment Variables:
   CHROME_CDP_PORT             Chrome DevTools Protocol port (default: 9222)
 
 Documentation:
-  Agent Workflow:    .claude/context/sweetlink-screenshot-workflow.md
-  Agent Guide:       .claude/context/sweetlink-agent-guide.md
-  CDP Guide:         .claude/context/sweetlink-cdp-guide.md
+  Agent Guide:       .claude/context/sweetlink-agent-guide.md`;
+
+function showHelp(): void {
+  console.log(`
+Sweetlink CLI - Autonomous Development Bridge
+
+Usage:
+  pnpm sweetlink <command> [options]
+
+Commands:
 `);
+  for (const help of Object.values(COMMAND_HELP)) {
+    console.log(help);
+    console.log('');
+  }
+  console.log(GLOBAL_HELP);
+}
+
+function showCommandHelp(command: string): void {
+  const canonical = COMMAND_ALIASES[command] || command;
+  const help = COMMAND_HELP[canonical];
+  if (!help) {
+    console.error(`[Sweetlink] Unknown command: ${command}`);
+    console.error(`Run "pnpm sweetlink --help" to see all available commands.`);
+    process.exit(1);
+  }
+  console.log(`\nSweetlink CLI - ${canonical}\n`);
+  console.log(help);
+  console.log(GLOBAL_HELP);
 }
 
 // CLI argument parsing
@@ -1839,6 +1993,12 @@ function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
 
+// Per-command --help: `pnpm sweetlink screenshot --help`
+if (hasFlag('--help') || hasFlag('-h')) {
+  showCommandHelp(commandType);
+  process.exit(0);
+}
+
 // Handle --output-schema before main switch
 if (hasFlag('--output-schema')) {
   // If commandType is a known command, print just that schema; otherwise print all
@@ -1852,34 +2012,89 @@ if (hasFlag('--output-schema')) {
 
 const jsonMode = hasFlag('--json');
 
+/**
+ * Set up JSON mode: suppress console.log/warn, capture errors, and intercept process.exit
+ * to emit structured JSON envelopes on failure.
+ */
+function setupJsonMode(command: string, startTime: number): { origExit: typeof process.exit; getLastError: () => string } {
+  console.log = () => {};
+  console.warn = () => {};
+
+  let lastErrorMsg = '';
+  const origError = console.error;
+  console.error = (...errorArgs: unknown[]) => {
+    lastErrorMsg = errorArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+    origError(...errorArgs);
+  };
+
+  const origExit = process.exit;
+  process.exit = ((code?: number) => {
+    if (code && code !== 0) {
+      emitJson({ ok: false, command, data: null, error: lastErrorMsg || `Process exited with code ${code}`, duration: Date.now() - startTime });
+    }
+    origExit(code);
+  }) as typeof process.exit;
+
+  return { origExit, getLastError: () => lastErrorMsg };
+}
+
+/**
+ * Handle the `wait` command: wait for a server to be ready.
+ */
+async function handleWaitCommand(): Promise<WaitData> {
+  const waitUrl = getArg('--url') || 'http://localhost:3000';
+  const waitTimeout = getArg('--timeout')
+    ? parseInt(getArg('--timeout')!, 10)
+    : SERVER_READY_TIMEOUT;
+  const waitStart = Date.now();
+  try {
+    await waitForServer(waitUrl, waitTimeout);
+    console.log('[Sweetlink] ✓ Server is ready');
+    return { url: waitUrl, ready: true, elapsed: Date.now() - waitStart };
+  } catch (error) {
+    console.error(
+      '[Sweetlink] ✗ Server not available:',
+      error instanceof Error ? error.message : error
+    );
+    process.exit(1);
+  }
+}
+
+/**
+ * Handle the `status` command: quick non-blocking server health check.
+ */
+async function handleStatusCommand(): Promise<StatusData> {
+  const statusUrl = getArg('--url') || 'http://localhost:3000';
+  try {
+    const parsedUrl = new URL(statusUrl);
+    const healthCheckUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch(healthCheckUrl, {
+      method: 'HEAD',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (response.ok || response.status === 304) {
+      console.log(`[Sweetlink] ✓ Server at ${healthCheckUrl} is running`);
+      return { url: statusUrl, running: true, statusCode: response.status };
+    } else {
+      console.log(`[Sweetlink] ⚠ Server responded with status ${response.status}`);
+      process.exit(1);
+    }
+  } catch {
+    console.log(`[Sweetlink] ✗ Server at ${statusUrl} is not responding`);
+    process.exit(1);
+  }
+}
+
 (async () => {
   const startTime = Date.now();
 
-  // In --json mode, suppress console.log/warn (preserve stderr for debugging)
+  let origExit = process.exit;
   if (jsonMode) {
-    console.log = () => {};
-    console.warn = () => {};
-  }
-
-  // Capture the last console.error message for error envelopes
-  let lastErrorMsg = '';
-  const origError = console.error;
-  if (jsonMode) {
-    console.error = (...errorArgs: unknown[]) => {
-      lastErrorMsg = errorArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
-      origError(...errorArgs);
-    };
-  }
-
-  // Intercept process.exit in json mode to emit error envelope
-  const origExit = process.exit;
-  if (jsonMode) {
-    process.exit = ((code?: number) => {
-      if (code && code !== 0) {
-        emitJson({ ok: false, command: commandType, data: null, error: lastErrorMsg || `Process exited with code ${code}`, duration: Date.now() - startTime });
-      }
-      origExit(code);
-    }) as typeof process.exit;
+    const jsonSetup = setupJsonMode(commandType, startTime);
+    origExit = jsonSetup.origExit;
   }
 
   try {
@@ -1912,8 +2127,12 @@ const jsonMode = hasFlag('--json');
           console.error('[Sweetlink] Error: --selector is required for query command');
           process.exit(1);
         }
-        if (hasFlag('--url')) {
-          console.warn('[Sweetlink] Warning: --url is not supported for query (uses WebSocket bridge on current page)');
+        if (getArg('--url')) {
+          const navigated = await navigateBrowser(getArg('--url')!);
+          if (!navigated) {
+            console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
+            process.exit(1);
+          }
         }
         result = await queryDOM({
           selector,
@@ -1941,8 +2160,12 @@ const jsonMode = hasFlag('--json');
           console.error('[Sweetlink] Error: --code is required for exec command');
           process.exit(1);
         }
-        if (hasFlag('--url')) {
-          console.warn('[Sweetlink] Warning: --url is not supported for exec (uses WebSocket bridge on current page)');
+        if (getArg('--url')) {
+          const navigated = await navigateBrowser(getArg('--url')!);
+          if (!navigated) {
+            console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
+            process.exit(1);
+          }
         }
         result = await execJS({
           code,
@@ -1978,7 +2201,7 @@ const jsonMode = hasFlag('--json');
         const rulerSelectors: string[] = [];
         args.forEach((arg, i) => {
           if (arg === '--selector' && args[i + 1]) {
-            rulerSelectors.push(args[i + 1]);
+            rulerSelectors.push(args[i + 1]!);
           }
         });
 
@@ -1997,53 +2220,13 @@ const jsonMode = hasFlag('--json');
         break;
       }
 
-      case 'wait': {
-        // Standalone wait command for waiting for server to be ready
-        const waitUrl = getArg('--url') || 'http://localhost:3000';
-        const waitTimeout = getArg('--timeout')
-          ? parseInt(getArg('--timeout')!, 10)
-          : SERVER_READY_TIMEOUT;
-        const waitStart = Date.now();
-        try {
-          await waitForServer(waitUrl, waitTimeout);
-          console.log('[Sweetlink] ✓ Server is ready');
-          result = { url: waitUrl, ready: true, elapsed: Date.now() - waitStart } satisfies WaitData;
-        } catch (error) {
-          console.error(
-            '[Sweetlink] ✗ Server not available:',
-            error instanceof Error ? error.message : error
-          );
-          process.exit(1);
-        }
+      case 'wait':
+        result = await handleWaitCommand();
         break;
-      }
 
-      case 'status': {
-        // Quick server status check (non-blocking)
-        const statusUrl = getArg('--url') || 'http://localhost:3000';
-        try {
-          const parsedUrl = new URL(statusUrl);
-          const healthCheckUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 2000);
-          const response = await fetch(healthCheckUrl, {
-            method: 'HEAD',
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (response.ok || response.status === 304) {
-            console.log(`[Sweetlink] ✓ Server at ${healthCheckUrl} is running`);
-            result = { url: statusUrl, running: true, statusCode: response.status } satisfies StatusData;
-          } else {
-            console.log(`[Sweetlink] ⚠ Server responded with status ${response.status}`);
-            process.exit(1);
-          }
-        } catch {
-          console.log(`[Sweetlink] ✗ Server at ${statusUrl} is not responding`);
-          process.exit(1);
-        }
+      case 'status':
+        result = await handleStatusCommand();
         break;
-      }
 
       case 'schema':
         result = await getSchema({
@@ -2079,6 +2262,15 @@ const jsonMode = hasFlag('--json');
           verbose: hasFlag('--verbose'),
         });
         break;
+
+      case 'setup': {
+        // Run the setup script to symlink Claude context and skills
+        const { execFileSync } = await import('child_process');
+        const scriptDir = path.dirname(import.meta.url.replace('file://', ''));
+        const setupScript = path.resolve(scriptDir, '..', '..', 'scripts', 'setup-claude-context.mjs');
+        execFileSync('node', [setupScript], { stdio: 'inherit' });
+        break;
+      }
 
       default:
         console.error(`[Sweetlink] Unknown command: ${commandType}`);

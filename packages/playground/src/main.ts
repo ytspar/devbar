@@ -169,7 +169,7 @@ function getCurrentThemeMode(): ThemeMode {
 
 function updateThemeToggle(): void {
   const mode = getCurrentThemeMode();
-  const config = themeConfig[mode] ?? themeConfig.system;
+  const config = (themeConfig[mode] ?? themeConfig.system)!;
   themeToggle.textContent = '';
   themeToggle.appendChild(config.icon());
   themeToggle.appendChild(document.createTextNode(` ${config.label}`));

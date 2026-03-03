@@ -2,7 +2,7 @@
  * Collapsed state rendering for the DevBar.
  */
 
-import { CSS_COLORS, withAlpha } from '../../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, withAlpha } from '../../constants.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 
@@ -36,7 +36,7 @@ export function renderCollapsed(state: DevBarState): void {
       'top-right': { top: '27px', right: '29px' },
       'bottom-center': { bottom: '19px', left: '50%', transform: 'translateX(-50%)' },
     };
-    posStyle = collapsedPositions[position] ?? collapsedPositions['bottom-left'];
+    posStyle = collapsedPositions[position] ?? collapsedPositions['bottom-left']!;
   }
 
   const wrapper = state.container;
@@ -55,7 +55,7 @@ export function renderCollapsed(state: DevBarState): void {
     border: `1px solid ${accentColor}`,
     borderRadius: '50%',
     color: accentColor,
-    boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px ${withAlpha(accentColor, 10)}`,
+    boxShadow: `${DEVBAR_THEME.shadows.dropToolbar}, 0 0 0 1px ${withAlpha(accentColor, 10)}`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     cursor: 'pointer',

@@ -55,6 +55,16 @@ yarn add @ytspar/sweetlink
 pnpm add @ytspar/sweetlink@canary
 ```
 
+### Claude Code Integration
+
+If you use [Claude Code](https://claude.com/claude-code), run the setup command to install the screenshot skill and context files:
+
+```bash
+pnpm sweetlink setup
+```
+
+This creates symlinks in your `.claude/` directory so Claude can use the `/screenshot` skill automatically. Re-run after upgrading sweetlink to pick up any skill updates.
+
 ## Quick Start
 
 ### For Vite Apps (Recommended)
@@ -318,13 +328,13 @@ export CHROME_CDP_PORT=9222
 ### Server
 
 ```typescript
-import { initSweetlink, closeSweetlink } from '@ytspar/sweetlink';
+import { initSweetlink, closeSweetlink } from '@ytspar/sweetlink/server';
 
 // Start server
-const wss = initSweetlink({ port: 9223 });
+const wss = await initSweetlink({ port: 9223 });
 
 // Close server
-closeSweetlink();
+await closeSweetlink();
 ```
 
 ### CDP Integration
@@ -352,32 +362,31 @@ const requests = await getNetworkRequestsViaCDP({
 });
 ```
 
-### Browser Component
+### Browser Bridge (Vanilla JS)
+
+The browser bridge is a vanilla JS class (not a React component). For most setups, use the Vite plugin or auto-import instead of initializing manually.
 
 ```typescript
-import { SweetlinkBridge } from '@ytspar/sweetlink/browser';
-import type { SweetlinkBridgeProps } from '@ytspar/sweetlink/browser';
+import { initSweetlinkBridge } from '@ytspar/sweetlink/browser';
 
-// Default usage (connects to ws://localhost:9223, standard colors)
-<SweetlinkBridge />
+// Initialize with defaults (auto-detects port from devbar)
+initSweetlinkBridge();
 
-// Custom theme colors (terminal green)
-<SweetlinkBridge
-  connectedStyles="bg-terminal-green/20 border-terminal-green text-terminal-green"
-  disconnectedStyles="bg-gray-700/20 border-gray-600 text-gray-400"
-/>
-
-// Custom WebSocket URL
-<SweetlinkBridge wsUrl="ws://localhost:9224" />
+// Or with explicit config
+initSweetlinkBridge({
+  basePort: 9223,
+  debug: true,
+});
 ```
 
-#### SweetlinkBridgeProps
+#### SweetlinkBridgeConfig
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `connectedStyles` | `string` | `'bg-green-500/20 border-green-500 text-green-500'` | Tailwind classes for connected state |
-| `disconnectedStyles` | `string` | `'bg-gray-700/20 border-gray-600 text-gray-400'` | Tailwind classes for disconnected state |
-| `wsUrl` | `string` | `'ws://localhost:9223'` | WebSocket server URL |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `basePort` | `number` | Auto-detected | WebSocket server port |
+| `maxPortRetries` | `number` | `10` | Max port scan attempts |
+| `hmrScreenshots` | `boolean` | `false` | Auto-capture on HMR updates |
+| `debug` | `boolean` | `false` | Enable verbose connection logging |
 
 ## Environment Variables
 
@@ -571,7 +580,7 @@ SWEETLINK_WS_PORT=9224 pnpm dev
 
 ### Browser Not Connected
 
-1. Ensure `<SweetlinkBridge />` is rendered in your app
+1. Ensure Sweetlink bridge is initialized (Vite plugin, auto-import, or `initSweetlinkBridge()`)
 2. Check browser console for connection errors
 3. Verify WebSocket server is running (`[Sweetlink] WebSocket server started...`)
 

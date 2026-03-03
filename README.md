@@ -14,7 +14,7 @@ Tools that enable AI agents (like Claude) to autonomously debug, test, and itera
 
 ## Requirements
 
-- **Node.js** 18+ (see `.nvmrc` for version)
+- **Node.js** 20+ (see `.nvmrc` for version)
 - **pnpm** 9.15.9+ (workspace-aware package manager)
 
 ## Installation
@@ -92,71 +92,60 @@ CHROME_CDP_PORT=9222
 
 ### 1. Add Sweetlink Server
 
-#### Remix
-
-```typescript
-// tools/sweetlink-dev.ts
-import { initSweetlink, closeSweetlink } from '@ytspar/sweetlink/server';
-
-const port = parseInt(process.env.SWEETLINK_WS_PORT || '9223', 10);
-initSweetlink({ port });
-
-// Graceful shutdown
-process.on('SIGTERM', () => closeSweetlink());
-process.on('SIGINT', () => closeSweetlink());
-```
-
-#### Vite
+#### Vite (Recommended)
 
 ```typescript
 // vite.config.ts
 import { defineConfig } from 'vite';
-import { initSweetlink } from '@ytspar/sweetlink/server';
+import { sweetlink } from '@ytspar/sweetlink/vite';
 
-if (process.env.NODE_ENV === 'development') {
-  initSweetlink({ port: 9223 });
-}
-
-export default defineConfig({ /* ... */ });
+export default defineConfig({
+  plugins: [sweetlink()]
+});
 ```
+
+That's it! The Vite plugin handles everything automatically (server, browser bridge, port detection).
 
 #### Next.js
 
-```javascript
-// next.config.js
-const { initSweetlink } = require('@ytspar/sweetlink/server');
+```typescript
+// src/instrumentation.ts
+export async function register() {
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    if (process.env.NODE_ENV === 'development') {
+      import('@ytspar/sweetlink/auto');
+    }
+  }
+}
+```
+
+#### Any Node.js App (Express, Remix, etc.)
+
+```typescript
+// server.ts or entry point
+import '@ytspar/sweetlink/auto';
+
+// Your app code...
+```
+
+### 2. Add DevBar (Optional Browser UI)
+
+```typescript
+// app entry point (main.ts, App.tsx, etc.)
+import { initGlobalDevBar } from '@ytspar/devbar';
 
 if (process.env.NODE_ENV === 'development') {
-  initSweetlink({ port: 9223 });
-}
-
-module.exports = { /* ... */ };
-```
-
-### 2. Add Browser Bridge
-
-```tsx
-// app/root.tsx or App.tsx
-import { SweetlinkBridge } from '@ytspar/sweetlink/browser';
-
-export default function App() {
-  return (
-    <>
-      {/* Your app content */}
-      {process.env.NODE_ENV === 'development' && <SweetlinkBridge />}
-    </>
-  );
+  initGlobalDevBar();
 }
 ```
 
-### 3. Update package.json Scripts
+DevBar automatically connects to Sweetlink — no configuration needed.
+
+### 3. Add CLI Script
 
 ```json
 {
   "scripts": {
-    "dev": "run-p dev:app sweetlink:dev",
-    "dev:app": "remix dev",
-    "sweetlink:dev": "tsx tools/sweetlink-dev.ts",
     "sweetlink": "sweetlink"
   }
 }
@@ -517,7 +506,7 @@ SWEETLINK_WS_PORT=9224 pnpm dev
 
 ### Browser Not Connected
 
-1. Ensure `<SweetlinkBridge />` is rendered in your app
+1. Ensure Sweetlink bridge is initialized in your app (Vite plugin, auto-import, or `initSweetlinkBridge()`)
 2. Check browser console for connection errors
 3. Verify WebSocket server is running
 

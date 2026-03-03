@@ -5,6 +5,7 @@
 import {
   BUTTON_COLORS,
   CSS_COLORS,
+  DEVBAR_THEME,
   FONT_MONO,
   TAILWIND_BREAKPOINTS,
   withAlpha,
@@ -76,7 +77,7 @@ function computeExpandedPosition(
     'top-right': { top: '20px', right: '16px' },
     'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
   };
-  return positionStyles[position] ?? positionStyles['bottom-left'];
+  return positionStyles[position] ?? positionStyles['bottom-left']!;
 }
 
 /**
@@ -108,7 +109,7 @@ function styleExpandedWrapper(
     border: `1px solid ${accentColor}`,
     borderRadius: '12px',
     color: accentColor,
-    boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px ${withAlpha(accentColor, 10)}`,
+    boxShadow: `${DEVBAR_THEME.shadows.dropToolbar}, 0 0 0 1px ${withAlpha(accentColor, 10)}`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     boxSizing: 'border-box',
@@ -387,7 +388,7 @@ function appendHiddenMetricsEllipsis(
 
       const labelSpan = document.createElement('span');
       Object.assign(labelSpan.style, { color: CSS_COLORS.textMuted });
-      labelSpan.textContent = config.title.split('(')[0].trim();
+      labelSpan.textContent = config.title.split('(')[0]!.trim();
 
       const valueSpan = document.createElement('span');
       Object.assign(valueSpan.style, { color: CSS_COLORS.text, fontWeight: '500' });

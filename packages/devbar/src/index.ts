@@ -6,8 +6,6 @@ export {
   type A11yState,
   type AxeResult,
   type AxeViolation,
-  clearA11yCache,
-  getCachedResult,
   getImpactColor,
   getViolationCounts,
   groupViolationsByImpact,
@@ -51,12 +49,9 @@ export {
 } from './GlobalDevBar.js';
 
 // Lazy loading utilities
-export { getHtml2Canvas, isHtml2CanvasLoaded, preloadHtml2Canvas } from './lazy/index.js';
+export { getHtml2Canvas } from './lazy/index.js';
 // Network monitoring utilities
 export {
-  formatBytes as formatNetworkBytes,
-  formatDuration,
-  getInitiatorColor,
   type NetworkEntry,
   NetworkMonitor,
   type NetworkState,
@@ -92,14 +87,10 @@ export {
 
 // Storage inspection utilities
 export {
-  beautifyJson,
   type CookieItem,
-  clearLocalStorage,
-  clearSessionStorage,
   deleteCookie,
   deleteLocalStorageItem,
   deleteSessionStorageItem,
-  formatStorageSummary,
   getCookies,
   getLocalStorage,
   getSessionStorage,

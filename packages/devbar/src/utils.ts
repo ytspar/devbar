@@ -19,6 +19,14 @@ export {
   prepareForCapture,
 } from '@ytspar/sweetlink/browser/screenshotUtils';
 
+/** Format bytes to human-readable string */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** Trigger a browser file download from a string content. */
 export function downloadFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });

@@ -108,6 +108,10 @@ describe('DEVBAR_THEME', () => {
     expect(DEVBAR_THEME.shadows.md).toBeDefined();
     expect(DEVBAR_THEME.shadows.lg).toBeDefined();
     expect(DEVBAR_THEME.shadows.glow).toBeDefined();
+    expect(DEVBAR_THEME.shadows.dropSm).toBeDefined();
+    expect(DEVBAR_THEME.shadows.dropLg).toBeDefined();
+    expect(DEVBAR_THEME.shadows.dropToolbar).toBeDefined();
+    expect(DEVBAR_THEME.shadows.dropXl).toBeDefined();
   });
 
   it('has transitions section', () => {

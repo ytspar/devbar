@@ -79,8 +79,8 @@ export function parseViewport(
   // Try to parse "widthxheight" format
   const parts = viewportName.split('x');
   if (parts.length === 2) {
-    const width = parseInt(parts[0], 10);
-    const height = parseInt(parts[1], 10);
+    const width = parseInt(parts[0]!, 10);
+    const height = parseInt(parts[1]!, 10);
     if (!Number.isNaN(width) && !Number.isNaN(height)) {
       return { width, height, isMobile: false };
     }

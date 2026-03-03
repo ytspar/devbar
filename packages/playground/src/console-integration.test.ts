@@ -54,8 +54,8 @@ describe('Console Capture Integration', () => {
 
       const logs = capture.getLogs();
       expect(logs.length).toBe(1);
-      expect(logs[0].level).toBe('info');
-      expect(logs[0].message).toContain('[Test] This is an info message');
+      expect(logs[0]!.level).toBe('info');
+      expect(logs[0]!.message).toContain('[Test] This is an info message');
     });
 
     it('should not increment error or warning counts', () => {
@@ -74,8 +74,8 @@ describe('Console Capture Integration', () => {
 
       const logs = capture.getLogs();
       expect(logs.length).toBe(1);
-      expect(logs[0].level).toBe('warn');
-      expect(logs[0].message).toContain('[Test] This is a warning message');
+      expect(logs[0]!.level).toBe('warn');
+      expect(logs[0]!.message).toContain('[Test] This is a warning message');
     });
 
     it('should increment warning count', () => {
@@ -103,8 +103,8 @@ describe('Console Capture Integration', () => {
 
       const logs = capture.getLogs();
       expect(logs.length).toBe(1);
-      expect(logs[0].level).toBe('error');
-      expect(logs[0].message).toContain('[Test] This is an error message');
+      expect(logs[0]!.level).toBe('error');
+      expect(logs[0]!.message).toContain('[Test] This is an error message');
     });
 
     it('should increment error count', () => {
@@ -138,10 +138,10 @@ describe('Console Capture Integration', () => {
       btn.click();
 
       const logs = capture.getLogs();
-      expect(logs[0].level).toBe('log');
-      expect(logs[1].level).toBe('info');
-      expect(logs[2].level).toBe('warn');
-      expect(logs[3].level).toBe('error');
+      expect(logs[0]!.level).toBe('log');
+      expect(logs[1]!.level).toBe('info');
+      expect(logs[2]!.level).toBe('warn');
+      expect(logs[3]!.level).toBe('error');
     });
 
     it('should increment both warning and error counts by 1 each', () => {
@@ -157,10 +157,10 @@ describe('Console Capture Integration', () => {
       btn.click();
 
       const logs = capture.getLogs();
-      expect(logs[0].message).toContain('[Test] First log (debug)');
-      expect(logs[1].message).toContain('[Test] Second log (info)');
-      expect(logs[2].message).toContain('[Test] Third log (warning)');
-      expect(logs[3].message).toContain('[Test] Fourth log (error)');
+      expect(logs[0]!.message).toContain('[Test] First log (debug)');
+      expect(logs[1]!.message).toContain('[Test] Second log (info)');
+      expect(logs[2]!.message).toContain('[Test] Third log (warning)');
+      expect(logs[3]!.message).toContain('[Test] Fourth log (error)');
     });
   });
 
@@ -176,9 +176,9 @@ describe('Console Capture Integration', () => {
 
       const logs = capture.getLogs();
       expect(logs.length).toBe(3);
-      expect(logs[0].level).toBe('info');
-      expect(logs[1].level).toBe('warn');
-      expect(logs[2].level).toBe('error');
+      expect(logs[0]!.level).toBe('info');
+      expect(logs[1]!.level).toBe('warn');
+      expect(logs[2]!.level).toBe('error');
     });
 
     it('should correctly sum error and warning counts', () => {
@@ -219,11 +219,11 @@ describe('Console Capture Integration', () => {
 
       const errors = capture.getFilteredLogs('error');
       expect(errors.length).toBe(1);
-      expect(errors[0].level).toBe('error');
+      expect(errors[0]!.level).toBe('error');
 
       const warnings = capture.getFilteredLogs('warn');
       expect(warnings.length).toBe(1);
-      expect(warnings[0].level).toBe('warn');
+      expect(warnings[0]!.level).toBe('warn');
     });
 
     it('should allow clearing logs', () => {

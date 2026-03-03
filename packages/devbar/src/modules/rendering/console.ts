@@ -71,7 +71,7 @@ function renderConsoleLogs(container: HTMLElement, logs: ConsoleLog[], color: st
     const logItem = document.createElement('div');
     Object.assign(logItem.style, {
       padding: '8px 14px',
-      borderBottom: index < logs.length - 1 ? '1px solid rgba(255, 255, 255, 0.05)' : 'none',
+      borderBottom: index < logs.length - 1 ? `1px solid ${CSS_COLORS.borderSubtle}` : 'none',
     });
 
     const timestamp = document.createElement('span');

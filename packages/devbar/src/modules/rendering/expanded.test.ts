@@ -34,6 +34,11 @@ vi.mock('../../constants.js', () => ({
     primary: '#10b981',
     primaryGlow: 'rgba(16, 185, 129, 0.4)',
   },
+  DEVBAR_THEME: {
+    shadows: {
+      dropToolbar: '0 4px 12px rgba(0, 0, 0, 0.3)',
+    },
+  },
   FONT_MONO: 'monospace',
   TAILWIND_BREAKPOINTS: {
     base: { min: 0, label: 'Tailwind base: <640px' },

@@ -87,7 +87,7 @@ export class DebugLogger {
   }
 
   private log(category: string, message: string, data?: unknown): void {
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+    const timestamp = new Date().toISOString().split('T')[1]!.slice(0, -1);
     const categoryColors: Record<string, string> = {
       lifecycle: PALETTE.emerald,
       state: PALETTE.blue,

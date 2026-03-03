@@ -6,11 +6,11 @@
  */
 
 import * as fs from 'fs';
-import puppeteer, {
-  type Browser,
-  type HTTPRequest,
-  type HTTPResponse,
-  type Page,
+import type {
+  Browser,
+  HTTPRequest,
+  HTTPResponse,
+  Page,
 } from 'puppeteer-core';
 import { parseViewport } from './viewportUtils.js';
 
@@ -45,6 +45,7 @@ export async function detectCDP(): Promise<boolean> {
  */
 export async function getCDPBrowser(): Promise<Browser> {
   try {
+    const puppeteer = (await import('puppeteer-core')).default;
     const browser = await puppeteer.connect({
       browserURL: CDP_URL,
       defaultViewport: null,
@@ -79,7 +80,7 @@ export async function findLocalDevPage(browser: Browser): Promise<Page> {
 
     // Use the first page or create a new one
     if (pages.length > 0) {
-      devPage = pages[0];
+      devPage = pages[0]!;
     } else {
       devPage = await browser.newPage();
     }
@@ -87,7 +88,7 @@ export async function findLocalDevPage(browser: Browser): Promise<Page> {
     await devPage.goto(DEFAULT_DEV_URL, { waitUntil: 'networkidle0' });
   }
 
-  return devPage;
+  return devPage!;
 }
 
 /**

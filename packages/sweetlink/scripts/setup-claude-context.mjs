@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * Setup script to symlink shared Claude context files to the consuming project
+ * Setup script to symlink shared Claude context and skills to the consuming project.
  *
- * This script runs as postinstall and creates symlinks from the project's
- * .claude/context/ directory to the shared context files in this package.
+ * Can be run directly (`node scripts/setup-claude-context.mjs`) or via CLI (`pnpm sweetlink setup`).
  *
- * Symlinks are relative paths so they work across different environments.
+ * Creates relative symlinks so they work across different environments.
+ *
+ * What gets linked:
+ *   - .claude/context/  ← context files from this package's claude-context/
+ *   - .claude/skills/   ← skill directories from this package's claude-skills/
  */
 
-import { existsSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from 'fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, symlinkSync, unlinkSync } from 'fs';
 import { dirname, join, relative } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,82 +23,104 @@ const packageRoot = join(__dirname, '..');
 const nodeModules = join(packageRoot, '..', '..', '..');
 const projectRoot = join(nodeModules, '..');
 
-// Source: this package's claude-context/
-const sourceDir = join(packageRoot, 'claude-context');
+/**
+ * Create a relative symlink, skipping if already correct.
+ * Won't overwrite non-symlink files.
+ */
+function linkOne(sourcePath, targetPath, label) {
+  const targetDir = dirname(targetPath);
+  const relativePath = relative(targetDir, sourcePath);
 
-// Target: project's .claude/context/
-const targetDir = join(projectRoot, '.claude', 'context');
+  if (existsSync(targetPath) || lstatSync(targetPath, { throwIfNoEntry: false })) {
+    try {
+      const currentLink = readlinkSync(targetPath);
+      if (currentLink === relativePath) {
+        return; // Already correct
+      }
+      // Remove incorrect symlink
+      unlinkSync(targetPath);
+    } catch {
+      // Not a symlink — don't overwrite user's files
+      console.log(`  [skip] ${label} — file exists (not a symlink)`);
+      return;
+    }
+  }
 
-// Files to symlink (add more as needed)
-const filesToLink = [
-  'ui-verification-mandate.md',
-  'debugging-protocol.md',
-  'sweetlink-architecture.md',
-  'component-development-guide.md',
-];
+  try {
+    symlinkSync(relativePath, targetPath);
+    console.log(`  [link] ${label}`);
+  } catch (err) {
+    console.error(`  [error] ${label} — ${err.message}`);
+  }
+}
 
-function setupSymlinks() {
-  // Skip if running in the tools repo itself (during development)
+function setupContext(claudeDir) {
+  const sourceDir = join(packageRoot, 'claude-context');
+  if (!existsSync(sourceDir)) return;
+
+  const targetDir = join(claudeDir, 'context');
+  mkdirSync(targetDir, { recursive: true });
+
+  const files = readdirSync(sourceDir).filter(f => f.endsWith('.md'));
+  if (files.length === 0) return;
+
+  console.log('[@ytspar/sweetlink] Setting up Claude context symlinks...');
+  for (const file of files) {
+    linkOne(join(sourceDir, file), join(targetDir, file), file);
+  }
+}
+
+function setupSkills(claudeDir) {
+  const sourceDir = join(packageRoot, 'claude-skills');
+  if (!existsSync(sourceDir)) return;
+
+  const targetDir = join(claudeDir, 'skills');
+  mkdirSync(targetDir, { recursive: true });
+
+  // Each subdirectory in claude-skills/ is a skill
+  const skills = readdirSync(sourceDir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name);
+
+  if (skills.length === 0) return;
+
+  console.log('[@ytspar/sweetlink] Setting up Claude skill symlinks...');
+
+  // If .claude/skills is itself a symlink (e.g. to a shared tools repo),
+  // we can't add entries inside it. Warn and provide instructions.
+  try {
+    const stat = lstatSync(targetDir);
+    if (stat.isSymbolicLink()) {
+      const linkTarget = readlinkSync(targetDir);
+      console.log(`  [info] .claude/skills is a symlink → ${linkTarget}`);
+      console.log(`  [info] Skills from @ytspar/sweetlink should be symlinked inside that directory.`);
+      console.log(`  [info] Run: cd ${linkTarget} && ln -sf ${relative(linkTarget, sourceDir)}/<skill> .`);
+      return;
+    }
+  } catch {
+    // Doesn't exist yet, will be created above
+  }
+
+  for (const skill of skills) {
+    linkOne(join(sourceDir, skill), join(targetDir, skill), `skills/${skill}`);
+  }
+}
+
+function setup() {
+  // Skip if running inside the devbar repo itself (development)
   if (projectRoot.includes('ytspar/devbar')) {
+    console.log('[@ytspar/sweetlink] Skipping setup (running inside devbar repo)');
     return;
   }
 
-  // Check if source directory exists
-  if (!existsSync(sourceDir)) {
-    // claude-context not built yet, skip silently
-    return;
-  }
-
-  // Check if project has .claude directory (indicates Claude Code project)
   const claudeDir = join(projectRoot, '.claude');
   if (!existsSync(claudeDir)) {
     // Not a Claude Code project, skip silently
     return;
   }
 
-  // Ensure target directory exists
-  if (!existsSync(targetDir)) {
-    mkdirSync(targetDir, { recursive: true });
-  }
-
-  console.log('[@ytspar/sweetlink] Setting up Claude context symlinks...');
-
-  for (const file of filesToLink) {
-    const sourcePath = join(sourceDir, file);
-    const targetPath = join(targetDir, file);
-
-    // Skip if source doesn't exist
-    if (!existsSync(sourcePath)) {
-      continue;
-    }
-
-    // Calculate relative path for symlink
-    const relativePath = relative(targetDir, sourcePath);
-
-    // Check if symlink already exists and points to correct location
-    if (existsSync(targetPath)) {
-      try {
-        const currentLink = readlinkSync(targetPath);
-        if (currentLink === relativePath) {
-          continue; // Already correct
-        }
-        // Remove incorrect symlink
-        unlinkSync(targetPath);
-      } catch {
-        // Not a symlink - don't overwrite user's files
-        console.log(`  [skip] ${file} - file exists (not a symlink)`);
-        continue;
-      }
-    }
-
-    // Create symlink
-    try {
-      symlinkSync(relativePath, targetPath);
-      console.log(`  [link] ${file}`);
-    } catch (err) {
-      console.error(`  [error] ${file} - ${err.message}`);
-    }
-  }
+  setupContext(claudeDir);
+  setupSkills(claudeDir);
 }
 
-setupSymlinks();
+setup();

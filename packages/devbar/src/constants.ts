@@ -219,6 +219,10 @@ export const DEVBAR_THEME = {
     md: '0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.1)',
     lg: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(16, 185, 129, 0.15)',
     glow: '0 0 20px rgba(16, 185, 129, 0.15)',
+    dropSm: '0 4px 12px rgba(0, 0, 0, 0.4)',
+    dropLg: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    dropToolbar: '0 4px 12px rgba(0, 0, 0, 0.3)',
+    dropXl: '0 20px 60px rgba(0, 0, 0, 0.6)',
   },
 
   transitions: {
@@ -273,6 +277,10 @@ export const DEVBAR_THEME_LIGHT = {
     md: '0 4px 12px rgba(4, 120, 87, 0.12), 0 0 0 1px rgba(4, 120, 87, 0.15)',
     lg: '0 8px 32px rgba(4, 120, 87, 0.15), 0 0 0 1px rgba(4, 120, 87, 0.2)',
     glow: '0 0 20px rgba(4, 120, 87, 0.15)',
+    dropSm: '0 4px 12px rgba(0, 0, 0, 0.4)',
+    dropLg: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    dropToolbar: '0 4px 12px rgba(0, 0, 0, 0.3)',
+    dropXl: '0 20px 60px rgba(0, 0, 0, 0.6)',
   },
 
   transitions: DEVBAR_THEME.transitions,
@@ -517,6 +525,10 @@ export function generateThemeCSSVars(theme: DevBarThemeInput = DEVBAR_THEME): st
   --devbar-shadow-md: ${theme.shadows.md};
   --devbar-shadow-lg: ${theme.shadows.lg};
   --devbar-shadow-glow: ${theme.shadows.glow};
+  --devbar-shadow-drop-sm: ${theme.shadows.dropSm};
+  --devbar-shadow-drop-lg: ${theme.shadows.dropLg};
+  --devbar-shadow-drop-toolbar: ${theme.shadows.dropToolbar};
+  --devbar-shadow-drop-xl: ${theme.shadows.dropXl};
 
   /* Transitions */
   --devbar-transition-fast: ${theme.transitions.fast};

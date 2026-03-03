@@ -136,7 +136,7 @@ function renderOutlineNodes(
 
     const textSpan = document.createElement('span');
     Object.assign(textSpan.style, {
-      color: '#d1d5db',
+      color: CSS_COLORS.textSecondary,
       fontSize: '0.6875rem',
       marginLeft: '8px',
     });
@@ -351,7 +351,7 @@ function renderJsonLdItems(container: HTMLElement, items: unknown[], color: stri
 
 function appendHighlightedJson(container: HTMLElement, json: string): void {
   // Color map for different token types
-  const colors: Record<string, string> = {
+  const colors = {
     key: CSS_COLORS.primary, // green
     string: CSS_COLORS.warning, // amber/yellow
     number: CSS_COLORS.purple, // purple
@@ -526,6 +526,151 @@ function faviconDevice(label: string, size?: string): { text: string; color: str
   return { text: 'General', color: CSS_COLORS.textMuted };
 }
 
+/** Create a single favicon card row with thumbnail, label, device pill, dimensions, and URL. */
+function createFaviconCard(
+  icon: { label: string; url: string; size?: string },
+  index: number
+): HTMLDivElement {
+  const device = faviconDevice(icon.label, icon.size);
+
+  const row = document.createElement('div');
+  Object.assign(row.style, {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '6px 8px',
+    gap: '10px',
+    borderRadius: '3px',
+    backgroundColor: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+  });
+
+  // Thumbnail frame
+  const frame = document.createElement('div');
+  Object.assign(frame.style, {
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    border: '1px solid rgba(255, 255, 255, 0.06)',
+    borderRadius: '4px',
+    flexShrink: '0',
+  });
+
+  const thumb = document.createElement('img');
+  Object.assign(thumb.style, {
+    width: '22px',
+    height: '22px',
+    objectFit: 'contain',
+  });
+  thumb.src = icon.url;
+  thumb.alt = icon.label;
+  thumb.onerror = () => { frame.style.opacity = '0.3'; };
+  frame.appendChild(thumb);
+  row.appendChild(frame);
+
+  // Info column: label, device, dimensions + URL
+  const infoCol = document.createElement('div');
+  Object.assign(infoCol.style, {
+    flex: '1',
+    minWidth: '0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  });
+
+  // Top row: label + device pill
+  const topRow = document.createElement('div');
+  Object.assign(topRow.style, {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  });
+
+  const labelEl = document.createElement('span');
+  Object.assign(labelEl.style, {
+    color: CSS_COLORS.text,
+    fontSize: '0.6875rem',
+    fontWeight: '500',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  });
+  labelEl.textContent = icon.label;
+  if (icon.label.length > 24) labelEl.title = icon.label;
+  topRow.appendChild(labelEl);
+
+  const devicePill = document.createElement('span');
+  Object.assign(devicePill.style, {
+    color: device.color,
+    fontSize: '0.5rem',
+    backgroundColor: withAlpha(device.color, 7),
+    padding: '1px 6px',
+    borderRadius: '6px',
+    letterSpacing: '0.03em',
+    whiteSpace: 'nowrap',
+    flexShrink: '0',
+  });
+  devicePill.textContent = device.text;
+  topRow.appendChild(devicePill);
+
+  infoCol.appendChild(topRow);
+
+  // Bottom row: declared size + actual dimensions + URL
+  const bottomRow = document.createElement('div');
+  Object.assign(bottomRow.style, {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.5625rem',
+    color: CSS_COLORS.textMuted,
+  });
+
+  if (icon.size) {
+    const declaredEl = document.createElement('span');
+    declaredEl.textContent = icon.size;
+    declaredEl.style.opacity = '0.8';
+    bottomRow.appendChild(declaredEl);
+  }
+
+  // Actual dimensions (populated on load)
+  const dimEl = document.createElement('span');
+  dimEl.style.letterSpacing = '0.02em';
+  bottomRow.appendChild(dimEl);
+
+  thumb.onload = () => {
+    if (thumb.naturalWidth) {
+      const actual = `${thumb.naturalWidth}\u00d7${thumb.naturalHeight}`;
+      if (icon.size) {
+        dimEl.textContent = `\u2192 ${actual}`;
+      } else {
+        dimEl.textContent = actual;
+      }
+    }
+  };
+
+  const sep = document.createElement('span');
+  sep.textContent = '\u00b7';
+  sep.style.opacity = '0.4';
+  bottomRow.appendChild(sep);
+
+  const urlEl = document.createElement('span');
+  Object.assign(urlEl.style, {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    opacity: '0.6',
+  });
+  urlEl.textContent = icon.url;
+  urlEl.title = icon.url;
+  bottomRow.appendChild(urlEl);
+
+  infoCol.appendChild(bottomRow);
+  row.appendChild(infoCol);
+
+  return row;
+}
+
 function renderFaviconsSection(
   container: HTMLElement,
   icons: Array<{ label: string; url: string; size?: string }>
@@ -537,147 +682,51 @@ function renderFaviconsSection(
   renderSchemaSectionHeader(section, 'Favicons', color, icons.length);
 
   icons.forEach((icon, i) => {
-    const device = faviconDevice(icon.label, icon.size);
-
-    const row = document.createElement('div');
-    Object.assign(row.style, {
-      display: 'flex',
-      alignItems: 'center',
-      padding: '6px 8px',
-      gap: '10px',
-      borderRadius: '3px',
-      backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-    });
-
-    // Thumbnail frame
-    const frame = document.createElement('div');
-    Object.assign(frame.style, {
-      width: '32px',
-      height: '32px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.25)',
-      border: '1px solid rgba(255, 255, 255, 0.06)',
-      borderRadius: '4px',
-      flexShrink: '0',
-    });
-
-    const thumb = document.createElement('img');
-    Object.assign(thumb.style, {
-      width: '22px',
-      height: '22px',
-      objectFit: 'contain',
-    });
-    thumb.src = icon.url;
-    thumb.alt = icon.label;
-    thumb.onerror = () => { frame.style.opacity = '0.3'; };
-    frame.appendChild(thumb);
-    row.appendChild(frame);
-
-    // Info column: label, device, dimensions + URL
-    const infoCol = document.createElement('div');
-    Object.assign(infoCol.style, {
-      flex: '1',
-      minWidth: '0',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2px',
-    });
-
-    // Top row: label + device pill
-    const topRow = document.createElement('div');
-    Object.assign(topRow.style, {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-    });
-
-    const labelEl = document.createElement('span');
-    Object.assign(labelEl.style, {
-      color: CSS_COLORS.text,
-      fontSize: '0.6875rem',
-      fontWeight: '500',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-    });
-    labelEl.textContent = icon.label;
-    if (icon.label.length > 24) labelEl.title = icon.label;
-    topRow.appendChild(labelEl);
-
-    const devicePill = document.createElement('span');
-    Object.assign(devicePill.style, {
-      color: device.color,
-      fontSize: '0.5rem',
-      backgroundColor: withAlpha(device.color, 7),
-      padding: '1px 6px',
-      borderRadius: '6px',
-      letterSpacing: '0.03em',
-      whiteSpace: 'nowrap',
-      flexShrink: '0',
-    });
-    devicePill.textContent = device.text;
-    topRow.appendChild(devicePill);
-
-    infoCol.appendChild(topRow);
-
-    // Bottom row: declared size + actual dimensions + URL
-    const bottomRow = document.createElement('div');
-    Object.assign(bottomRow.style, {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      fontSize: '0.5625rem',
-      color: CSS_COLORS.textMuted,
-    });
-
-    if (icon.size) {
-      const declaredEl = document.createElement('span');
-      declaredEl.textContent = icon.size;
-      declaredEl.style.opacity = '0.8';
-      bottomRow.appendChild(declaredEl);
-    }
-
-    // Actual dimensions (populated on load)
-    const dimEl = document.createElement('span');
-    dimEl.style.letterSpacing = '0.02em';
-    bottomRow.appendChild(dimEl);
-
-    thumb.onload = () => {
-      if (thumb.naturalWidth) {
-        const actual = `${thumb.naturalWidth}\u00d7${thumb.naturalHeight}`;
-        if (icon.size) {
-          dimEl.textContent = `\u2192 ${actual}`;
-        } else {
-          dimEl.textContent = actual;
-        }
-      }
-    };
-
-    const sep = document.createElement('span');
-    sep.textContent = '\u00b7';
-    sep.style.opacity = '0.4';
-    bottomRow.appendChild(sep);
-
-    const urlEl = document.createElement('span');
-    Object.assign(urlEl.style, {
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      opacity: '0.6',
-    });
-    urlEl.textContent = icon.url;
-    urlEl.title = icon.url;
-    bottomRow.appendChild(urlEl);
-
-    infoCol.appendChild(bottomRow);
-    row.appendChild(infoCol);
-
-    section.appendChild(row);
+    section.appendChild(createFaviconCard(icon, i));
   });
 
   container.appendChild(section);
+}
+
+/** Create a colored summary pill (e.g. "3 errors", "2 warnings"). */
+function createSummaryPill(text: string, color: string): HTMLSpanElement {
+  const pill = document.createElement('span');
+  Object.assign(pill.style, {
+    color,
+    fontSize: '0.5625rem',
+    backgroundColor: withAlpha(color, 8),
+    padding: '2px 8px',
+    borderRadius: '8px',
+    letterSpacing: '0.03em',
+  });
+  pill.textContent = text;
+  return pill;
+}
+
+/** Create a striped row with alternating background and optional left border. */
+function createStripedRow(index: number, borderColor?: string): HTMLDivElement {
+  const row = document.createElement('div');
+  Object.assign(row.style, {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '4px 8px',
+    gap: '8px',
+    borderRadius: '3px',
+    backgroundColor: index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+    ...(borderColor ? { borderLeft: `2px solid ${withAlpha(borderColor, 25)}` } : {}),
+  });
+  return row;
+}
+
+/** Create a styled text span for modal info items. */
+function createInfoSpan(
+  text: string,
+  styles: Partial<CSSStyleDeclaration>
+): HTMLSpanElement {
+  const el = document.createElement('span');
+  Object.assign(el.style, styles);
+  el.textContent = text;
+  return el;
 }
 
 function renderMissingTagsSection(
@@ -704,31 +753,11 @@ function renderMissingTagsSection(
     });
 
     if (errorCount > 0) {
-      const errPill = document.createElement('span');
-      Object.assign(errPill.style, {
-        color: CSS_COLORS.error,
-        fontSize: '0.5625rem',
-        backgroundColor: withAlpha(CSS_COLORS.error, 8),
-        padding: '2px 8px',
-        borderRadius: '8px',
-        letterSpacing: '0.03em',
-      });
-      errPill.textContent = `${errorCount} error${errorCount > 1 ? 's' : ''}`;
-      summary.appendChild(errPill);
+      summary.appendChild(createSummaryPill(`${errorCount} error${errorCount > 1 ? 's' : ''}`, CSS_COLORS.error));
     }
 
     if (warnCount > 0) {
-      const warnPill = document.createElement('span');
-      Object.assign(warnPill.style, {
-        color: CSS_COLORS.warning,
-        fontSize: '0.5625rem',
-        backgroundColor: withAlpha(CSS_COLORS.warning, 8),
-        padding: '2px 8px',
-        borderRadius: '8px',
-        letterSpacing: '0.03em',
-      });
-      warnPill.textContent = `${warnCount} warning${warnCount > 1 ? 's' : ''}`;
-      summary.appendChild(warnPill);
+      summary.appendChild(createSummaryPill(`${warnCount} warning${warnCount > 1 ? 's' : ''}`, CSS_COLORS.warning));
     }
 
     section.appendChild(summary);
@@ -738,49 +767,32 @@ function renderMissingTagsSection(
     const isError = tag.severity === 'error';
     const tagColor = isError ? CSS_COLORS.error : CSS_COLORS.warning;
 
-    const row = document.createElement('div');
-    Object.assign(row.style, {
-      display: 'flex',
-      alignItems: 'center',
-      padding: '4px 8px',
-      gap: '8px',
-      borderRadius: '3px',
-      backgroundColor: i % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-      borderLeft: `2px solid ${withAlpha(tagColor, 25)}`,
-    });
+    const row = createStripedRow(i, tagColor);
 
-    const icon = document.createElement('span');
-    Object.assign(icon.style, {
+    const icon = createInfoSpan(isError ? '\u2718' : '\u26a0', {
       fontSize: '0.625rem',
       flexShrink: '0',
       width: '14px',
       textAlign: 'center',
       color: tagColor,
     });
-    icon.textContent = isError ? '\u2718' : '\u26a0';
     row.appendChild(icon);
 
-    const tagName = document.createElement('span');
-    Object.assign(tagName.style, {
+    row.appendChild(createInfoSpan(tag.tag, {
       color: CSS_COLORS.text,
       fontSize: '0.6875rem',
       width: '120px',
       minWidth: '120px',
       flexShrink: '0',
       fontWeight: '500',
-    });
-    tagName.textContent = tag.tag;
-    row.appendChild(tagName);
+    }));
 
-    const hint = document.createElement('span');
-    Object.assign(hint.style, {
+    row.appendChild(createInfoSpan(tag.hint, {
       color: CSS_COLORS.textMuted,
       fontSize: '0.6875rem',
       flex: '1',
       opacity: '0.85',
-    });
-    hint.textContent = tag.hint;
-    row.appendChild(hint);
+    }));
 
     section.appendChild(row);
   });
@@ -993,6 +1005,94 @@ function createViolationNodeEl(node: { html: string }): HTMLDivElement {
   return el;
 }
 
+/** Create a single violation card with rule ID, help text, description, and affected nodes. */
+function createViolationCard(violation: AxeViolation, impactColor: string): HTMLDivElement {
+  const violationEl = document.createElement('div');
+  Object.assign(violationEl.style, {
+    marginBottom: '12px',
+    padding: '10px 12px',
+    backgroundColor: withAlpha(impactColor, 3),
+    border: `1px solid ${withAlpha(impactColor, 13)}`,
+    borderRadius: '6px',
+  });
+
+  // Rule ID
+  const ruleId = document.createElement('div');
+  Object.assign(ruleId.style, {
+    color: impactColor,
+    fontSize: '0.6875rem',
+    fontWeight: '600',
+    marginBottom: '4px',
+  });
+  ruleId.textContent = violation.id;
+  violationEl.appendChild(ruleId);
+
+  // Help text
+  const helpText = document.createElement('div');
+  Object.assign(helpText.style, {
+    color: CSS_COLORS.text,
+    fontSize: '0.75rem',
+    marginBottom: '4px',
+  });
+  helpText.textContent = violation.help;
+  violationEl.appendChild(helpText);
+
+  // Description
+  const desc = document.createElement('div');
+  Object.assign(desc.style, {
+    color: CSS_COLORS.textSecondary,
+    fontSize: '0.6875rem',
+    marginBottom: '6px',
+  });
+  desc.textContent = violation.description;
+  violationEl.appendChild(desc);
+
+  // Node count
+  const nodeCount = document.createElement('div');
+  Object.assign(nodeCount.style, {
+    color: CSS_COLORS.textMuted,
+    fontSize: '0.625rem',
+    marginBottom: '4px',
+  });
+  nodeCount.textContent = `${violation.nodes.length} element${violation.nodes.length === 1 ? '' : 's'} affected`;
+  violationEl.appendChild(nodeCount);
+
+  // Affected nodes (collapsed by default, show first 3)
+  const nodesPreview = document.createElement('div');
+  Object.assign(nodesPreview.style, {
+    marginTop: '6px',
+  });
+
+  const visibleNodes = violation.nodes.slice(0, 3);
+  for (const node of visibleNodes) {
+    nodesPreview.appendChild(createViolationNodeEl(node));
+  }
+
+  if (violation.nodes.length > 3) {
+    const moreBtn = document.createElement('button');
+    Object.assign(moreBtn.style, {
+      background: 'none',
+      border: 'none',
+      color: impactColor,
+      fontSize: '0.625rem',
+      cursor: 'pointer',
+      padding: '2px 0',
+      fontFamily: FONT_MONO,
+    });
+    moreBtn.textContent = `+ ${violation.nodes.length - 3} more`;
+    moreBtn.onclick = () => {
+      moreBtn.remove();
+      for (const node of violation.nodes.slice(3)) {
+        nodesPreview.appendChild(createViolationNodeEl(node));
+      }
+    };
+    nodesPreview.appendChild(moreBtn);
+  }
+
+  violationEl.appendChild(nodesPreview);
+  return violationEl;
+}
+
 function renderA11yViolationGroup(
   container: HTMLElement,
   impact: string,
@@ -1018,90 +1118,7 @@ function renderA11yViolationGroup(
   section.appendChild(sectionTitle);
 
   for (const violation of violations) {
-    const violationEl = document.createElement('div');
-    Object.assign(violationEl.style, {
-      marginBottom: '12px',
-      padding: '10px 12px',
-      backgroundColor: withAlpha(impactColor, 3),
-      border: `1px solid ${withAlpha(impactColor, 13)}`,
-      borderRadius: '6px',
-    });
-
-    // Rule ID
-    const ruleId = document.createElement('div');
-    Object.assign(ruleId.style, {
-      color: impactColor,
-      fontSize: '0.6875rem',
-      fontWeight: '600',
-      marginBottom: '4px',
-    });
-    ruleId.textContent = violation.id;
-    violationEl.appendChild(ruleId);
-
-    // Help text
-    const helpText = document.createElement('div');
-    Object.assign(helpText.style, {
-      color: CSS_COLORS.text,
-      fontSize: '0.75rem',
-      marginBottom: '4px',
-    });
-    helpText.textContent = violation.help;
-    violationEl.appendChild(helpText);
-
-    // Description
-    const desc = document.createElement('div');
-    Object.assign(desc.style, {
-      color: CSS_COLORS.textSecondary,
-      fontSize: '0.6875rem',
-      marginBottom: '6px',
-    });
-    desc.textContent = violation.description;
-    violationEl.appendChild(desc);
-
-    // Node count
-    const nodeCount = document.createElement('div');
-    Object.assign(nodeCount.style, {
-      color: CSS_COLORS.textMuted,
-      fontSize: '0.625rem',
-      marginBottom: '4px',
-    });
-    nodeCount.textContent = `${violation.nodes.length} element${violation.nodes.length === 1 ? '' : 's'} affected`;
-    violationEl.appendChild(nodeCount);
-
-    // Affected nodes (collapsed by default, show first 3)
-    const nodesPreview = document.createElement('div');
-    Object.assign(nodesPreview.style, {
-      marginTop: '6px',
-    });
-
-    const visibleNodes = violation.nodes.slice(0, 3);
-    for (const node of visibleNodes) {
-      nodesPreview.appendChild(createViolationNodeEl(node));
-    }
-
-    if (violation.nodes.length > 3) {
-      const moreBtn = document.createElement('button');
-      Object.assign(moreBtn.style, {
-        background: 'none',
-        border: 'none',
-        color: impactColor,
-        fontSize: '0.625rem',
-        cursor: 'pointer',
-        padding: '2px 0',
-        fontFamily: FONT_MONO,
-      });
-      moreBtn.textContent = `+ ${violation.nodes.length - 3} more`;
-      moreBtn.onclick = () => {
-        moreBtn.remove();
-        for (const node of violation.nodes.slice(3)) {
-          nodesPreview.appendChild(createViolationNodeEl(node));
-        }
-      };
-      nodesPreview.appendChild(moreBtn);
-    }
-
-    violationEl.appendChild(nodesPreview);
-    section.appendChild(violationEl);
+    section.appendChild(createViolationCard(violation, impactColor));
   }
 
   container.appendChild(section);

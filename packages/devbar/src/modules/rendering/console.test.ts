@@ -347,10 +347,10 @@ describe('renderConsolePopup', () => {
 
     // First and second items should have border-bottom
     const first = content.children[0] as HTMLElement;
-    expect(first.style.borderBottom).toContain('1px solid');
+    expect(first.style.borderBottom).toContain('var(--devbar-color-border-subtle)');
 
     const second = content.children[1] as HTMLElement;
-    expect(second.style.borderBottom).toContain('1px solid');
+    expect(second.style.borderBottom).toContain('var(--devbar-color-border-subtle)');
 
     // Last item should have no border-bottom
     const last = content.children[2] as HTMLElement;

@@ -183,7 +183,7 @@ function extractFromElement(root: Element): OutlineNode[] {
       const hasText = text.length > 0;
 
       if (isHeading || isLandmark || hasText) {
-        const level = isHeading ? parseInt(tagName[1], 10) : 0;
+        const level = isHeading ? parseInt(tagName[1]!, 10) : 0;
 
         const node: OutlineNode = {
           tagName,

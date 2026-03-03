@@ -5,7 +5,7 @@
  * click-to-toggle tooltips for mobile, and composable hover behavior via TooltipHoverOptions.
  */
 
-import { CSS_COLORS, FONT_MONO, withAlpha } from '../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../constants.js';
 import type { DevBarState } from './types.js';
 
 /** Base styles for tooltip containers */
@@ -19,7 +19,7 @@ const TOOLTIP_BASE_STYLES = {
   fontSize: '0.6875rem',
   fontFamily: FONT_MONO,
   maxWidth: '280px',
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+  boxShadow: DEVBAR_THEME.shadows.dropSm,
   pointerEvents: 'auto',
 } as const;
 

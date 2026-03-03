@@ -116,8 +116,8 @@ export function getViolationCounts(violations: AxeViolation[]): Record<string, n
   };
 
   for (const violation of violations) {
-    counts[violation.impact] = (counts[violation.impact] || 0) + 1;
-    counts.total++;
+    counts[violation.impact] = (counts[violation.impact] ?? 0) + 1;
+    counts['total'] = (counts['total'] ?? 0) + 1;
   }
 
   return counts;

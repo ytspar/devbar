@@ -4,7 +4,7 @@
  * Modal creation utilities for the devbar UI.
  */
 
-import { CSS_COLORS, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES, withAlpha } from '../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES, withAlpha } from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
 import { createCloseButton, createStyledButton } from './buttons.js';
 
@@ -50,7 +50,7 @@ export function createModalBox(color: string): HTMLDivElement {
   Object.assign(modal.style, {
     ...MODAL_BOX_BASE_STYLES,
     border: `1px solid ${color}`,
-    boxShadow: `0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px ${withAlpha(color, 20)}`,
+    boxShadow: `${DEVBAR_THEME.shadows.dropXl}, 0 0 0 1px ${withAlpha(color, 20)}`,
   });
   return modal;
 }

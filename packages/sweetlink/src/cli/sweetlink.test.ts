@@ -32,8 +32,13 @@ const { MockWebSocket, autoResponse } = vi.hoisted(() => {
    * Configurable auto-response: when set, the mock WebSocket will
    * automatically emit 'open' followed by a 'message' with this response
    * after construction. This eliminates timing issues.
+   *
+   * - `value`: single response used for all connections (backwards-compatible)
+   * - `queue`: array of responses consumed in order; each new WS connection
+   *   shifts the next response. When the queue is empty, falls back to `value`.
+   *   Use `null` in the queue to simulate a connection that emits an error.
    */
-  const autoResponse: { value: object | null } = { value: null };
+  const autoResponse: { value: object | null; queue: (object | null)[] } = { value: null, queue: [] };
 
   class MockWS extends EE {
     static instances: MockWS[] = [];
@@ -47,18 +52,34 @@ const { MockWebSocket, autoResponse } = vi.hoisted(() => {
       this.url = url;
       MockWS.instances.push(this);
 
-      // Auto-reply if configured
-      if (autoResponse.value) {
-        const response = autoResponse.value;
+      // Pick response: queue takes priority, then fall back to value
+      let response: object | null | undefined;
+      if (autoResponse.queue.length > 0) {
+        response = autoResponse.queue.shift();
+        // null in queue = simulate connection error
+        if (response === null) {
+          queueMicrotask(() => {
+            this.emit('error', new Error('connect ECONNREFUSED'));
+          });
+          return;
+        }
+      } else {
+        response = autoResponse.value;
+      }
+
+      // Auto-reply if a response is configured
+      if (response) {
+        const resp = response;
         // Use queueMicrotask to run after the caller has attached event listeners
         queueMicrotask(() => {
           this.emit('open');
           // After open, send is called by the module — reply after that
           queueMicrotask(() => {
-            this.emit('message', Buffer.from(JSON.stringify(response)));
+            this.emit('message', Buffer.from(JSON.stringify(resp)));
           });
         });
       }
+      // If no response configured (value=null, queue empty), do nothing (old behavior)
     }
 
     static reset() {
@@ -126,6 +147,7 @@ function setup() {
   originalFetch = globalThis.fetch;
   MockWebSocket.reset();
   autoResponse.value = null;
+  autoResponse.queue = [];
   logs.length = 0;
   errors.length = 0;
   warns.length = 0;
@@ -150,6 +172,7 @@ function teardown() {
   process.argv = originalArgv;
   globalThis.fetch = originalFetch;
   autoResponse.value = null;
+  autoResponse.queue = [];
   exitSpy.mockRestore();
   spyLog.mockRestore();
   spyError.mockRestore();
@@ -162,15 +185,19 @@ function teardown() {
  * Import the CLI module with the given argv. The module runs its IIFE
  * immediately on import, so we must configure argv and mocks first.
  * Returns a promise that resolves when the IIFE finishes.
+ *
+ * @param drainMs - How long to wait for async operations to complete.
+ *   Default 50ms is enough for most commands. Use a higher value (e.g. 2000)
+ *   for commands that involve polling with setTimeout (like navigateBrowser).
  */
-async function runCLI(argv: string[]): Promise<void> {
+async function runCLI(argv: string[], drainMs = 50): Promise<void> {
   process.argv = ['node', 'sweetlink', ...argv];
   vi.resetModules();
   // Allow the IIFE to complete — it's an async function, so we await any
   // pending microtasks / timers.
   await import('./sweetlink.js').catch(() => {});
   // Drain microtask queue
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((r) => setTimeout(r, drainMs));
 }
 
 // ===========================================================================
@@ -450,6 +477,59 @@ describe('showHelp', () => {
     const allOutput = logs.join('\n');
     expect(allOutput).toContain('SWEETLINK_WS_URL');
     expect(allOutput).toContain('CHROME_CDP_PORT');
+  });
+});
+
+// ===========================================================================
+// 4b. Per-command help tests
+// ===========================================================================
+
+describe('per-command help', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('displays per-command help for "screenshot --help"', async () => {
+    await runCLI(['screenshot', '--help']);
+    const allOutput = logs.join('\n');
+    expect(allOutput).toContain('screenshot');
+    expect(allOutput).toContain('--selector');
+    expect(allOutput).toContain('--force-cdp');
+    // Should NOT contain other commands' help
+    expect(allOutput).not.toContain('exec --code');
+    expect(allOutput).not.toContain('query --selector');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('displays per-command help for "query -h"', async () => {
+    await runCLI(['query', '-h']);
+    const allOutput = logs.join('\n');
+    expect(allOutput).toContain('query');
+    expect(allOutput).toContain('--selector');
+    expect(allOutput).toContain('--property');
+    expect(allOutput).not.toContain('screenshot');
+    expect(allOutput).not.toContain('exec --code');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('per-command help includes global flags', async () => {
+    await runCLI(['logs', '--help']);
+    const allOutput = logs.join('\n');
+    expect(allOutput).toContain('--json');
+    expect(allOutput).toContain('SWEETLINK_WS_URL');
+  });
+
+  it('per-command help for unknown command shows error', async () => {
+    await runCLI(['badcmd', '--help']);
+    expect(errors.some((e) => e.includes('Unknown command: badcmd'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('per-command help resolves aliases (measure → ruler)', async () => {
+    await runCLI(['measure', '--help']);
+    const allOutput = logs.join('\n');
+    expect(allOutput).toContain('ruler');
+    expect(allOutput).toContain('--preset');
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });
 
@@ -852,8 +932,8 @@ describe('screenshot command via WebSocket', () => {
       success: true,
       data: {
         screenshot: 'data:image/png;base64,iVBORw0KGgo=',
-        width: 1920,
-        height: 1080,
+        width: 960,
+        height: 540,
         selector: '.hero-image',
       },
       timestamp: Date.now(),
@@ -872,10 +952,10 @@ describe('screenshot command via WebSocket', () => {
     expect(sentData).toEqual({
       type: 'screenshot',
       selector: '.hero-image',
-      options: { fullPage: true, a11y: false },
+      options: { fullPage: true, a11y: false, scale: 0.5 },
     });
     expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
-    expect(logs.some((l) => l.includes('1920x1080'))).toBe(true);
+    expect(logs.some((l) => l.includes('960x540'))).toBe(true);
   });
 });
 
@@ -1942,5 +2022,220 @@ describe('getArg edge cases', () => {
 
   it('handles args with only the command', () => {
     expect(getArg(['screenshot'], '--output')).toBeUndefined();
+  });
+});
+
+// ===========================================================================
+// 31. urlsMatch — pure function tests
+// ===========================================================================
+
+describe('urlsMatch', () => {
+  /**
+   * Re-implementation of the internal urlsMatch function from sweetlink.ts.
+   */
+  function urlsMatch(a: string, b: string): boolean {
+    return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
+  }
+
+  it('matches identical URLs', () => {
+    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000')).toBe(true);
+  });
+
+  it('matches when one has trailing slash', () => {
+    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
+    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000/')).toBe(true);
+  });
+
+  it('matches when both have trailing slashes', () => {
+    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000/')).toBe(true);
+  });
+
+  it('matches paths with trailing slashes', () => {
+    expect(urlsMatch('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(true);
+  });
+
+  it('does not match different paths', () => {
+    expect(urlsMatch('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(false);
+  });
+
+  it('preserves query params in comparison', () => {
+    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=1')).toBe(true);
+    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=2')).toBe(false);
+  });
+
+  it('preserves hash fragments in comparison', () => {
+    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#top')).toBe(true);
+    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#bottom')).toBe(false);
+  });
+
+  it('does not match different ports', () => {
+    expect(urlsMatch('http://localhost:3000', 'http://localhost:3001')).toBe(false);
+  });
+
+  it('strips multiple trailing slashes', () => {
+    expect(urlsMatch('http://localhost:3000///', 'http://localhost:3000')).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 32. screenshot --url navigates browser via WS
+// ===========================================================================
+
+describe('screenshot --url navigation', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('navigates browser before capturing when --url is provided', async () => {
+    // Queue: 1st call = exec-js to check current URL (different from target)
+    // 2nd call = exec-js to navigate (window.location.href = ...)
+    // 3rd call = exec-js to poll reconnection (returns new URL)
+    // 4th call = screenshot command
+    autoResponse.queue = [
+      // 1. Check current URL — returns different URL
+      { success: true, data: { result: 'http://localhost:3000/' }, timestamp: Date.now() },
+      // 2. Navigate — fire-and-forget, returns success
+      { success: true, data: { result: undefined }, timestamp: Date.now() },
+      // 3. Poll reconnection — browser is back
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 4. Screenshot response
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url', 'http://localhost:3000/about',
+      '--force-ws',
+      '--output', '/tmp/test-nav.png',
+    ], 2000);
+
+    expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
+    expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
+  });
+
+  it('skips navigation when already on target URL', async () => {
+    // Queue: 1st call = exec-js to check current URL (same as target)
+    // 2nd call = screenshot command
+    autoResponse.queue = [
+      // 1. Check current URL — already on target
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 2. Screenshot response
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url', 'http://localhost:3000/about',
+      '--force-ws',
+      '--output', '/tmp/test-skip.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('already on'))).toBe(true);
+    expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
+    // Should NOT have navigated
+    expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(false);
+  });
+
+  it('auto-escalates to Playwright when no browser connected', async () => {
+    // null in queue = ECONNREFUSED (no browser connected)
+    autoResponse.queue = [null];
+
+    await runCLI([
+      'screenshot',
+      '--url', 'http://localhost:3000/about',
+      '--output', '/tmp/test-escalate.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('escalating to Playwright'))).toBe(true);
+  });
+
+  it('errors with --force-ws when no browser connected for navigation', async () => {
+    // null in queue = ECONNREFUSED
+    autoResponse.queue = [null];
+
+    await runCLI([
+      'screenshot',
+      '--url', 'http://localhost:3000/about',
+      '--force-ws',
+      '--output', '/tmp/test-force-ws.png',
+    ]);
+
+    expect(errors.some((e) => e.includes('Could not navigate browser to'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+// ===========================================================================
+// 33. query --url navigates browser
+// ===========================================================================
+
+describe('query --url navigation', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('navigates browser before querying when --url is provided', async () => {
+    // Queue: 1st = check URL, 2nd = navigate, 3rd = poll reconnection, 4th = query response
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/' }, timestamp: Date.now() },
+      { success: true, data: { result: undefined }, timestamp: Date.now() },
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // Query response
+      {
+        success: true,
+        data: { count: 1, elements: [{ tagName: 'H1', textContent: 'About' }] },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'query',
+      '--selector', 'h1',
+      '--url', 'http://localhost:3000/about',
+    ], 2000);
+
+    expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 34. exec --url navigates browser
+// ===========================================================================
+
+describe('exec --url navigation', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('navigates browser before executing when --url is provided', async () => {
+    // Queue: 1st = check URL, 2nd = navigate, 3rd = poll reconnection, 4th = exec response
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/' }, timestamp: Date.now() },
+      { success: true, data: { result: undefined }, timestamp: Date.now() },
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // Exec response
+      { success: true, data: { result: 'About Page' }, timestamp: Date.now() },
+    ];
+
+    await runCLI([
+      'exec',
+      '--code', 'document.title',
+      '--url', 'http://localhost:3000/about',
+    ], 2000);
+
+    expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
   });
 });

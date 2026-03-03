@@ -117,7 +117,7 @@ export class NetworkMonitor {
       const urlObj = new URL(url);
       const pathname = urlObj.pathname;
       const parts = pathname.split('/').filter(Boolean);
-      return parts.length > 0 ? parts[parts.length - 1] : urlObj.hostname;
+      return parts.length > 0 ? parts[parts.length - 1]! : urlObj.hostname;
     } catch {
       return url.slice(0, 50);
     }
@@ -219,5 +219,5 @@ export function getInitiatorColor(type: string): string {
     iframe: PALETTE.cyan,
     other: PALETTE.gray,
   };
-  return colors[type] || colors.other;
+  return colors[type] ?? colors['other']!;
 }

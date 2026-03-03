@@ -527,7 +527,7 @@ function handleRequestScreenshot(
 
   pendingScreenshotRequests.set(requestId, { requestId, clientWs: ctx.ws, timeout });
 
-  browserClients[0].send(
+  browserClients[0]!.send(
     JSON.stringify({
       type: 'request-screenshot',
       requestId,
@@ -746,7 +746,7 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
       return;
     }
 
-    const browserWs = browserClients[0];
+    const browserWs = browserClients[0]!;
     cliClientMap.set(browserWs, ctx.ws);
     browserWs.send(ctx.rawMessage.toString());
   } else if (ctx.clientInfo?.type === 'browser') {

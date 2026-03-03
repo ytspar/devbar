@@ -98,7 +98,7 @@ export async function getBrowser(
 
     if (verbose) console.log('[Sweetlink] Connected to existing Chrome.');
     const contexts = browser.contexts();
-    const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+    const context = contexts.length > 0 ? contexts[0]! : await browser.newContext();
     const pages = context.pages();
 
     // Find page with matching URL

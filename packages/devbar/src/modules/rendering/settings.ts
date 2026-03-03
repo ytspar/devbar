@@ -2,7 +2,7 @@
  * Settings popover rendering for the DevBar.
  */
 
-import { CSS_COLORS, FONT_MONO, withAlpha } from '../../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../../constants.js';
 import { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS } from '../../settings.js';
 import type { ThemeMode } from '../../types.js';
 import { createCloseButton, createStyledButton } from '../../ui/index.js';
@@ -56,7 +56,7 @@ export function renderSettingsPopover(state: DevBarState): void {
     backgroundColor: 'var(--devbar-color-bg-elevated)',
     border: `1px solid ${accentColor}`,
     borderRadius: '8px',
-    boxShadow: `0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px ${withAlpha(accentColor, 20)}`,
+    boxShadow: `${DEVBAR_THEME.shadows.dropLg}, 0 0 0 1px ${withAlpha(accentColor, 20)}`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     width: `${popoverWidth}px`,
@@ -336,6 +336,50 @@ function createAccentColorPicker(state: DevBarState): HTMLDivElement {
   return accentRow;
 }
 
+/** Generate the scoped CSS for the range input thumb (webkit + moz). */
+function generateSliderThumbCSS(sliderId: string, accentColor: string): string {
+  return [
+    `#${sliderId}::-webkit-slider-thumb {`,
+    `  -webkit-appearance: none;`,
+    `  width: 12px; height: 12px;`,
+    `  border-radius: 50%;`,
+    `  background: ${accentColor};`,
+    `  border: 2px solid ${CSS_COLORS.bg};`,
+    `  box-shadow: 0 0 4px ${withAlpha(accentColor, 50)};`,
+    `  cursor: grab;`,
+    `}`,
+    `#${sliderId}::-webkit-slider-thumb:active { cursor: grabbing; }`,
+    `#${sliderId}::-moz-range-thumb {`,
+    `  width: 12px; height: 12px;`,
+    `  border-radius: 50%;`,
+    `  background: ${accentColor};`,
+    `  border: 2px solid ${CSS_COLORS.bg};`,
+    `  box-shadow: 0 0 4px ${withAlpha(accentColor, 50)};`,
+    `  cursor: grab;`,
+    `}`,
+    `#${sliderId}::-webkit-slider-runnable-track { background: transparent; }`,
+    `#${sliderId}::-moz-range-track { background: transparent; }`,
+  ].join('\n');
+}
+
+/** Attach input/change event handlers to the quality slider. */
+function attachSliderEvents(
+  slider: HTMLInputElement,
+  qualityValue: HTMLSpanElement,
+  trackFill: HTMLDivElement,
+  state: DevBarState
+): void {
+  slider.oninput = () => {
+    const val = parseFloat(slider.value);
+    qualityValue.textContent = val.toFixed(2);
+    trackFill.style.width = `${val * 100}%`;
+    state.options.screenshotQuality = val;
+  };
+  slider.onchange = () => {
+    state.settingsManager.saveSettings({ screenshotQuality: state.options.screenshotQuality });
+  };
+}
+
 function createScreenshotQualitySlider(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
   const color = CSS_COLORS.textSecondary;
@@ -425,39 +469,10 @@ function createScreenshotQualitySlider(state: DevBarState): HTMLDivElement {
   const sliderId = `devbar-quality-${Date.now()}`;
   qualitySlider.id = sliderId;
   const sliderStyle = document.createElement('style');
-  sliderStyle.textContent = [
-    `#${sliderId}::-webkit-slider-thumb {`,
-    `  -webkit-appearance: none;`,
-    `  width: 12px; height: 12px;`,
-    `  border-radius: 50%;`,
-    `  background: ${accentColor};`,
-    `  border: 2px solid ${CSS_COLORS.bg};`,
-    `  box-shadow: 0 0 4px ${withAlpha(accentColor, 50)};`,
-    `  cursor: grab;`,
-    `}`,
-    `#${sliderId}::-webkit-slider-thumb:active { cursor: grabbing; }`,
-    `#${sliderId}::-moz-range-thumb {`,
-    `  width: 12px; height: 12px;`,
-    `  border-radius: 50%;`,
-    `  background: ${accentColor};`,
-    `  border: 2px solid ${CSS_COLORS.bg};`,
-    `  box-shadow: 0 0 4px ${withAlpha(accentColor, 50)};`,
-    `  cursor: grab;`,
-    `}`,
-    `#${sliderId}::-webkit-slider-runnable-track { background: transparent; }`,
-    `#${sliderId}::-moz-range-track { background: transparent; }`,
-  ].join('\n');
+  sliderStyle.textContent = generateSliderThumbCSS(sliderId, accentColor);
   sliderWrap.appendChild(sliderStyle);
 
-  qualitySlider.oninput = () => {
-    const val = parseFloat(qualitySlider.value);
-    qualityValue.textContent = val.toFixed(2);
-    trackFill.style.width = `${val * 100}%`;
-    state.options.screenshotQuality = val;
-  };
-  qualitySlider.onchange = () => {
-    state.settingsManager.saveSettings({ screenshotQuality: state.options.screenshotQuality });
-  };
+  attachSliderEvents(qualitySlider, qualityValue, trackFill, state);
   sliderWrap.appendChild(qualitySlider);
   qualityRow.appendChild(sliderWrap);
 

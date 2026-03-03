@@ -29,8 +29,44 @@ function ogAbsoluteUrls() {
   };
 }
 
+/**
+ * Fetch npm timeline data (dist-tags + time) at build time so the release
+ * graph and changelog render instantly without large runtime fetches.
+ * The full registry document per package is ~500KB; we only need ~2KB.
+ */
+function npmTimeline() {
+  let cached: string | null = null;
+  return {
+    name: 'npm-timeline',
+    resolveId(id: string) {
+      if (id === 'virtual:npm-timeline') return '\0virtual:npm-timeline';
+    },
+    async load(id: string) {
+      if (id !== '\0virtual:npm-timeline') return;
+      if (cached) return cached;
+
+      const pkgs = ['@ytspar/devbar', '@ytspar/sweetlink'];
+      const results: Record<string, { 'dist-tags': { latest: string }; time: Record<string, string> }> = {};
+
+      await Promise.all(pkgs.map(async (pkg) => {
+        try {
+          const res = await globalThis.fetch(
+            `https://registry.npmjs.org/${encodeURIComponent(pkg)}`
+          );
+          if (!res.ok) return;
+          const json = await res.json();
+          results[pkg] = { 'dist-tags': json['dist-tags'], time: json.time };
+        } catch { /* build continues with empty data */ }
+      }));
+
+      cached = `export default ${JSON.stringify(results)};`;
+      return cached;
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [sweetlink(), ogAbsoluteUrls()],
+  plugins: [sweetlink(), ogAbsoluteUrls(), npmTimeline()],
 
   // Use workspace packages directly via node_modules (symlinked by pnpm)
   resolve: {

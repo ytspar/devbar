@@ -18,8 +18,25 @@ function nodeBuiltinsPlugin(): Plugin {
   };
 }
 
+/**
+ * Stub for the virtual:npm-timeline module used by the playground.
+ * At build time, a Vite plugin fetches npm registry data; in tests, we provide empty data.
+ */
+function npmTimelineStub(): Plugin {
+  return {
+    name: 'npm-timeline-stub',
+    enforce: 'pre',
+    resolveId(id) {
+      if (id === 'virtual:npm-timeline') return '\0virtual:npm-timeline';
+    },
+    load(id) {
+      if (id === '\0virtual:npm-timeline') return 'export default {};';
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [nodeBuiltinsPlugin()],
+  plugins: [nodeBuiltinsPlugin(), npmTimelineStub()],
   test: {
     globals: true,
     environment: 'happy-dom',

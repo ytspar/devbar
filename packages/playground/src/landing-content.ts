@@ -6,6 +6,7 @@
 
 import { PALETTE } from '@ytspar/devbar';
 import releaseNotes from './release-notes.json';
+import npmTimeline from 'virtual:npm-timeline';
 
 /**
  * Helper to create a text element
@@ -175,14 +176,22 @@ function formatDate(dateStr: string): string {
 }
 
 /**
- * Fetch npm package metadata (time field only, cached to avoid large payloads)
+ * npm package timeline data — bundled at build time by the npmTimeline Vite plugin.
+ * Falls back to a runtime fetch if the build-time data is empty (e.g., offline build).
  */
 interface NpmTimeline {
   'dist-tags': { latest: string };
   time: Record<string, string>;
 }
 
-function fetchNpmTimeline(pkg: string): Promise<NpmTimeline> {
+function getNpmTimeline(pkg: string): Promise<NpmTimeline | null> {
+  // Prefer build-time data (instant, no network request)
+  const buildData = npmTimeline[pkg];
+  if (buildData?.time && Object.keys(buildData.time).length > 0) {
+    return Promise.resolve(buildData);
+  }
+
+  // Fallback: runtime fetch (only if build-time data is missing)
   const cacheKey = `timeline:${pkg}`;
   const cached = sessionStorage.getItem(cacheKey);
   if (cached) return Promise.resolve(JSON.parse(cached) as NpmTimeline);
@@ -193,14 +202,14 @@ function fetchNpmTimeline(pkg: string): Promise<NpmTimeline> {
       return r.json() as Promise<NpmTimeline>;
     })
     .then((data) => {
-      // Store only the fields we need (time + dist-tags), not full version metadata
       const slim: NpmTimeline = {
         'dist-tags': data['dist-tags'],
         time: data.time,
       };
       sessionStorage.setItem(cacheKey, JSON.stringify(slim));
       return slim;
-    });
+    })
+    .catch(() => null);
 }
 
 /**
@@ -377,7 +386,8 @@ export function createLandingHero(): HTMLElement {
  * Fetch and display release info in the hero section
  */
 function fetchReleaseInfo(): void {
-  fetchNpmTimeline('@ytspar/devbar').then((data) => {
+  getNpmTimeline('@ytspar/devbar').then((data) => {
+    if (!data) return;
     const latest = data['dist-tags'].latest;
     const dateStr = data.time[latest];
     if (!dateStr) return;
@@ -386,7 +396,7 @@ function fetchReleaseInfo(): void {
     if (el) {
       el.textContent = `Published ${formatRelativeDate(dateStr)} \u00B7 v${latest}`;
     }
-  }).catch(() => {});
+  });
 }
 
 /**
@@ -674,8 +684,8 @@ function renderReleaseGraph(
  */
 function populateChangelog(): void {
   Promise.all([
-    fetchNpmTimeline('@ytspar/devbar').catch(() => null),
-    fetchNpmTimeline('@ytspar/sweetlink').catch(() => null),
+    getNpmTimeline('@ytspar/devbar'),
+    getNpmTimeline('@ytspar/sweetlink'),
   ]).then(([devbarData, sweetlinkData]) => {
     // Render the release graph (includes ALL versions — stable, canary, prerelease)
     renderReleaseGraph(

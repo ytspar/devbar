@@ -68,11 +68,7 @@
       }
     },
     {
-      "includes": [
-        "**/*.test.ts",
-        "**/*.test.tsx",
-        "**/*.spec.ts"
-      ],
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts"],
       "linter": {
         "rules": {
           "suspicious": {

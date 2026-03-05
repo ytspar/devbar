@@ -530,7 +530,13 @@ export function isHmrScreenshotData(value: unknown): value is HmrScreenshotData 
  * Shared shape for screenshot-like command data (screenshot + url + dimensions + timestamp).
  * Used by both save-screenshot and design-review-screenshot commands.
  */
-type ScreenshotPayload = { screenshot: string; url: string; timestamp: number; width: number; height: number };
+type ScreenshotPayload = {
+  screenshot: string;
+  url: string;
+  timestamp: number;
+  width: number;
+  height: number;
+};
 
 function isScreenshotPayload(value: unknown): value is ScreenshotPayload {
   if (value === null || typeof value !== 'object') return false;

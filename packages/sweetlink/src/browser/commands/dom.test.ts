@@ -6,7 +6,7 @@
  * and DOM structure edge cases.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { QueryDomCommand, SweetlinkResponse } from '../../types.js';
 import { handleQueryDOM } from './dom.js';
 
@@ -149,7 +149,7 @@ describe('handleQueryDOM', () => {
     expect(response.success).toBe(true);
     const attrs = d(response).elements[0].attributes;
     expect(attrs['data-testid']).toBe('my-el');
-    expect(attrs['role']).toBe('button');
+    expect(attrs.role).toBe('button');
     expect(attrs['aria-label']).toBe('Click me');
   });
 

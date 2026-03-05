@@ -46,18 +46,25 @@ function npmTimeline() {
       if (cached) return cached;
 
       const pkgs = ['@ytspar/devbar', '@ytspar/sweetlink'];
-      const results: Record<string, { 'dist-tags': { latest: string }; time: Record<string, string> }> = {};
+      const results: Record<
+        string,
+        { 'dist-tags': { latest: string }; time: Record<string, string> }
+      > = {};
 
-      await Promise.all(pkgs.map(async (pkg) => {
-        try {
-          const res = await globalThis.fetch(
-            `https://registry.npmjs.org/${encodeURIComponent(pkg)}`
-          );
-          if (!res.ok) return;
-          const json = await res.json();
-          results[pkg] = { 'dist-tags': json['dist-tags'], time: json.time };
-        } catch { /* build continues with empty data */ }
-      }));
+      await Promise.all(
+        pkgs.map(async (pkg) => {
+          try {
+            const res = await globalThis.fetch(
+              `https://registry.npmjs.org/${encodeURIComponent(pkg)}`
+            );
+            if (!res.ok) return;
+            const json = await res.json();
+            results[pkg] = { 'dist-tags': json['dist-tags'], time: json.time };
+          } catch {
+            /* build continues with empty data */
+          }
+        })
+      );
 
       cached = `export default ${JSON.stringify(results)};`;
       return cached;

@@ -27,7 +27,7 @@ describe('EARLY_CONSOLE_CAPTURE_SCRIPT', () => {
   });
 
   it('captures the log level in each entry', () => {
-    expect(EARLY_CONSOLE_CAPTURE_SCRIPT).toContain("level: level");
+    expect(EARLY_CONSOLE_CAPTURE_SCRIPT).toContain('level: level');
     expect(EARLY_CONSOLE_CAPTURE_SCRIPT).toContain("capture('log'");
     expect(EARLY_CONSOLE_CAPTURE_SCRIPT).toContain("capture('error'");
     expect(EARLY_CONSOLE_CAPTURE_SCRIPT).toContain("capture('warn'");
@@ -91,6 +91,7 @@ describe('EARLY_CONSOLE_CAPTURE_SCRIPT - execution behavior', () => {
   function runEarlyCaptureScript(): void {
     // indirect eval to execute in global scope, matching how browsers
     // run inline <script> tags
+    // biome-ignore lint/security/noGlobalEval: test needs eval for global scope execution
     const indirectEval = eval; // eslint-disable-line no-eval
     indirectEval(EARLY_CONSOLE_CAPTURE_SCRIPT);
   }

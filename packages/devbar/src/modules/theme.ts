@@ -4,12 +4,7 @@
  * Extracted from GlobalDevBar to reduce file size.
  */
 
-import {
-  getEffectiveTheme,
-  getTheme,
-  injectThemeCSS,
-  setStoredThemeMode,
-} from '../constants.js';
+import { getEffectiveTheme, getTheme, injectThemeCSS, setStoredThemeMode } from '../constants.js';
 import type { ThemeMode } from '../types.js';
 import type { DevBarState } from './types.js';
 

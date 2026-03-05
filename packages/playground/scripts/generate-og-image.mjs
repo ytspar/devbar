@@ -7,7 +7,7 @@
  * Usage:  node scripts/generate-og-image.mjs
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Resvg } from '@resvg/resvg-js';
 
@@ -16,24 +16,17 @@ const playgroundDir = join(__dirname, '..');
 
 // ── Read assets ──────────────────────────────────────────────────────────────
 
-const logoSvg = readFileSync(
-  join(playgroundDir, 'public/logo/devbar-logo.svg'),
-  'utf-8',
-);
+const logoSvg = readFileSync(join(playgroundDir, 'public/logo/devbar-logo.svg'), 'utf-8');
 
 // Extract the inner content of <g id="devbar-wordmark" ...> ... </g>
-const wordmarkMatch = logoSvg.match(
-  /<g\s+id="devbar-wordmark"[^>]*>([\s\S]*?)<\/g>\s*<\/svg>/,
-);
+const wordmarkMatch = logoSvg.match(/<g\s+id="devbar-wordmark"[^>]*>([\s\S]*?)<\/g>\s*<\/svg>/);
 if (!wordmarkMatch) throw new Error('Could not extract wordmark paths from logo SVG');
 const wordmarkPaths = wordmarkMatch[1];
 
 // Logo viewBox: 0 0 580.43 167.62
 const logoW = 580.43;
 
-const fontBuffer = readFileSync(
-  join(playgroundDir, 'public/fonts/DepartureMono-Regular.woff'),
-);
+const fontBuffer = readFileSync(join(playgroundDir, 'public/fonts/DepartureMono-Regular.woff'));
 
 // ── Image parameters ─────────────────────────────────────────────────────────
 

@@ -208,7 +208,7 @@ describe('schemaToMarkdown (re-exported)', () => {
   it('renders missing tags section when provided via extras', () => {
     const md = schemaToMarkdown(
       { jsonLd: [], metaTags: {}, openGraph: {}, twitter: {}, microdata: [] },
-      { missingTags: [{ tag: 'og:title', severity: 'error', hint: 'Required for sharing' }] },
+      { missingTags: [{ tag: 'og:title', severity: 'error', hint: 'Required for sharing' }] }
     );
 
     expect(md).toContain('## Missing Tags');
@@ -219,7 +219,7 @@ describe('schemaToMarkdown (re-exported)', () => {
   it('renders favicons section when provided via extras', () => {
     const md = schemaToMarkdown(
       { jsonLd: [], metaTags: {}, openGraph: {}, twitter: {}, microdata: [] },
-      { favicons: [{ label: 'favicon', url: '/favicon.ico', size: '32x32' }] },
+      { favicons: [{ label: 'favicon', url: '/favicon.ico', size: '32x32' }] }
     );
 
     expect(md).toContain('## Favicons');

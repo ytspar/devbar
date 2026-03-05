@@ -189,7 +189,12 @@ describe('createStyledButton', () => {
   });
 
   it('applies custom width and height', () => {
-    const btn = createStyledButton({ color: '#10b981', text: 'Test', width: '100px', height: '40px' });
+    const btn = createStyledButton({
+      color: '#10b981',
+      text: 'Test',
+      width: '100px',
+      height: '40px',
+    });
 
     expect(btn.style.width).toBe('100px');
     expect(btn.style.height).toBe('40px');

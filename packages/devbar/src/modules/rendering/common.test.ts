@@ -6,6 +6,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DevBarState } from '../types.js';
 import {
   captureDotPosition,
   clearChildren,
@@ -13,7 +14,6 @@ import {
   renderGuard,
   setRenderGuard,
 } from './common.js';
-import type { DevBarState } from '../types.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {

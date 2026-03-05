@@ -85,8 +85,8 @@ vi.mock('../theme.js', () => ({
   setThemeMode: vi.fn(),
 }));
 
-import { renderSettingsPopover } from './settings.js';
 import { setThemeMode } from '../theme.js';
+import { renderSettingsPopover } from './settings.js';
 
 // ---------------------------------------------------------------------------
 // Helper

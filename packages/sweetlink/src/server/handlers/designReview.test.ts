@@ -13,9 +13,7 @@ const { mockMkdir, mockWriteFile, mockCallClaude } = vi.hoisted(() => ({
   mockMkdir: vi.fn().mockResolvedValue(undefined),
   mockWriteFile: vi.fn().mockResolvedValue(undefined),
   mockCallClaude: vi.fn().mockResolvedValue({
-    content: [
-      { type: 'text', text: '# Design Review\n\n## Summary\nLooks great!' },
-    ],
+    content: [{ type: 'text', text: '# Design Review\n\n## Summary\nLooks great!' }],
     usage: {
       input_tokens: 1000,
       output_tokens: 500,
@@ -36,10 +34,10 @@ vi.mock('../index.js', () => ({
 
 vi.mock('../../browser/screenshotUtils.js', () => ({
   extractBase64FromDataUrl: vi.fn((url: string) =>
-    url.replace(/^data:image\/(png|jpeg);base64,/, ''),
+    url.replace(/^data:image\/(png|jpeg);base64,/, '')
   ),
   getMediaTypeFromDataUrl: vi.fn((url: string) =>
-    url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+    url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg'
   ),
 }));
 
@@ -50,10 +48,7 @@ vi.mock('../anthropic.js', () => ({
   callClaude: mockCallClaude,
 }));
 
-import {
-  handleDesignReviewScreenshot,
-  DESIGN_REVIEW_PROMPT,
-} from './designReview.js';
+import { DESIGN_REVIEW_PROMPT, handleDesignReviewScreenshot } from './designReview.js';
 
 const FAKE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAUA';
 const FAKE_DATA_URL = `data:image/png;base64,${FAKE_BASE64}`;
@@ -77,10 +72,9 @@ describe('handleDesignReviewScreenshot', () => {
   it('creates the screenshot directory', async () => {
     await handleDesignReviewScreenshot(makeDesignReviewData());
 
-    expect(mockMkdir).toHaveBeenCalledWith(
-      expect.stringContaining('.tmp/sweetlink-screenshots'),
-      { recursive: true },
-    );
+    expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('.tmp/sweetlink-screenshots'), {
+      recursive: true,
+    });
   });
 
   it('saves the screenshot as a PNG file', async () => {
@@ -191,9 +185,7 @@ describe('handleDesignReviewScreenshot', () => {
   });
 
   it('shows "no errors or warnings" when logs have no errors/warnings', async () => {
-    const logs = [
-      { timestamp: 1700000000000, level: 'log', message: 'All good' },
-    ];
+    const logs = [{ timestamp: 1700000000000, level: 'log', message: 'All good' }];
 
     await handleDesignReviewScreenshot(makeDesignReviewData({ logs }));
 
@@ -237,20 +229,20 @@ describe('handleDesignReviewScreenshot', () => {
 
   it('propagates Claude API errors', async () => {
     mockCallClaude.mockRejectedValueOnce(
-      new Error('ANTHROPIC_API_KEY environment variable is not set'),
+      new Error('ANTHROPIC_API_KEY environment variable is not set')
     );
 
-    await expect(
-      handleDesignReviewScreenshot(makeDesignReviewData()),
-    ).rejects.toThrow('ANTHROPIC_API_KEY environment variable is not set');
+    await expect(handleDesignReviewScreenshot(makeDesignReviewData())).rejects.toThrow(
+      'ANTHROPIC_API_KEY environment variable is not set'
+    );
   });
 
   it('propagates fs errors', async () => {
     mockMkdir.mockRejectedValueOnce(new Error('Cannot create directory'));
 
-    await expect(
-      handleDesignReviewScreenshot(makeDesignReviewData()),
-    ).rejects.toThrow('Cannot create directory');
+    await expect(handleDesignReviewScreenshot(makeDesignReviewData())).rejects.toThrow(
+      'Cannot create directory'
+    );
   });
 
   it('DESIGN_REVIEW_PROMPT is a non-empty string', () => {

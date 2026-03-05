@@ -5,17 +5,17 @@
  * DevBarState rather than referencing the class directly.
  */
 
+import { runA11yAudit } from '../accessibility.js';
 import {
   BASE_RECONNECT_DELAY_MS,
+  DESIGN_REVIEW_NOTIFICATION_MS,
   MAX_PORT_RETRIES,
   MAX_RECONNECT_ATTEMPTS,
   MAX_RECONNECT_DELAY_MS,
   PORT_RETRY_DELAY_MS,
   PORT_SCAN_RESTART_DELAY_MS,
   SCREENSHOT_NOTIFICATION_MS,
-  DESIGN_REVIEW_NOTIFICATION_MS,
 } from '../constants.js';
-import { runA11yAudit } from '../accessibility.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
 import { extractPageSchema, schemaToMarkdown } from '../schema.js';
@@ -141,10 +141,15 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
 function createSavedHandler<T extends SweetlinkCommand>(
   notificationType: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
   pathField: keyof T & string,
-  durationMs: number = SCREENSHOT_NOTIFICATION_MS,
+  durationMs: number = SCREENSHOT_NOTIFICATION_MS
 ): (state: DevBarState, command: T) => void {
   return (state: DevBarState, command: T) => {
-    handleNotification(state, notificationType, command[pathField] as string | undefined, durationMs);
+    handleNotification(
+      state,
+      notificationType,
+      command[pathField] as string | undefined,
+      durationMs
+    );
   };
 }
 
@@ -155,7 +160,7 @@ function createSavedHandler<T extends SweetlinkCommand>(
  */
 function createErrorHandler<T extends SweetlinkCommand & { error?: string }>(
   label: string,
-  savingFlag?: keyof DevBarState & string,
+  savingFlag?: keyof DevBarState & string
 ): (state: DevBarState, command: T) => void {
   return (state: DevBarState, command: T) => {
     if (savingFlag) {
@@ -170,33 +175,37 @@ function createErrorHandler<T extends SweetlinkCommand & { error?: string }>(
 
 // Saved handlers (created via factory)
 const handleOutlineSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'outline-saved' }>(
-  'outline', 'outlinePath',
+  'outline',
+  'outlinePath'
 );
 const handleSchemaSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'schema-saved' }>(
-  'schema', 'schemaPath',
+  'schema',
+  'schemaPath'
 );
-const handleConsoleLogsSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'console-logs-saved' }>(
-  'consoleLogs', 'consoleLogsPath',
-);
+const handleConsoleLogsSavedCommand = createSavedHandler<
+  SweetlinkCommand & { type: 'console-logs-saved' }
+>('consoleLogs', 'consoleLogsPath');
 const handleA11ySavedCommand = createSavedHandler<SweetlinkCommand & { type: 'a11y-saved' }>(
-  'a11y', 'a11yPath',
+  'a11y',
+  'a11yPath'
 );
-const handleScreenshotSavedCommand = createSavedHandler<SweetlinkCommand & { type: 'screenshot-saved' }>(
-  'screenshot', 'path',
-);
+const handleScreenshotSavedCommand = createSavedHandler<
+  SweetlinkCommand & { type: 'screenshot-saved' }
+>('screenshot', 'path');
 
 // Error handlers (created via factory)
 const handleOutlineErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'outline-error' }>(
-  'Outline save',
+  'Outline save'
 );
 const handleSchemaErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'schema-error' }>(
-  'Schema save',
+  'Schema save'
 );
-const handleConsoleLogsErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'console-logs-error' }>(
-  'Console logs save', 'savingConsoleLogs',
-);
+const handleConsoleLogsErrorCommand = createErrorHandler<
+  SweetlinkCommand & { type: 'console-logs-error' }
+>('Console logs save', 'savingConsoleLogs');
 const handleA11yErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'a11y-error' }>(
-  'A11y save', 'savingA11yAudit',
+  'A11y save',
+  'savingA11yAudit'
 );
 
 // ============================================================================
@@ -271,13 +280,11 @@ function handleQueryDomCommand(
   }
 }
 
-function handleExecJsCommand(
-  ws: WebSocket,
-  command: SweetlinkCommand & { type: 'exec-js' }
-): void {
+function handleExecJsCommand(ws: WebSocket, command: SweetlinkCommand & { type: 'exec-js' }): void {
   if (command.code && typeof command.code === 'string' && command.code.length <= 10000) {
     try {
       // Use indirect eval to avoid strict mode issues
+      // biome-ignore lint/security/noGlobalEval: intentional eval for remote JS execution
       const indirectEval = eval;
       const result = indirectEval(command.code);
       ws.send(JSON.stringify({ success: true, data: result, timestamp: Date.now() }));
@@ -299,32 +306,41 @@ async function handleGetA11yCommand(
 ): Promise<void> {
   try {
     const result = await runA11yAudit(command.forceRefresh);
-    const violationsByImpact: Record<string, number> = { critical: 0, serious: 0, moderate: 0, minor: 0 };
+    const violationsByImpact: Record<string, number> = {
+      critical: 0,
+      serious: 0,
+      moderate: 0,
+      minor: 0,
+    };
     for (const v of result.violations) {
       violationsByImpact[v.impact] = (violationsByImpact[v.impact] || 0) + 1;
     }
-    ws.send(JSON.stringify({
-      success: true,
-      data: {
-        result,
-        summary: {
-          totalViolations: result.violations.length,
-          totalPasses: result.passes.length,
-          totalIncomplete: result.incomplete.length,
-          byImpact: violationsByImpact,
+    ws.send(
+      JSON.stringify({
+        success: true,
+        data: {
+          result,
+          summary: {
+            totalViolations: result.violations.length,
+            totalPasses: result.passes.length,
+            totalIncomplete: result.incomplete.length,
+            byImpact: violationsByImpact,
+          },
+          url: window.location.href,
+          title: document.title,
+          timestamp: Date.now(),
         },
-        url: window.location.href,
-        title: document.title,
         timestamp: Date.now(),
-      },
-      timestamp: Date.now(),
-    }));
+      })
+    );
   } catch (e) {
-    ws.send(JSON.stringify({
-      success: false,
-      error: e instanceof Error ? e.message : 'Accessibility audit failed',
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: e instanceof Error ? e.message : 'Accessibility audit failed',
+        timestamp: Date.now(),
+      })
+    );
   }
 }
 
@@ -332,17 +348,27 @@ function handleGetOutlineCommand(ws: WebSocket): void {
   try {
     const outline = extractDocumentOutline();
     const markdown = outlineToMarkdown(outline);
-    ws.send(JSON.stringify({
-      success: true,
-      data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: true,
+        data: {
+          outline,
+          markdown,
+          url: window.location.href,
+          title: document.title,
+          timestamp: Date.now(),
+        },
+        timestamp: Date.now(),
+      })
+    );
   } catch (e) {
-    ws.send(JSON.stringify({
-      success: false,
-      error: e instanceof Error ? e.message : 'Outline extraction failed',
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: e instanceof Error ? e.message : 'Outline extraction failed',
+        timestamp: Date.now(),
+      })
+    );
   }
 }
 
@@ -350,17 +376,27 @@ function handleGetSchemaCommand(ws: WebSocket): void {
   try {
     const schema = extractPageSchema();
     const markdown = schemaToMarkdown(schema);
-    ws.send(JSON.stringify({
-      success: true,
-      data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: true,
+        data: {
+          schema,
+          markdown,
+          url: window.location.href,
+          title: document.title,
+          timestamp: Date.now(),
+        },
+        timestamp: Date.now(),
+      })
+    );
   } catch (e) {
-    ws.send(JSON.stringify({
-      success: false,
-      error: e instanceof Error ? e.message : 'Schema extraction failed',
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: e instanceof Error ? e.message : 'Schema extraction failed',
+        timestamp: Date.now(),
+      })
+    );
   }
 }
 
@@ -375,10 +411,17 @@ async function handleGetVitalsCommand(ws: WebSocket): Promise<void> {
       new Promise((resolve) => {
         try {
           const entries: PerformanceEntry[] = [];
-          const observer = new PerformanceObserver((list) => { entries.push(...list.getEntries()); });
+          const observer = new PerformanceObserver((list) => {
+            entries.push(...list.getEntries());
+          });
           observer.observe({ type: entryType, buffered: true });
-          setTimeout(() => { observer.disconnect(); resolve(entries); }, 0);
-        } catch { resolve([]); }
+          setTimeout(() => {
+            observer.disconnect();
+            resolve(entries);
+          }, 0);
+        } catch {
+          resolve([]);
+        }
       });
 
     const [lcpEntries, layoutShiftEntries, eventEntries] = await Promise.all([
@@ -387,7 +430,13 @@ async function handleGetVitalsCommand(ws: WebSocket): Promise<void> {
       collectEntries('event'),
     ]);
 
-    const lcp = lcpEntries.length > 0 ? Math.round((lcpEntries[lcpEntries.length - 1] as PerformanceEntry & { startTime: number }).startTime) : null;
+    const lcp =
+      lcpEntries.length > 0
+        ? Math.round(
+            (lcpEntries[lcpEntries.length - 1] as PerformanceEntry & { startTime: number })
+              .startTime
+          )
+        : null;
 
     let cls: number | null = null;
     if (layoutShiftEntries.length > 0) {
@@ -417,7 +466,16 @@ async function handleGetVitalsCommand(ws: WebSocket): Promise<void> {
     }
     if (totalSize > 0) pageSize = totalSize;
 
-    const vitals = { fcp, lcp, cls, inp, pageSize, url: window.location.href, title: document.title, timestamp: Date.now() };
+    const vitals = {
+      fcp,
+      lcp,
+      cls,
+      inp,
+      pageSize,
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    };
     const parts: string[] = [];
     if (fcp !== null) parts.push(`FCP: ${fcp}ms`);
     if (lcp !== null) parts.push(`LCP: ${lcp}ms`);
@@ -425,17 +483,21 @@ async function handleGetVitalsCommand(ws: WebSocket): Promise<void> {
     if (inp !== null) parts.push(`INP: ${inp}ms`);
     if (pageSize !== null) parts.push(`Page size: ${Math.round(pageSize / 1024)}KB`);
 
-    ws.send(JSON.stringify({
-      success: true,
-      data: { vitals, summary: parts.join(', ') || 'No metrics available yet' },
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: true,
+        data: { vitals, summary: parts.join(', ') || 'No metrics available yet' },
+        timestamp: Date.now(),
+      })
+    );
   } catch (e) {
-    ws.send(JSON.stringify({
-      success: false,
-      error: e instanceof Error ? e.message : 'Vitals collection failed',
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: e instanceof Error ? e.message : 'Vitals collection failed',
+        timestamp: Date.now(),
+      })
+    );
   }
 }
 
@@ -444,11 +506,13 @@ function handleRefreshCommand(ws: WebSocket): void {
     window.location.reload();
     ws.send(JSON.stringify({ success: true, timestamp: Date.now() }));
   } catch (e) {
-    ws.send(JSON.stringify({
-      success: false,
-      error: e instanceof Error ? e.message : 'Refresh failed',
-      timestamp: Date.now(),
-    }));
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: e instanceof Error ? e.message : 'Refresh failed',
+        timestamp: Date.now(),
+      })
+    );
   }
 }
 
@@ -509,9 +573,7 @@ function handleSettingsSavedCommand(
   state.debug.state('Settings saved to server', { path: command.settingsPath });
 }
 
-function handleSettingsErrorCommand(
-  command: SweetlinkCommand & { type: 'settings-error' }
-): void {
+function handleSettingsErrorCommand(command: SweetlinkCommand & { type: 'settings-error' }): void {
   console.error('[GlobalDevBar] Settings operation failed:', command.error);
 }
 
@@ -522,7 +584,10 @@ function handleSettingsErrorCommand(
 /**
  * Handle an incoming Sweetlink command from the WebSocket.
  */
-async function handleSweetlinkCommand(state: DevBarState, command: SweetlinkCommand): Promise<void> {
+async function handleSweetlinkCommand(
+  state: DevBarState,
+  command: SweetlinkCommand
+): Promise<void> {
   const ws = state.ws;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 

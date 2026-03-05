@@ -594,7 +594,8 @@ function createCustomControlsRow(
       fontSize: '0.5625rem',
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
-      marginLeft: ungrouped.length > 0 || [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
+      marginLeft:
+        ungrouped.length > 0 || [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
     });
     groupLabel.textContent = groupName;
     customRow.appendChild(groupLabel);
@@ -640,7 +641,12 @@ export function renderExpanded(
 
   // 3. Status row (connection dot + info metrics + console badges)
   const statusRow = createStatusRow(
-    state, showMetrics, showConsoleBadges, errorCount, warningCount, infoCount
+    state,
+    showMetrics,
+    showConsoleBadges,
+    errorCount,
+    warningCount,
+    infoCount
   );
   mainRow.appendChild(statusRow);
 

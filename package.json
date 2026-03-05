@@ -36,6 +36,7 @@
     "happy-dom": "^20.6.1",
     "playwright": "^1.58.2",
     "typescript": "^5.9.3",
+    "ultracite": "^7.2.4",
     "vitest": "^4.0.18"
   },
   "version": "0.0.0",

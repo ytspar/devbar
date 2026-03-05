@@ -28,7 +28,7 @@ vi.mock('../index.js', () => ({
 
 vi.mock('../../browser/screenshotUtils.js', () => ({
   extractBase64FromDataUrl: vi.fn((url: string) =>
-    url.replace(/^data:image\/(png|jpeg);base64,/, ''),
+    url.replace(/^data:image\/(png|jpeg);base64,/, '')
   ),
 }));
 
@@ -37,9 +37,7 @@ import { handleHmrScreenshot } from './hmr.js';
 const FAKE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAUA';
 const FAKE_DATA_URL = `data:image/jpeg;base64,${FAKE_BASE64}`;
 
-function makeHmrData(
-  overrides: Partial<HmrScreenshotData> = {},
-): HmrScreenshotData {
+function makeHmrData(overrides: Partial<HmrScreenshotData> = {}): HmrScreenshotData {
   return {
     trigger: 'file-change',
     screenshot: FAKE_DATA_URL,
@@ -64,10 +62,9 @@ describe('handleHmrScreenshot', () => {
   it('creates the HMR screenshot directory recursively', async () => {
     await handleHmrScreenshot(makeHmrData());
 
-    expect(mockMkdir).toHaveBeenCalledWith(
-      expect.stringContaining('.tmp/hmr-screenshots'),
-      { recursive: true },
-    );
+    expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('.tmp/hmr-screenshots'), {
+      recursive: true,
+    });
   });
 
   it('saves the screenshot as a binary JPEG file', async () => {
@@ -83,9 +80,7 @@ describe('handleHmrScreenshot', () => {
   it('saves logs as JSON file', async () => {
     const data = makeHmrData({
       logs: {
-        all: [
-          { level: 'log', message: 'HMR update', timestamp: 1700000000000 },
-        ],
+        all: [{ level: 'log', message: 'HMR update', timestamp: 1700000000000 }],
         errors: [],
         warnings: [],
         sinceLastCapture: 1,
@@ -108,9 +103,7 @@ describe('handleHmrScreenshot', () => {
   });
 
   it('includes trigger in the filename', async () => {
-    const result = await handleHmrScreenshot(
-      makeHmrData({ trigger: 'style-update' }),
-    );
+    const result = await handleHmrScreenshot(makeHmrData({ trigger: 'style-update' }));
 
     expect(result.screenshotPath).toContain('style-update');
     expect(result.logsPath).toContain('style-update');
@@ -201,24 +194,18 @@ describe('handleHmrScreenshot', () => {
 
     const writeFileCalls = mockWriteFile.mock.calls;
     const logsJson = JSON.parse(writeFileCalls[1][1]);
-    expect(logsJson.logs.all[0].timestamp).toBe(
-      new Date(1700000000000).toISOString(),
-    );
+    expect(logsJson.logs.all[0].timestamp).toBe(new Date(1700000000000).toISOString());
   });
 
   it('propagates fs.mkdir errors', async () => {
     mockMkdir.mockRejectedValueOnce(new Error('Permission denied'));
 
-    await expect(handleHmrScreenshot(makeHmrData())).rejects.toThrow(
-      'Permission denied',
-    );
+    await expect(handleHmrScreenshot(makeHmrData())).rejects.toThrow('Permission denied');
   });
 
   it('propagates fs.writeFile errors', async () => {
     mockWriteFile.mockRejectedValueOnce(new Error('No space left'));
 
-    await expect(handleHmrScreenshot(makeHmrData())).rejects.toThrow(
-      'No space left',
-    );
+    await expect(handleHmrScreenshot(makeHmrData())).rejects.toThrow('No space left');
   });
 });

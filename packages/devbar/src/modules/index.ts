@@ -5,8 +5,6 @@
  * Functions receive DevBarState (or specific parameters) rather than using `this`.
  */
 
-export { closeAllModals, type DevBarState, type PositionStyle } from './types.js';
-
 export { setupKeyboardShortcuts } from './keyboard.js';
 export {
   getResponsiveMetricVisibility,
@@ -32,9 +30,8 @@ export {
   setThemeMode,
   setupTheme,
 } from './theme.js';
-export {
-  clearAllTooltips,
-} from './tooltips.js';
+export { clearAllTooltips } from './tooltips.js';
+export { closeAllModals, type DevBarState, type PositionStyle } from './types.js';
 export {
   connectWebSocket,
   handleNotification,

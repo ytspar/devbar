@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConsoleLog } from '../types.js';
-import {
-  ConsoleCapture,
-  formatArg,
-  formatArgs,
-  MAX_CONSOLE_LOGS,
-} from './consoleCapture.js';
+import { ConsoleCapture, formatArg, formatArgs, MAX_CONSOLE_LOGS } from './consoleCapture.js';
 
 describe('formatArg', () => {
   it('formats strings as-is', () => {
@@ -500,9 +495,7 @@ describe('ConsoleCapture - importEarlyLogs', () => {
 
   it('converts ISO timestamp strings to epoch milliseconds', () => {
     const isoString = '2024-01-15T10:30:00.000Z';
-    window.__sweetlinkEarlyLogs = [
-      { level: 'log', message: 'test', timestamp: isoString },
-    ];
+    window.__sweetlinkEarlyLogs = [{ level: 'log', message: 'test', timestamp: isoString }];
 
     capture.importEarlyLogs();
 

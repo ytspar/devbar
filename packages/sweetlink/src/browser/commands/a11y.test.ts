@@ -8,12 +8,14 @@ const d = (r: SweetlinkResponse): any => r.data;
  * Build a minimal mock axe-core module.
  * `run` returns a configurable AxeResults-like object.
  */
-function createMockAxeModule(overrides: {
-  violations?: unknown[];
-  passes?: unknown[];
-  incomplete?: unknown[];
-  inapplicable?: unknown[];
-} = {}) {
+function createMockAxeModule(
+  overrides: {
+    violations?: unknown[];
+    passes?: unknown[];
+    incomplete?: unknown[];
+    inapplicable?: unknown[];
+  } = {}
+) {
   const result = {
     violations: overrides.violations ?? [],
     passes: overrides.passes ?? [],
@@ -49,7 +51,9 @@ describe('handleGetA11y', () => {
 
   it('returns correct structure on successful audit with no violations', async () => {
     const mockAxe = createMockAxeModule({
-      passes: [{ id: 'color-contrast', description: 'Elements must have sufficient color contrast' }],
+      passes: [
+        { id: 'color-contrast', description: 'Elements must have sufficient color contrast' },
+      ],
       inapplicable: [{ id: 'aria-allowed-attr' }],
     });
 
@@ -71,7 +75,9 @@ describe('handleGetA11y', () => {
     // Result fields
     const result = d(response).result;
     expect(result.violations).toEqual([]);
-    expect(result.passes).toEqual([{ id: 'color-contrast', description: 'Elements must have sufficient color contrast' }]);
+    expect(result.passes).toEqual([
+      { id: 'color-contrast', description: 'Elements must have sufficient color contrast' },
+    ]);
     expect(result.incomplete).toEqual([]);
     expect(result.inapplicable).toEqual([{ id: 'aria-allowed-attr' }]);
     expect(result.timestamp).toBeDefined();
@@ -90,9 +96,7 @@ describe('handleGetA11y', () => {
         { id: 'p1', description: 'Pass 1' },
         { id: 'p2', description: 'Pass 2' },
       ],
-      incomplete: [
-        { id: 'i1', impact: 'minor', description: 'Incomplete', nodes: [] },
-      ],
+      incomplete: [{ id: 'i1', impact: 'minor', description: 'Incomplete', nodes: [] }],
     });
 
     vi.doMock('axe-core', () => ({ default: mockAxe }));
@@ -145,7 +149,13 @@ describe('handleGetA11y', () => {
     const [context, options] = mockAxe.run.mock.calls[0];
     expect(context).toEqual({ exclude: ['[data-devbar]'] });
     expect(options.runOnly.type).toBe('tag');
-    expect(options.runOnly.values).toEqual(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice']);
+    expect(options.runOnly.values).toEqual([
+      'wcag2a',
+      'wcag2aa',
+      'wcag21a',
+      'wcag21aa',
+      'best-practice',
+    ]);
   });
 
   it('handles CJS-style module where default is the module itself', async () => {

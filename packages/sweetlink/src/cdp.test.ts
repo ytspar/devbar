@@ -37,9 +37,7 @@ describe('detectCDP', () => {
   });
 
   it('returns true when CDP endpoint responds OK', async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve({ ok: true } as Response)
-    );
+    globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true } as Response));
     expect(await detectCDP()).toBe(true);
   });
 
@@ -49,9 +47,7 @@ describe('detectCDP', () => {
   });
 
   it('returns false when CDP endpoint returns non-OK', async () => {
-    globalThis.fetch = vi.fn(() =>
-      Promise.resolve({ ok: false } as Response)
-    );
+    globalThis.fetch = vi.fn(() => Promise.resolve({ ok: false } as Response));
     expect(await detectCDP()).toBe(false);
   });
 });

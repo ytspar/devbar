@@ -14,8 +14,8 @@ vi.mock('../tooltips.js', () => ({
   attachTextTooltip: vi.fn(),
 }));
 
-import { renderCollapsed } from './collapsed.js';
 import { attachTextTooltip } from '../tooltips.js';
+import { renderCollapsed } from './collapsed.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
@@ -106,7 +106,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -300,11 +307,7 @@ describe('renderCollapsed', () => {
       getLogCounts: vi.fn(() => ({ errorCount: 5, warningCount: 0, infoCount: 0 })),
     } as any);
     renderCollapsed(state);
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
-      5,
-      'rgba(239, 68, 68, 0.95)',
-      '-6px'
-    );
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(5, 'rgba(239, 68, 68, 0.95)', '-6px');
   });
 
   it('shifts error badge left when warnings also exist', () => {
@@ -327,11 +330,7 @@ describe('renderCollapsed', () => {
       getLogCounts: vi.fn(() => ({ errorCount: 0, warningCount: 7, infoCount: 0 })),
     } as any);
     renderCollapsed(state);
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
-      7,
-      'rgba(245, 158, 11, 0.95)',
-      '-6px'
-    );
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(7, 'rgba(245, 158, 11, 0.95)', '-6px');
   });
 
   it('shows both error and warning badges when both have counts', () => {
@@ -372,7 +371,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -390,7 +396,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -408,7 +421,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -426,7 +446,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -444,7 +471,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCollapsed(state);
@@ -475,7 +509,14 @@ describe('renderCollapsed', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
       lastDotPosition: { left: 150, top: 80, bottom: 720 },
     });

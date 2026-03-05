@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VIEWPORT, VIEWPORT_PRESETS, parseViewport } from './viewportUtils.js';
+import { DEFAULT_VIEWPORT, parseViewport, VIEWPORT_PRESETS } from './viewportUtils.js';
 
 describe('VIEWPORT_PRESETS', () => {
   it('defines a default preset', () => {

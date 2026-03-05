@@ -4,6 +4,8 @@
  * Extracted from GlobalDevBar to reduce file size.
  */
 
+import type { AxeResult } from '../accessibility.js';
+import { a11yToMarkdown } from '../accessibility.js';
 import {
   CLIPBOARD_NOTIFICATION_MS,
   SCREENSHOT_BLUR_DELAY_MS,
@@ -11,10 +13,13 @@ import {
   SCREENSHOT_SCALE,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
-import { a11yToMarkdown } from '../accessibility.js';
-import type { AxeResult } from '../accessibility.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
-import { checkMissingTags, extractFavicons, extractPageSchema, schemaToMarkdown } from '../schema.js';
+import {
+  checkMissingTags,
+  extractFavicons,
+  extractPageSchema,
+  schemaToMarkdown,
+} from '../schema.js';
 import { resolveSaveLocation } from '../settings.js';
 import {
   canvasToDataUrl,
@@ -59,8 +64,16 @@ function saveOrDownload(
     );
   } else {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    downloadFile(`${opts.downloadFilename}-${timestamp}.md`, opts.downloadContent, opts.downloadMimeType);
-    state.handleNotification(opts.notificationKey, opts.notificationMessage, SCREENSHOT_NOTIFICATION_MS);
+    downloadFile(
+      `${opts.downloadFilename}-${timestamp}.md`,
+      opts.downloadContent,
+      opts.downloadMimeType
+    );
+    state.handleNotification(
+      opts.notificationKey,
+      opts.notificationMessage,
+      SCREENSHOT_NOTIFICATION_MS
+    );
   }
 }
 
@@ -135,10 +148,7 @@ export async function copyPathToClipboard(state: DevBarState, path: string): Pro
 /**
  * Take a screenshot and either save to file or copy to clipboard.
  */
-export async function handleScreenshot(
-  state: DevBarState,
-  copyToClipboard = false
-): Promise<void> {
+export async function handleScreenshot(state: DevBarState, copyToClipboard = false): Promise<void> {
   if (state.capturing) return;
   const effectiveSave = resolveSaveLocation(state.options.saveLocation, state.sweetlinkConnected);
   // When saving (not clipboard) with 'local' mode, require connection
@@ -154,7 +164,10 @@ export async function handleScreenshot(
     await delay(SCREENSHOT_BLUR_DELAY_MS);
 
     const html2canvas = await getHtml2Canvas();
-    const fullCanvas = await html2canvas(document.body, captureOptions(SCREENSHOT_SCALE, copyToClipboard));
+    const fullCanvas = await html2canvas(
+      document.body,
+      captureOptions(SCREENSHOT_SCALE, copyToClipboard)
+    );
 
     // Restore page state
     cleanup();
@@ -306,9 +319,7 @@ export function showDesignReviewConfirmation(state: DevBarState): void {
 /**
  * Calculate estimated cost for design review based on viewport size.
  */
-export function calculateCostEstimate(
-  state: DevBarState
-): { tokens: number; cost: string } | null {
+export function calculateCostEstimate(state: DevBarState): { tokens: number; cost: string } | null {
   if (!state.apiKeyStatus?.pricing) return null;
 
   // Image token estimation for Claude Vision:
@@ -352,7 +363,10 @@ export function proceedWithDesignReview(state: DevBarState): void {
   handleDesignReview(state);
 }
 
-function toggleModal(state: DevBarState, key: 'showOutlineModal' | 'showSchemaModal' | 'showA11yModal'): void {
+function toggleModal(
+  state: DevBarState,
+  key: 'showOutlineModal' | 'showSchemaModal' | 'showA11yModal'
+): void {
   const wasOpen = state[key];
   closeAllModals(state);
   state[key] = !wasOpen;
@@ -411,7 +425,13 @@ export function handleSaveOutline(state: DevBarState): void {
 
   saveOrDownload(state, {
     type: 'save-outline',
-    data: { outline, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    data: {
+      outline,
+      markdown,
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    },
     savingFlag: 'savingOutline',
     downloadFilename: 'outline',
     downloadContent: markdown,
@@ -449,7 +469,13 @@ export function handleSaveConsoleLogs(
 
   saveOrDownload(state, {
     type: 'save-console-logs',
-    data: { logs: filteredLogs, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    data: {
+      logs: filteredLogs,
+      markdown,
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    },
     savingFlag: 'savingConsoleLogs',
     downloadFilename: 'console-logs',
     downloadContent: markdown,
@@ -472,7 +498,13 @@ export function handleSaveSchema(state: DevBarState): void {
 
   saveOrDownload(state, {
     type: 'save-schema',
-    data: { schema, markdown, url: window.location.href, title: document.title, timestamp: Date.now() },
+    data: {
+      schema,
+      markdown,
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    },
     savingFlag: 'savingSchema',
     downloadFilename: 'schema',
     downloadContent: markdown,

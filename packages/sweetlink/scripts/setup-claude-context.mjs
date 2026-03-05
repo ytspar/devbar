@@ -11,7 +11,15 @@
  *   - .claude/skills/   ← skill directories from this package's claude-skills/
  */
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, symlinkSync, unlinkSync } from 'fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  symlinkSync,
+  unlinkSync,
+} from 'fs';
 import { dirname, join, relative } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -61,7 +69,7 @@ function setupContext(claudeDir) {
   const targetDir = join(claudeDir, 'context');
   mkdirSync(targetDir, { recursive: true });
 
-  const files = readdirSync(sourceDir).filter(f => f.endsWith('.md'));
+  const files = readdirSync(sourceDir).filter((f) => f.endsWith('.md'));
   if (files.length === 0) return;
 
   console.log('[@ytspar/sweetlink] Setting up Claude context symlinks...');
@@ -79,8 +87,8 @@ function setupSkills(claudeDir) {
 
   // Each subdirectory in claude-skills/ is a skill
   const skills = readdirSync(sourceDir, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
 
   if (skills.length === 0) return;
 
@@ -93,8 +101,12 @@ function setupSkills(claudeDir) {
     if (stat.isSymbolicLink()) {
       const linkTarget = readlinkSync(targetDir);
       console.log(`  [info] .claude/skills is a symlink → ${linkTarget}`);
-      console.log(`  [info] Skills from @ytspar/sweetlink should be symlinked inside that directory.`);
-      console.log(`  [info] Run: cd ${linkTarget} && ln -sf ${relative(linkTarget, sourceDir)}/<skill> .`);
+      console.log(
+        `  [info] Skills from @ytspar/sweetlink should be symlinked inside that directory.`
+      );
+      console.log(
+        `  [info] Run: cd ${linkTarget} && ln -sf ${relative(linkTarget, sourceDir)}/<skill> .`
+      );
       return;
     }
   } catch {

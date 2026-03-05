@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 import type { OutlineNode } from '../../types.js';
+import { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 
 describe('extractDocumentOutline', () => {
   beforeEach(() => {

@@ -16,6 +16,7 @@
  * - tooltips.ts    — tooltip creation, positioning, and management helpers
  */
 
+import { ConsoleCapture, type LogChangeListener } from '@ytspar/sweetlink/browser/consoleCapture';
 import {
   CSS_COLORS,
   DEVBAR_STYLES,
@@ -25,13 +26,19 @@ import {
   WS_PORT_OFFSET,
 } from './constants.js';
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
+import { setupKeyboardShortcuts } from './modules/keyboard.js';
+import { setupBreakpointDetection, setupPerformanceMonitoring } from './modules/performance.js';
+import { render as moduleRender } from './modules/rendering.js';
+import { handleScreenshot as moduleHandleScreenshot } from './modules/screenshot.js';
 import {
-  ACCENT_COLOR_PRESETS,
-  DEFAULT_SETTINGS,
-  type DevBarSettings,
-  getSettingsManager,
-  type SettingsManager,
-} from './settings.js';
+  loadCompactMode,
+  setThemeMode as moduleSetThemeMode,
+  setupTheme,
+} from './modules/theme.js';
+import type { DevBarState } from './modules/types.js';
+// Import module functions
+import { connectWebSocket, handleNotification } from './modules/websocket.js';
+import { type DevBarSettings, getSettingsManager, type SettingsManager } from './settings.js';
 import type {
   ConsoleLog,
   DebugConfig,
@@ -42,23 +49,6 @@ import type {
   SweetlinkCommand,
   ThemeMode,
 } from './types.js';
-import { ConsoleCapture, type LogChangeListener } from '@ytspar/sweetlink/browser/consoleCapture';
-
-// Import module functions
-import { connectWebSocket, handleNotification } from './modules/websocket.js';
-import { handleScreenshot as moduleHandleScreenshot } from './modules/screenshot.js';
-import { render as moduleRender } from './modules/rendering.js';
-import {
-  setupBreakpointDetection,
-  setupPerformanceMonitoring,
-} from './modules/performance.js';
-import { setupKeyboardShortcuts } from './modules/keyboard.js';
-import {
-  setupTheme,
-  loadCompactMode,
-  setThemeMode as moduleSetThemeMode,
-} from './modules/theme.js';
-import type { DevBarState } from './modules/types.js';
 
 // Re-export types for backwards compatibility
 export type {

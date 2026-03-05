@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatTimestampForFilename,
+  generateBaseFilename,
+  generateSlugFromUrl,
+  HMR_SCREENSHOT_DIR,
   MAX_LOG_MESSAGE_LENGTH,
   MAX_SLUG_LENGTH,
   SCREENSHOT_DIR,
-  HMR_SCREENSHOT_DIR,
-  generateSlugFromUrl,
-  formatTimestampForFilename,
-  generateBaseFilename,
   truncateMessage,
 } from './urlUtils.js';
 

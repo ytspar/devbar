@@ -16,7 +16,11 @@ describe('handleGetVitals', () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(globalThis, 'performance', { value: originalPerformance, writable: true, configurable: true });
+    Object.defineProperty(globalThis, 'performance', {
+      value: originalPerformance,
+      writable: true,
+      configurable: true,
+    });
     globalThis.PerformanceObserver = originalPerformanceObserver;
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -31,7 +35,11 @@ describe('handleGetVitals', () => {
       getEntriesByType: vi.fn().mockReturnValue([]),
       ...overrides,
     } as unknown as Performance;
-    Object.defineProperty(globalThis, 'performance', { value: base, writable: true, configurable: true });
+    Object.defineProperty(globalThis, 'performance', {
+      value: base,
+      writable: true,
+      configurable: true,
+    });
   }
 
   /**
@@ -52,12 +60,14 @@ describe('handleGetVitals', () => {
             {
               getEntries: () => entries,
             } as unknown as PerformanceObserverEntryList,
-            this as unknown as PerformanceObserver,
+            this as unknown as PerformanceObserver
           );
         }
       }
       disconnect(): void {}
-      takeRecords(): PerformanceEntryList { return []; }
+      takeRecords(): PerformanceEntryList {
+        return [];
+      }
     } as unknown as typeof PerformanceObserver;
   }
 
@@ -128,8 +138,20 @@ describe('handleGetVitals', () => {
     mockPerformance();
     mockObserver({
       'largest-contentful-paint': [
-        { name: '', startTime: 500, entryType: 'largest-contentful-paint', duration: 0, toJSON: () => ({}) },
-        { name: '', startTime: 900.4, entryType: 'largest-contentful-paint', duration: 0, toJSON: () => ({}) },
+        {
+          name: '',
+          startTime: 500,
+          entryType: 'largest-contentful-paint',
+          duration: 0,
+          toJSON: () => ({}),
+        },
+        {
+          name: '',
+          startTime: 900.4,
+          entryType: 'largest-contentful-paint',
+          duration: 0,
+          toJSON: () => ({}),
+        },
       ] as unknown as PerformanceEntry[],
     });
 
@@ -145,9 +167,33 @@ describe('handleGetVitals', () => {
     mockPerformance();
     mockObserver({
       'layout-shift': [
-        { name: '', startTime: 0, entryType: 'layout-shift', duration: 0, toJSON: () => ({}), hadRecentInput: false, value: 0.05 },
-        { name: '', startTime: 0, entryType: 'layout-shift', duration: 0, toJSON: () => ({}), hadRecentInput: true, value: 0.3 },
-        { name: '', startTime: 0, entryType: 'layout-shift', duration: 0, toJSON: () => ({}), hadRecentInput: false, value: 0.02 },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'layout-shift',
+          duration: 0,
+          toJSON: () => ({}),
+          hadRecentInput: false,
+          value: 0.05,
+        },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'layout-shift',
+          duration: 0,
+          toJSON: () => ({}),
+          hadRecentInput: true,
+          value: 0.3,
+        },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'layout-shift',
+          duration: 0,
+          toJSON: () => ({}),
+          hadRecentInput: false,
+          value: 0.02,
+        },
       ] as unknown as PerformanceEntry[],
     });
 
@@ -163,9 +209,33 @@ describe('handleGetVitals', () => {
     mockPerformance();
     mockObserver({
       event: [
-        { name: '', startTime: 0, entryType: 'event', duration: 50, toJSON: () => ({}), processingStart: 0, processingEnd: 50 },
-        { name: '', startTime: 0, entryType: 'event', duration: 200.8, toJSON: () => ({}), processingStart: 0, processingEnd: 200 },
-        { name: '', startTime: 0, entryType: 'event', duration: 100, toJSON: () => ({}), processingStart: 0, processingEnd: 100 },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'event',
+          duration: 50,
+          toJSON: () => ({}),
+          processingStart: 0,
+          processingEnd: 50,
+        },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'event',
+          duration: 200.8,
+          toJSON: () => ({}),
+          processingStart: 0,
+          processingEnd: 200,
+        },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'event',
+          duration: 100,
+          toJSON: () => ({}),
+          processingStart: 0,
+          processingEnd: 100,
+        },
       ] as unknown as PerformanceEntry[],
     });
 
@@ -180,11 +250,7 @@ describe('handleGetVitals', () => {
     mockPerformance({
       getEntriesByType: vi.fn((type: string) => {
         if (type === 'resource') {
-          return [
-            { transferSize: 50000 },
-            { transferSize: 25000 },
-            { transferSize: 0 },
-          ];
+          return [{ transferSize: 50000 }, { transferSize: 25000 }, { transferSize: 0 }];
         }
         return [];
       }),
@@ -234,7 +300,9 @@ describe('handleGetVitals', () => {
       }
       observe(): void {}
       disconnect(): void {}
-      takeRecords(): PerformanceEntryList { return []; }
+      takeRecords(): PerformanceEntryList {
+        return [];
+      }
     } as unknown as typeof PerformanceObserver;
 
     const response = await handleGetVitals();
@@ -249,12 +317,13 @@ describe('handleGetVitals', () => {
   it('handles observer type not supported (observe throws)', async () => {
     mockPerformance();
     globalThis.PerformanceObserver = class {
-      constructor(_cb: PerformanceObserverCallback) {}
       observe(): void {
         throw new DOMException('type not supported');
       }
       disconnect(): void {}
-      takeRecords(): PerformanceEntryList { return []; }
+      takeRecords(): PerformanceEntryList {
+        return [];
+      }
     } as unknown as typeof PerformanceObserver;
 
     const response = await handleGetVitals();
@@ -295,13 +364,35 @@ describe('handleGetVitals', () => {
     });
     mockObserver({
       'largest-contentful-paint': [
-        { name: '', startTime: 800, entryType: 'largest-contentful-paint', duration: 0, toJSON: () => ({}) },
+        {
+          name: '',
+          startTime: 800,
+          entryType: 'largest-contentful-paint',
+          duration: 0,
+          toJSON: () => ({}),
+        },
       ] as unknown as PerformanceEntry[],
       'layout-shift': [
-        { name: '', startTime: 0, entryType: 'layout-shift', duration: 0, toJSON: () => ({}), hadRecentInput: false, value: 0.1 },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'layout-shift',
+          duration: 0,
+          toJSON: () => ({}),
+          hadRecentInput: false,
+          value: 0.1,
+        },
       ] as unknown as PerformanceEntry[],
       event: [
-        { name: '', startTime: 0, entryType: 'event', duration: 64, toJSON: () => ({}), processingStart: 0, processingEnd: 64 },
+        {
+          name: '',
+          startTime: 0,
+          entryType: 'event',
+          duration: 64,
+          toJSON: () => ({}),
+          processingStart: 0,
+          processingEnd: 64,
+        },
       ] as unknown as PerformanceEntry[],
     });
 

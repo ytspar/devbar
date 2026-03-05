@@ -125,8 +125,8 @@ describe('createModalHeader', () => {
     });
 
     const buttons = header.querySelectorAll('button');
-    const closeBtn = Array.from(buttons).find((btn) =>
-      btn.textContent === '\u00d7' || btn.textContent === '×'
+    const closeBtn = Array.from(buttons).find(
+      (btn) => btn.textContent === '\u00d7' || btn.textContent === '×'
     );
     expect(closeBtn).toBeTruthy();
     closeBtn!.click();

@@ -1,8 +1,8 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SCHEMAS, emitJson, printOutputSchema } from './outputSchemas.js';
 import type { JsonEnvelope } from './outputSchemas.js';
+import { emitJson, printOutputSchema, SCHEMAS } from './outputSchemas.js';
 
 describe('outputSchemas', () => {
   // =========================================================================
@@ -42,7 +42,7 @@ describe('outputSchemas', () => {
     });
 
     it('each schema contains "interface" keyword', () => {
-      for (const [name, schema] of Object.entries(SCHEMAS)) {
+      for (const [_name, schema] of Object.entries(SCHEMAS)) {
         expect(schema).toContain('interface');
       }
     });
@@ -143,7 +143,7 @@ describe('outputSchemas', () => {
     it('prints all schemas when no command specified', () => {
       printOutputSchema();
 
-      const allOutput = logSpy.mock.calls.map(c => c[0]).join('\n');
+      const allOutput = logSpy.mock.calls.map((c) => c[0]).join('\n');
       // Should contain the envelope
       expect(allOutput).toContain('JsonEnvelope');
       // Should contain at least a few command schemas
@@ -155,7 +155,7 @@ describe('outputSchemas', () => {
     it('prints just the command schema when command specified', () => {
       printOutputSchema('screenshot');
 
-      const allOutput = logSpy.mock.calls.map(c => c[0]).join('\n');
+      const allOutput = logSpy.mock.calls.map((c) => c[0]).join('\n');
       expect(allOutput).toContain('ScreenshotData');
       // Should NOT contain other command schemas
       expect(allOutput).not.toContain('LogsData');

@@ -9,9 +9,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockSaveMarkdownArtifact } = vi.hoisted(() => ({
-  mockSaveMarkdownArtifact: vi.fn().mockResolvedValue(
-    '/mock/project/.tmp/sweetlink-screenshots/console-logs-index-2023-11-14T22-13-20-000Z.md',
-  ),
+  mockSaveMarkdownArtifact: vi
+    .fn()
+    .mockResolvedValue(
+      '/mock/project/.tmp/sweetlink-screenshots/console-logs-index-2023-11-14T22-13-20-000Z.md'
+    ),
 }));
 
 vi.mock('./saveMarkdown.js', () => ({
@@ -72,7 +74,7 @@ describe('handleSaveConsoleLogs', () => {
     expect(mockSaveMarkdownArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         markdown: '_No console logs recorded_',
-      }),
+      })
     );
   });
 
@@ -86,7 +88,7 @@ describe('handleSaveConsoleLogs', () => {
         url: 'https://example.com/',
         title: 'Test',
         timestamp: 1700000000000,
-      }),
+      })
     ).rejects.toThrow('Write failed');
   });
 });

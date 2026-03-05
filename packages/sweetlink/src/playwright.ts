@@ -160,10 +160,12 @@ export async function screenshotViaPlaywright(options: {
     screenshotViaPlaywrightCore(options),
     new Promise<never>((_, reject) => {
       setTimeout(() => {
-        reject(new Error(
-          `Playwright screenshot timed out after ${timeoutMs}ms. ` +
-          `The dev server may be unreachable. Set SWEETLINK_OPERATION_TIMEOUT to adjust.`
-        ));
+        reject(
+          new Error(
+            `Playwright screenshot timed out after ${timeoutMs}ms. ` +
+              `The dev server may be unreachable. Set SWEETLINK_OPERATION_TIMEOUT to adjust.`
+          )
+        );
       }, timeoutMs);
     }),
   ]);

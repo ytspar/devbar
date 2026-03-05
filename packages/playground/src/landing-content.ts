@@ -4,9 +4,9 @@
  * Creates the hero section and documentation overview using devbar styling.
  */
 
+import npmTimeline from 'virtual:npm-timeline';
 import { PALETTE } from '@ytspar/devbar';
 import releaseNotes from './release-notes.json';
-import npmTimeline from 'virtual:npm-timeline';
 
 /**
  * Helper to create a text element
@@ -140,13 +140,15 @@ function setCoverageBlocks(pct: number): void {
 function cachedFetch<T>(url: string, key: string): Promise<T> {
   const cached = sessionStorage.getItem(key);
   if (cached) return Promise.resolve(JSON.parse(cached) as T);
-  return fetch(url).then((r) => {
-    if (!r.ok) throw new Error(`${r.status}`);
-    return r.json() as Promise<T>;
-  }).then((data) => {
-    sessionStorage.setItem(key, JSON.stringify(data));
-    return data;
-  });
+  return fetch(url)
+    .then((r) => {
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json() as Promise<T>;
+    })
+    .then((data) => {
+      sessionStorage.setItem(key, JSON.stringify(data));
+      return data;
+    });
 }
 
 /**
@@ -217,38 +219,49 @@ function getNpmTimeline(pkg: string): Promise<NpmTimeline | null> {
  */
 function fetchBadgeData(): void {
   cachedFetch<{ version: string }>(
-    'https://registry.npmjs.org/@ytspar/devbar/latest', 'badge:devbar'
-  ).then((d) => {
-    const el = document.getElementById('badge-devbar-version');
-    if (el) el.textContent = `v${d.version}`;
-  }).catch(() => {});
+    'https://registry.npmjs.org/@ytspar/devbar/latest',
+    'badge:devbar'
+  )
+    .then((d) => {
+      const el = document.getElementById('badge-devbar-version');
+      if (el) el.textContent = `v${d.version}`;
+    })
+    .catch(() => {});
 
   cachedFetch<{ version: string }>(
-    'https://registry.npmjs.org/@ytspar/sweetlink/latest', 'badge:sweetlink'
-  ).then((d) => {
-    const el = document.getElementById('badge-sweetlink-version');
-    if (el) el.textContent = `v${d.version}`;
-  }).catch(() => {});
+    'https://registry.npmjs.org/@ytspar/sweetlink/latest',
+    'badge:sweetlink'
+  )
+    .then((d) => {
+      const el = document.getElementById('badge-sweetlink-version');
+      if (el) el.textContent = `v${d.version}`;
+    })
+    .catch(() => {});
 
   cachedFetch<{ stargazers_count?: number }>(
-    'https://api.github.com/repos/ytspar/devbar', 'badge:stars'
-  ).then((d) => {
-    const el = document.getElementById('badge-stars');
-    if (el && typeof d.stargazers_count === 'number') {
-      el.textContent = String(d.stargazers_count);
-    }
-  }).catch(() => {});
+    'https://api.github.com/repos/ytspar/devbar',
+    'badge:stars'
+  )
+    .then((d) => {
+      const el = document.getElementById('badge-stars');
+      if (el && typeof d.stargazers_count === 'number') {
+        el.textContent = String(d.stargazers_count);
+      }
+    })
+    .catch(() => {});
 
   cachedFetch<{ workflow_runs?: Array<{ conclusion: string }> }>(
     'https://api.github.com/repos/ytspar/devbar/actions/workflows/canary.yml/runs?per_page=1&status=completed',
     'badge:build'
-  ).then((d) => {
-    const el = document.getElementById('badge-build');
-    if (el && d.workflow_runs?.[0]) {
-      const conclusion = d.workflow_runs[0].conclusion;
-      el.textContent = conclusion === 'success' ? 'passing' : conclusion;
-    }
-  }).catch(() => {});
+  )
+    .then((d) => {
+      const el = document.getElementById('badge-build');
+      if (el && d.workflow_runs?.[0]) {
+        const conclusion = d.workflow_runs[0].conclusion;
+        el.textContent = conclusion === 'success' ? 'passing' : conclusion;
+      }
+    })
+    .catch(() => {});
 
   // Coverage data (generated during CI build, not cached — local file)
   fetch(`${import.meta.env.BASE_URL}coverage.json`)
@@ -290,32 +303,32 @@ export function createLandingHero(): HTMLElement {
   badges.appendChild(
     createBadge(
       'https://www.npmjs.com/package/@ytspar/devbar',
-      'devbar', '...', 'badge-devbar-version'
+      'devbar',
+      '...',
+      'badge-devbar-version'
     )
   );
   badges.appendChild(
     createBadge(
       'https://www.npmjs.com/package/@ytspar/sweetlink',
-      'sweetlink', '...', 'badge-sweetlink-version'
+      'sweetlink',
+      '...',
+      'badge-sweetlink-version'
     )
   );
   badges.appendChild(
     createBadge(
       'https://github.com/ytspar/devbar/actions/workflows/canary.yml',
-      'build', '...', 'badge-build'
+      'build',
+      '...',
+      'badge-build'
     )
   );
   badges.appendChild(
-    createBadge(
-      'https://github.com/ytspar/devbar',
-      'stars', '...', 'badge-stars'
-    )
+    createBadge('https://github.com/ytspar/devbar', 'stars', '...', 'badge-stars')
   );
   badges.appendChild(
-    createBadge(
-      'https://github.com/ytspar/devbar/blob/main/LICENSE',
-      'license', 'MIT'
-    )
+    createBadge('https://github.com/ytspar/devbar/blob/main/LICENSE', 'license', 'MIT')
   );
   badges.appendChild(createCoverageBadge());
   hero.appendChild(badges);
@@ -492,7 +505,7 @@ function classifyVersion(version: string): 'stable' | 'canary' | 'prerelease' {
 function parseSemver(version: string): number {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
   if (!match) return 0;
-  return parseInt(match[1]!) * 10000 + parseInt(match[2]!) * 100 + parseInt(match[3]!);
+  return parseInt(match[1]!, 10) * 10000 + parseInt(match[2]!, 10) * 100 + parseInt(match[3]!, 10);
 }
 
 /**
@@ -501,7 +514,7 @@ function parseSemver(version: string): number {
  */
 function renderReleaseGraph(
   devbarTime: Record<string, string>,
-  sweetlinkTime: Record<string, string>,
+  sweetlinkTime: Record<string, string>
 ): void {
   const container = document.getElementById('release-graph');
   if (!container) return;
@@ -516,7 +529,10 @@ function renderReleaseGraph(
 
   const points: Point[] = [];
 
-  for (const [time, label] of [[devbarTime, 'devbar'], [sweetlinkTime, 'sweetlink']] as const) {
+  for (const [time, label] of [
+    [devbarTime, 'devbar'],
+    [sweetlinkTime, 'sweetlink'],
+  ] as const) {
     for (const [ver, dateStr] of Object.entries(time)) {
       if (ver === 'created' || ver === 'modified') continue;
       // Skip v0.0.x — initial placeholder publishes that compress the Y scale
@@ -555,8 +571,16 @@ function renderReleaseGraph(
 
   // Colors
   const colors: Record<string, Record<string, string>> = {
-    devbar: { stable: PALETTE.emerald, canary: 'rgba(16,185,129,0.35)', prerelease: 'rgba(16,185,129,0.5)' },
-    sweetlink: { stable: PALETTE.purple, canary: 'rgba(168,85,247,0.35)', prerelease: 'rgba(168,85,247,0.5)' },
+    devbar: {
+      stable: PALETTE.emerald,
+      canary: 'rgba(16,185,129,0.35)',
+      prerelease: 'rgba(16,185,129,0.5)',
+    },
+    sweetlink: {
+      stable: PALETTE.purple,
+      canary: 'rgba(168,85,247,0.35)',
+      prerelease: 'rgba(168,85,247,0.5)',
+    },
   };
 
   const NS = 'http://www.w3.org/2000/svg';
@@ -683,68 +707,64 @@ function renderReleaseGraph(
  * Fetch both packages' timelines and render the changelog
  */
 function populateChangelog(): void {
-  Promise.all([
-    getNpmTimeline('@ytspar/devbar'),
-    getNpmTimeline('@ytspar/sweetlink'),
-  ]).then(([devbarData, sweetlinkData]) => {
-    // Render the release graph (includes ALL versions — stable, canary, prerelease)
-    renderReleaseGraph(
-      devbarData?.time ?? {},
-      sweetlinkData?.time ?? {},
-    );
+  Promise.all([getNpmTimeline('@ytspar/devbar'), getNpmTimeline('@ytspar/sweetlink')]).then(
+    ([devbarData, sweetlinkData]) => {
+      // Render the release graph (includes ALL versions — stable, canary, prerelease)
+      renderReleaseGraph(devbarData?.time ?? {}, sweetlinkData?.time ?? {});
 
-    // Extract curated stable entries for the table below
-    const devbarEntries = devbarData ? extractEntries('devbar', devbarData.time) : [];
-    const sweetlinkEntries = sweetlinkData ? extractEntries('sweetlink', sweetlinkData.time) : [];
-    // Only show versions that have curated release notes
-    const all = [...devbarEntries, ...sweetlinkEntries]
-      .filter((e) => RELEASE_NOTES[e.pkg]?.[e.version])
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Extract curated stable entries for the table below
+      const devbarEntries = devbarData ? extractEntries('devbar', devbarData.time) : [];
+      const sweetlinkEntries = sweetlinkData ? extractEntries('sweetlink', sweetlinkData.time) : [];
+      // Only show versions that have curated release notes
+      const all = [...devbarEntries, ...sweetlinkEntries]
+        .filter((e) => RELEASE_NOTES[e.pkg]?.[e.version])
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    const container = document.getElementById('changelog-list');
-    if (!container) return;
+      const container = document.getElementById('changelog-list');
+      if (!container) return;
 
-    // Clear loading state
-    while (container.firstChild) container.removeChild(container.firstChild);
+      // Clear loading state
+      while (container.firstChild) container.removeChild(container.firstChild);
 
-    if (all.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'changelog-loading';
-      empty.textContent = 'No release data available';
-      container.appendChild(empty);
-      return;
+      if (all.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'changelog-loading';
+        empty.textContent = 'No release data available';
+        container.appendChild(empty);
+        return;
+      }
+
+      for (const entry of all) {
+        const row = document.createElement('div');
+        row.className = 'changelog-entry';
+
+        const version = document.createElement('a');
+        version.className = 'changelog-version';
+        version.href = `https://www.npmjs.com/package/@ytspar/${entry.pkg}/v/${entry.version}`;
+        version.target = '_blank';
+        version.rel = 'noopener noreferrer';
+        version.textContent = `v${entry.version}`;
+
+        const pkg = document.createElement('span');
+        pkg.className = `changelog-pkg changelog-pkg-${entry.pkg}`;
+        pkg.textContent = entry.pkg;
+
+        const desc = document.createElement('span');
+        desc.className = 'changelog-desc';
+        desc.textContent = RELEASE_NOTES[entry.pkg]?.[entry.version] ?? '';
+
+        const date = document.createElement('span');
+        date.className = 'changelog-date';
+        date.textContent = formatDate(entry.date);
+
+        row.appendChild(version);
+        row.appendChild(pkg);
+        row.appendChild(desc);
+        row.appendChild(date);
+        container.appendChild(row);
+      }
     }
-
-    for (const entry of all) {
-      const row = document.createElement('div');
-      row.className = 'changelog-entry';
-
-      const version = document.createElement('a');
-      version.className = 'changelog-version';
-      version.href = `https://www.npmjs.com/package/@ytspar/${entry.pkg}/v/${entry.version}`;
-      version.target = '_blank';
-      version.rel = 'noopener noreferrer';
-      version.textContent = `v${entry.version}`;
-
-      const pkg = document.createElement('span');
-      pkg.className = `changelog-pkg changelog-pkg-${entry.pkg}`;
-      pkg.textContent = entry.pkg;
-
-      const desc = document.createElement('span');
-      desc.className = 'changelog-desc';
-      desc.textContent = RELEASE_NOTES[entry.pkg]?.[entry.version] ?? '';
-
-      const date = document.createElement('span');
-      date.className = 'changelog-date';
-      date.textContent = formatDate(entry.date);
-
-      row.appendChild(version);
-      row.appendChild(pkg);
-      row.appendChild(desc);
-      row.appendChild(date);
-      container.appendChild(row);
-    }
-  });
+  );
 }
 
 /**
@@ -772,7 +792,11 @@ interface Token {
 /**
  * Simple syntax highlighter for TypeScript/JavaScript
  */
-function highlightCode(code: string, language: 'typescript' | 'bash' = 'typescript', label = 'Code example'): HTMLElement {
+function highlightCode(
+  code: string,
+  language: 'typescript' | 'bash' = 'typescript',
+  label = 'Code example'
+): HTMLElement {
   const pre = document.createElement('pre');
   pre.className = 'code-block';
   pre.setAttribute('tabindex', '0');
@@ -1106,7 +1130,9 @@ export function createQuickStartSection(): HTMLElement {
 
   // Step 1: Install
   const { card: step1, content: content1 } = createNotchedCard('quickstart-step', '1. Install');
-  content1.appendChild(highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash', 'Install command'));
+  content1.appendChild(
+    highlightCode(`pnpm add @ytspar/devbar @ytspar/sweetlink`, 'bash', 'Install command')
+  );
   stepsContainer.appendChild(step1);
 
   // Step 2: Vite setup

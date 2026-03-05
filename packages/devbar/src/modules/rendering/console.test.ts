@@ -8,8 +8,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DevBarState } from '../types.js';
 import type { ConsoleLog } from '../../types.js';
+import type { DevBarState } from '../types.js';
 
 // Mock UI components
 vi.mock('../../ui/index.js', () => ({
@@ -53,7 +53,6 @@ vi.mock('../screenshot.js', () => ({
   handleSaveConsoleLogs: vi.fn(),
 }));
 
-import { renderConsolePopup } from './console.js';
 import {
   createEmptyMessage,
   createModalBox,
@@ -61,6 +60,7 @@ import {
   createModalHeader,
   createModalOverlay,
 } from '../../ui/index.js';
+import { renderConsolePopup } from './console.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
@@ -94,7 +94,9 @@ function createMockConsoleCapture(logs: ConsoleLog[]) {
   } as any;
 }
 
-function makeLogs(entries: Array<{ level: string; message: string; timestamp?: number }>): ConsoleLog[] {
+function makeLogs(
+  entries: Array<{ level: string; message: string; timestamp?: number }>
+): ConsoleLog[] {
   return entries.map((e, i) => ({
     level: e.level,
     message: e.message,
@@ -418,7 +420,14 @@ describe('renderConsolePopup', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     const capture = createMockConsoleCapture([]);

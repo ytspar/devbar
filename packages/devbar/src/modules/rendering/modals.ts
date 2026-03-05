@@ -2,9 +2,29 @@
  * Modal rendering for the DevBar: outline, schema, a11y, and design review modals.
  */
 
-import { BUTTON_COLORS, CATEGORY_COLORS, CSS_COLORS, FONT_MONO, withAlpha } from '../../constants.js';
+import type { AxeViolation } from '../../accessibility.js';
+import {
+  a11yToMarkdown,
+  getImpactColor,
+  getViolationCounts,
+  groupViolationsByImpact,
+  runA11yAudit,
+} from '../../accessibility.js';
+import {
+  BUTTON_COLORS,
+  CATEGORY_COLORS,
+  CSS_COLORS,
+  FONT_MONO,
+  withAlpha,
+} from '../../constants.js';
 import { extractDocumentOutline, outlineToMarkdown } from '../../outline.js';
-import { checkMissingTags, extractFavicons, extractPageSchema, isImageKey, schemaToMarkdown } from '../../schema.js';
+import {
+  checkMissingTags,
+  extractFavicons,
+  extractPageSchema,
+  isImageKey,
+  schemaToMarkdown,
+} from '../../schema.js';
 import type { OutlineNode } from '../../types.js';
 import {
   createEmptyMessage,
@@ -15,14 +35,6 @@ import {
   createModalOverlay,
   createStyledButton,
 } from '../../ui/index.js';
-import {
-  a11yToMarkdown,
-  runA11yAudit,
-  groupViolationsByImpact,
-  getImpactColor,
-  getViolationCounts,
-} from '../../accessibility.js';
-import type { AxeViolation } from '../../accessibility.js';
 import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
@@ -462,7 +474,9 @@ function renderKeyValueItems(container: HTMLElement, items: Record<string, strin
       });
       thumb.src = value;
       thumb.alt = key;
-      thumb.onerror = () => { frame.style.display = 'none'; };
+      thumb.onerror = () => {
+        frame.style.display = 'none';
+      };
       thumb.onload = () => {
         if (thumb.naturalWidth) {
           dimEl.textContent = `${thumb.naturalWidth}\u00d7${thumb.naturalHeight}`;
@@ -513,16 +527,12 @@ function renderKeyValueItems(container: HTMLElement, items: Record<string, strin
 /** Derive intended device/purpose from favicon label and declared size */
 function faviconDevice(label: string, size?: string): { text: string; color: string } {
   const s = parseInt(size || '', 10);
-  if (label.includes('apple'))
-    return { text: 'Apple home screen', color: CSS_COLORS.info };
+  if (label.includes('apple')) return { text: 'Apple home screen', color: CSS_COLORS.info };
   if (size === 'any' || label.includes('svg'))
     return { text: 'Scalable (any)', color: CSS_COLORS.cyan };
-  if (s >= 192)
-    return { text: 'Android / PWA', color: CSS_COLORS.primary };
-  if (s >= 48)
-    return { text: 'Taskbar / shortcut', color: CSS_COLORS.purple };
-  if (s > 0)
-    return { text: 'Browser tab', color: CSS_COLORS.textSecondary };
+  if (s >= 192) return { text: 'Android / PWA', color: CSS_COLORS.primary };
+  if (s >= 48) return { text: 'Taskbar / shortcut', color: CSS_COLORS.purple };
+  if (s > 0) return { text: 'Browser tab', color: CSS_COLORS.textSecondary };
   return { text: 'General', color: CSS_COLORS.textMuted };
 }
 
@@ -565,7 +575,9 @@ function createFaviconCard(
   });
   thumb.src = icon.url;
   thumb.alt = icon.label;
-  thumb.onerror = () => { frame.style.opacity = '0.3'; };
+  thumb.onerror = () => {
+    frame.style.opacity = '0.3';
+  };
   frame.appendChild(thumb);
   row.appendChild(frame);
 
@@ -719,10 +731,7 @@ function createStripedRow(index: number, borderColor?: string): HTMLDivElement {
 }
 
 /** Create a styled text span for modal info items. */
-function createInfoSpan(
-  text: string,
-  styles: Partial<CSSStyleDeclaration>
-): HTMLSpanElement {
+function createInfoSpan(text: string, styles: Partial<CSSStyleDeclaration>): HTMLSpanElement {
   const el = document.createElement('span');
   Object.assign(el.style, styles);
   el.textContent = text;
@@ -753,11 +762,15 @@ function renderMissingTagsSection(
     });
 
     if (errorCount > 0) {
-      summary.appendChild(createSummaryPill(`${errorCount} error${errorCount > 1 ? 's' : ''}`, CSS_COLORS.error));
+      summary.appendChild(
+        createSummaryPill(`${errorCount} error${errorCount > 1 ? 's' : ''}`, CSS_COLORS.error)
+      );
     }
 
     if (warnCount > 0) {
-      summary.appendChild(createSummaryPill(`${warnCount} warning${warnCount > 1 ? 's' : ''}`, CSS_COLORS.warning));
+      summary.appendChild(
+        createSummaryPill(`${warnCount} warning${warnCount > 1 ? 's' : ''}`, CSS_COLORS.warning)
+      );
     }
 
     section.appendChild(summary);
@@ -778,21 +791,25 @@ function renderMissingTagsSection(
     });
     row.appendChild(icon);
 
-    row.appendChild(createInfoSpan(tag.tag, {
-      color: CSS_COLORS.text,
-      fontSize: '0.6875rem',
-      width: '120px',
-      minWidth: '120px',
-      flexShrink: '0',
-      fontWeight: '500',
-    }));
+    row.appendChild(
+      createInfoSpan(tag.tag, {
+        color: CSS_COLORS.text,
+        fontSize: '0.6875rem',
+        width: '120px',
+        minWidth: '120px',
+        flexShrink: '0',
+        fontWeight: '500',
+      })
+    );
 
-    row.appendChild(createInfoSpan(tag.hint, {
-      color: CSS_COLORS.textMuted,
-      fontSize: '0.6875rem',
-      flex: '1',
-      opacity: '0.85',
-    }));
+    row.appendChild(
+      createInfoSpan(tag.hint, {
+        color: CSS_COLORS.textMuted,
+        fontSize: '0.6875rem',
+        flex: '1',
+        opacity: '0.85',
+      })
+    );
 
     section.appendChild(row);
   });
@@ -822,58 +839,65 @@ export function renderA11yModal(state: DevBarState): void {
   document.body.appendChild(overlay);
 
   // Run the audit async and replace content when done
-  runA11yAudit().then((result) => {
-    // Check modal is still open
-    if (!state.showA11yModal) return;
+  runA11yAudit()
+    .then((result) => {
+      // Check modal is still open
+      if (!state.showA11yModal) return;
 
-    const markdown = a11yToMarkdown(result);
+      const markdown = a11yToMarkdown(result);
 
-    // Replace modal content
-    clearChildren(modal);
+      // Replace modal content
+      clearChildren(modal);
 
-    const violationCount = result.violations.length;
-    const titleText = violationCount === 0
-      ? 'Accessibility Audit \u2014 No Issues'
-      : `Accessibility Audit \u2014 ${violationCount} Violation${violationCount === 1 ? '' : 's'}`;
+      const violationCount = result.violations.length;
+      const titleText =
+        violationCount === 0
+          ? 'Accessibility Audit \u2014 No Issues'
+          : `Accessibility Audit \u2014 ${violationCount} Violation${violationCount === 1 ? '' : 's'}`;
 
-    const header = createModalHeader({
-      color,
-      title: titleText,
-      onClose: closeModal,
-      onCopyMd: async () => {
-        await navigator.clipboard.writeText(markdown);
-      },
-      onSave: () => handleSaveA11yAudit(state, result),
-      sweetlinkConnected: state.sweetlinkConnected,
-      saveLocation: state.options.saveLocation,
-      isSaving: state.savingA11yAudit,
-      savedPath: state.lastA11yAudit,
+      const header = createModalHeader({
+        color,
+        title: titleText,
+        onClose: closeModal,
+        onCopyMd: async () => {
+          await navigator.clipboard.writeText(markdown);
+        },
+        onSave: () => handleSaveA11yAudit(state, result),
+        sweetlinkConnected: state.sweetlinkConnected,
+        saveLocation: state.options.saveLocation,
+        isSaving: state.savingA11yAudit,
+        savedPath: state.lastA11yAudit,
+      });
+      modal.appendChild(header);
+
+      const content = createModalContent();
+      renderA11ySuccessContent(content, result, color);
+      modal.appendChild(content);
+    })
+    .catch((err) => {
+      if (!state.showA11yModal) return;
+
+      clearChildren(modal);
+      const header = createModalHeader({
+        color: CSS_COLORS.error,
+        title: 'Accessibility Audit \u2014 Error',
+        onClose: closeModal,
+        onCopyMd: async () => {},
+        sweetlinkConnected: state.sweetlinkConnected,
+        saveLocation: state.options.saveLocation,
+      });
+      modal.appendChild(header);
+
+      const content = createModalContent();
+      content.appendChild(
+        createInfoBox(
+          CSS_COLORS.error,
+          'Audit Failed',
+          `${err instanceof Error ? err.message : 'Unknown error'}`
+        )
+      );
+      modal.appendChild(content);
     });
-    modal.appendChild(header);
-
-    const content = createModalContent();
-    renderA11ySuccessContent(content, result, color);
-    modal.appendChild(content);
-  }).catch((err) => {
-    if (!state.showA11yModal) return;
-
-    clearChildren(modal);
-    const header = createModalHeader({
-      color: CSS_COLORS.error,
-      title: 'Accessibility Audit \u2014 Error',
-      onClose: closeModal,
-      onCopyMd: async () => {},
-      sweetlinkConnected: state.sweetlinkConnected,
-      saveLocation: state.options.saveLocation,
-    });
-    modal.appendChild(header);
-
-    const content = createModalContent();
-    content.appendChild(
-      createInfoBox(CSS_COLORS.error, 'Audit Failed', `${err instanceof Error ? err.message : 'Unknown error'}`)
-    );
-    modal.appendChild(content);
-  });
 }
 
 /** Set up the loading/spinner state shown while the a11y audit is running. */

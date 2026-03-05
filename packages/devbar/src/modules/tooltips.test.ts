@@ -2,7 +2,7 @@
  * Tooltips module tests
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addTooltipColoredRow,
   addTooltipDescription,
@@ -30,7 +30,8 @@ import type { DevBarState } from './types.js';
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
     options: {
-      showTooltips: true, saveLocation: 'auto',
+      showTooltips: true,
+      saveLocation: 'auto',
       showScreenshot: true,
       showConsoleBadges: true,
       position: 'bottom-left',
@@ -48,10 +49,18 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         position: 'bottom-left',
         themeMode: 'system',
         compactMode: false,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
         showScreenshot: true,
         showConsoleBadges: true,
-        showTooltips: true, saveLocation: 'auto',
+        showTooltips: true,
+        saveLocation: 'auto',
       })),
     } as any,
     render: vi.fn(),
@@ -474,7 +483,12 @@ describe('attachTextTooltip', () => {
     // Mock getBoundingClientRect for positioning
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -496,7 +510,12 @@ describe('attachTextTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -537,7 +556,12 @@ describe('attachHtmlTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -558,7 +582,12 @@ describe('attachHtmlTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -578,7 +607,12 @@ describe('attachHtmlTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -620,7 +654,12 @@ describe('attachClickToggleTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -642,7 +681,12 @@ describe('attachClickToggleTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -668,7 +712,12 @@ describe('attachClickToggleTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -689,7 +738,12 @@ describe('attachClickToggleTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -712,7 +766,12 @@ describe('attachClickToggleTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -734,7 +793,12 @@ describe('attachMetricTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -771,7 +835,12 @@ describe('attachBreakpointTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);
@@ -805,7 +874,12 @@ describe('attachInfoTooltip', () => {
 
     Object.defineProperty(element, 'getBoundingClientRect', {
       value: () => ({
-        left: 100, right: 200, top: 500, bottom: 530, width: 100, height: 30,
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
       }),
     });
     document.body.appendChild(element);

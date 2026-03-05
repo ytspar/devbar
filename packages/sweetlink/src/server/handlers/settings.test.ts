@@ -27,8 +27,8 @@ vi.mock('../index.js', () => ({
   getProjectRoot: vi.fn(() => '/mock/project'),
 }));
 
-import { handleSaveSettings, handleLoadSettings } from './settings.js';
 import type { DevBarSettings } from './settings.js';
+import { handleLoadSettings, handleSaveSettings } from './settings.js';
 
 function makeSettings(overrides: Partial<DevBarSettings> = {}): DevBarSettings {
   return {
@@ -64,10 +64,7 @@ describe('handleSaveSettings', () => {
     const settings = makeSettings();
     await handleSaveSettings({ settings });
 
-    expect(mockMkdir).toHaveBeenCalledWith(
-      expect.stringContaining('.devbar'),
-      { recursive: true },
-    );
+    expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('.devbar'), { recursive: true });
   });
 
   it('writes settings as JSON to settings.json', async () => {
@@ -97,17 +94,15 @@ describe('handleSaveSettings', () => {
   it('propagates fs.mkdir errors', async () => {
     mockMkdir.mockRejectedValueOnce(new Error('Permission denied'));
 
-    await expect(
-      handleSaveSettings({ settings: makeSettings() }),
-    ).rejects.toThrow('Permission denied');
+    await expect(handleSaveSettings({ settings: makeSettings() })).rejects.toThrow(
+      'Permission denied'
+    );
   });
 
   it('propagates fs.writeFile errors', async () => {
     mockWriteFile.mockRejectedValueOnce(new Error('Disk full'));
 
-    await expect(
-      handleSaveSettings({ settings: makeSettings() }),
-    ).rejects.toThrow('Disk full');
+    await expect(handleSaveSettings({ settings: makeSettings() })).rejects.toThrow('Disk full');
   });
 
   it('writes pretty-printed JSON (indented with 2 spaces)', async () => {
@@ -134,7 +129,7 @@ describe('handleLoadSettings', () => {
 
     expect(mockReadFile).toHaveBeenCalledWith(
       expect.stringContaining('.devbar/settings.json'),
-      'utf-8',
+      'utf-8'
     );
     expect(result).toEqual(settings);
   });

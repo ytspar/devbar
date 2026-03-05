@@ -48,7 +48,12 @@ export function clearAllTooltips(state: DevBarState): void {
 }
 
 /** Add a bold title to tooltip (metric name, feature name, etc.) */
-export function addTooltipTitle(state: DevBarState, container: HTMLElement, title: string, color?: string): void {
+export function addTooltipTitle(
+  state: DevBarState,
+  container: HTMLElement,
+  title: string,
+  color?: string
+): void {
   const titleEl = document.createElement('div');
   const titleColor = color || state.settingsManager.get('accentColor') || CSS_COLORS.primary;
   Object.assign(titleEl.style, {
@@ -193,19 +198,24 @@ export function attachTextTooltip(
   getText: () => string,
   hoverOptions?: TooltipHoverOptions
 ): void {
-  attachHtmlTooltip(state, element, (tooltip) => {
-    const text = getText();
-    const lines = text.split('\n');
-    for (const line of lines) {
-      const div = document.createElement('div');
-      Object.assign(div.style, {
-        color: CSS_COLORS.primary,
-        lineHeight: '1.4',
-      });
-      div.textContent = line;
-      tooltip.appendChild(div);
-    }
-  }, hoverOptions);
+  attachHtmlTooltip(
+    state,
+    element,
+    (tooltip) => {
+      const text = getText();
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const div = document.createElement('div');
+        Object.assign(div.style, {
+          color: CSS_COLORS.primary,
+          lineHeight: '1.4',
+        });
+        div.textContent = line;
+        tooltip.appendChild(div);
+      }
+    },
+    hoverOptions
+  );
 }
 
 /** Attach an HTML tooltip to an element with custom content builder */
@@ -374,11 +384,7 @@ export function attachClickToggleTooltip(
 }
 
 /** Add a keyboard shortcut row to tooltip */
-export function addTooltipShortcut(
-  container: HTMLElement,
-  key: string,
-  description: string
-): void {
+export function addTooltipShortcut(container: HTMLElement, key: string, description: string): void {
   const row = document.createElement('div');
   Object.assign(row.style, {
     display: 'flex',
@@ -425,7 +431,7 @@ type StatusIconConfig = {
 function createStatusBox(
   color: string,
   iconConfig: StatusIconConfig,
-  extraContainerStyles?: Partial<CSSStyleDeclaration>,
+  extraContainerStyles?: Partial<CSSStyleDeclaration>
 ): HTMLDivElement {
   const box = document.createElement('div');
   Object.assign(box.style, {
@@ -441,14 +447,22 @@ function createStatusBox(
 
   const icon = document.createElement('span');
   icon.textContent = iconConfig.text;
-  Object.assign(icon.style, { color: iconConfig.color, flexShrink: '0', ...iconConfig.extraStyles });
+  Object.assign(icon.style, {
+    color: iconConfig.color,
+    flexShrink: '0',
+    ...iconConfig.extraStyles,
+  });
   box.appendChild(icon);
 
   return box;
 }
 
 /** Append a secondary text line below a primary line (used by success/error boxes) */
-function appendSubtext(parent: HTMLElement, text: string, extraStyles?: Partial<CSSStyleDeclaration>): void {
+function appendSubtext(
+  parent: HTMLElement,
+  text: string,
+  extraStyles?: Partial<CSSStyleDeclaration>
+): void {
   const sub = document.createElement('div');
   Object.assign(sub.style, {
     color: CSS_COLORS.textMuted,
@@ -465,7 +479,7 @@ export function addTooltipWarning(container: HTMLElement, text: string): void {
   const box = createStatusBox(
     CSS_COLORS.warning,
     { text: '\u26A0', color: CSS_COLORS.warning },
-    { marginTop: '8px', fontSize: '0.625rem' },
+    { marginTop: '8px', fontSize: '0.625rem' }
   );
 
   const textSpan = document.createElement('span');
@@ -477,15 +491,12 @@ export function addTooltipWarning(container: HTMLElement, text: string): void {
 }
 
 /** Add a success status message to tooltip */
-export function addTooltipSuccess(
-  container: HTMLElement,
-  text: string,
-  subtext?: string
-): void {
-  const box = createStatusBox(
-    CSS_COLORS.primary,
-    { text: '\u2713', color: CSS_COLORS.primary, extraStyles: { fontWeight: '600' } },
-  );
+export function addTooltipSuccess(container: HTMLElement, text: string, subtext?: string): void {
+  const box = createStatusBox(CSS_COLORS.primary, {
+    text: '\u2713',
+    color: CSS_COLORS.primary,
+    extraStyles: { fontWeight: '600' },
+  });
 
   const textContainer = document.createElement('div');
   const mainText = document.createElement('div');
@@ -502,15 +513,12 @@ export function addTooltipSuccess(
 }
 
 /** Add an error status message to tooltip */
-export function addTooltipError(
-  container: HTMLElement,
-  title: string,
-  message: string
-): void {
-  const box = createStatusBox(
-    CSS_COLORS.error,
-    { text: '\u00D7', color: CSS_COLORS.error, extraStyles: { fontWeight: '600', fontSize: '0.875rem' } },
-  );
+export function addTooltipError(container: HTMLElement, title: string, message: string): void {
+  const box = createStatusBox(CSS_COLORS.error, {
+    text: '\u00D7',
+    color: CSS_COLORS.error,
+    extraStyles: { fontWeight: '600', fontSize: '0.875rem' },
+  });
 
   const textContainer = document.createElement('div');
   const titleEl = document.createElement('div');
@@ -533,7 +541,7 @@ export function addTooltipProgress(container: HTMLElement, text: string): void {
       color: CSS_COLORS.info,
       extraStyles: { fontWeight: '600', animation: 'pulse 1s infinite' },
     },
-    { alignItems: 'center' },
+    { alignItems: 'center' }
   );
 
   const textSpan = document.createElement('span');
@@ -564,7 +572,7 @@ export type ButtonTooltipHelpers = {
 function createBoundHelpers(
   state: DevBarState,
   tooltip: HTMLDivElement,
-  titleColor: string,
+  titleColor: string
 ): ButtonTooltipHelpers {
   return {
     addTitle: (title: string) => addTooltipTitle(state, tooltip, title, titleColor),
@@ -593,7 +601,7 @@ export function attachButtonTooltip(
 /** Build a color-coded thresholds section (good / needs work / poor) */
 function buildThresholdsSection(
   container: HTMLElement,
-  thresholds: { good: string; needsWork: string; poor: string },
+  thresholds: { good: string; needsWork: string; poor: string }
 ): void {
   addTooltipSectionHeader(container, 'Thresholds');
 

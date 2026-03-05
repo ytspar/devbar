@@ -42,10 +42,9 @@ describe('saveMarkdownArtifact', () => {
       timestamp: 1700000000000,
     });
 
-    expect(mockMkdir).toHaveBeenCalledWith(
-      expect.stringContaining('.tmp/sweetlink-screenshots'),
-      { recursive: true },
-    );
+    expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('.tmp/sweetlink-screenshots'), {
+      recursive: true,
+    });
   });
 
   it('writes the markdown file with correct frontmatter', async () => {
@@ -134,9 +133,7 @@ describe('saveMarkdownArtifact', () => {
     });
 
     // The filename should contain a date string derived from the timestamp
-    const expectedDateFragment = new Date(timestamp)
-      .toISOString()
-      .replace(/[:.]/g, '-');
+    const expectedDateFragment = new Date(timestamp).toISOString().replace(/[:.]/g, '-');
     expect(result).toContain(expectedDateFragment);
   });
 
@@ -163,7 +160,7 @@ describe('saveMarkdownArtifact', () => {
         url: 'https://example.com/',
         title: 'Test',
         timestamp: 1700000000000,
-      }),
+      })
     ).rejects.toThrow('Permission denied');
   });
 
@@ -177,7 +174,7 @@ describe('saveMarkdownArtifact', () => {
         url: 'https://example.com/',
         title: 'Test',
         timestamp: 1700000000000,
-      }),
+      })
     ).rejects.toThrow('Disk full');
   });
 });

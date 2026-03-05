@@ -4,12 +4,11 @@
  * Shared constants used by the devbar components.
  */
 
-import type { ThemeMode } from './types.js';
 import { DEPARTURE_MONO_WOFF2_BASE64 } from './font-data.js';
+import type { ThemeMode } from './types.js';
 
 // Re-export shared constants from sweetlink's browser modules to avoid pulling in Node.js-only code
 export { MAX_CONSOLE_LOGS } from '@ytspar/sweetlink/browser/consoleCapture';
-
 
 // ============================================================================
 // Reconnection Settings
@@ -29,7 +28,12 @@ export const MAX_RECONNECT_DELAY_MS = 30000;
 // ============================================================================
 
 // Re-export port constants from sweetlink
-export { DEFAULT_WS_PORT as WS_PORT, MAX_PORT_RETRIES, PORT_RETRY_DELAY_MS, WS_PORT_OFFSET } from '@ytspar/sweetlink/types';
+export {
+  DEFAULT_WS_PORT as WS_PORT,
+  MAX_PORT_RETRIES,
+  PORT_RETRY_DELAY_MS,
+  WS_PORT_OFFSET,
+} from '@ytspar/sweetlink/types';
 
 /** Delay before restarting port scan from base after all ports fail (ms) */
 export const PORT_SCAN_RESTART_DELAY_MS = 3000;

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ConsoleLog, ExecJsCommand, GetLogsCommand, QueryDomCommand, SweetlinkResponse } from '../../types.js';
+import type {
+  ConsoleLog,
+  ExecJsCommand,
+  GetLogsCommand,
+  QueryDomCommand,
+  SweetlinkResponse,
+} from '../../types.js';
 import { handleQueryDOM } from './dom.js';
 import { handleExecJS } from './exec.js';
 import { handleGetLogs } from './logs.js';

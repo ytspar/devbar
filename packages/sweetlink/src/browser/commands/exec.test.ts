@@ -6,7 +6,7 @@
  * script tag injection path.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { ExecJsCommand, SweetlinkResponse } from '../../types.js';
 import { handleExecJS } from './exec.js';
 

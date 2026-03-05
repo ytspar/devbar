@@ -6,7 +6,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RequestScreenshotCommand, ScreenshotCommand, SweetlinkResponse } from '../../types.js';
+import type {
+  RequestScreenshotCommand,
+  ScreenshotCommand,
+  SweetlinkResponse,
+} from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -42,8 +46,8 @@ vi.mock('../screenshotUtils.js', () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
+import { canvasToDataUrl, delay, prepareForCapture, scaleCanvas } from '../screenshotUtils.js';
 import { handleRequestScreenshot, handleScreenshot } from './screenshot.js';
-import { prepareForCapture, delay, scaleCanvas, canvasToDataUrl } from '../screenshotUtils.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
@@ -96,7 +100,7 @@ describe('handleScreenshot', () => {
         logging: false,
         useCORS: true,
         allowTaint: true,
-      }),
+      })
     );
   });
 
@@ -108,7 +112,7 @@ describe('handleScreenshot', () => {
     expect(d(result).selector).toBe('#app');
     expect(mockHtml2canvas).toHaveBeenCalledWith(
       document.querySelector('#app'),
-      expect.any(Object),
+      expect.any(Object)
     );
   });
 
@@ -136,7 +140,7 @@ describe('handleScreenshot', () => {
         scale: 2,
         logging: false,
         useCORS: true,
-      }),
+      })
     );
   });
 
@@ -204,7 +208,7 @@ describe('handleScreenshot', () => {
         useCORS: true,
         allowTaint: true,
         logging: false,
-      }),
+      })
     );
   });
 });
@@ -268,7 +272,7 @@ describe('handleRequestScreenshot', () => {
 
     expect(scaleCanvas).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ scale: 0.25 }),
+      expect.objectContaining({ scale: 0.25 })
     );
   });
 
@@ -281,7 +285,7 @@ describe('handleRequestScreenshot', () => {
 
     expect(scaleCanvas).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ scale: 0.5 }),
+      expect.objectContaining({ scale: 0.5 })
     );
   });
 
@@ -293,7 +297,7 @@ describe('handleRequestScreenshot', () => {
 
     expect(canvasToDataUrl).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ format: 'jpeg', quality: 0.7 }),
+      expect.objectContaining({ format: 'jpeg', quality: 0.7 })
     );
   });
 
@@ -306,7 +310,7 @@ describe('handleRequestScreenshot', () => {
 
     expect(canvasToDataUrl).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ format: 'png' }),
+      expect.objectContaining({ format: 'png' })
     );
   });
 
@@ -319,7 +323,7 @@ describe('handleRequestScreenshot', () => {
 
     expect(canvasToDataUrl).toHaveBeenCalledWith(
       expect.any(Object),
-      expect.objectContaining({ quality: 0.9 }),
+      expect.objectContaining({ quality: 0.9 })
     );
   });
 
@@ -418,7 +422,7 @@ describe('handleRequestScreenshot', () => {
     expect(d(result).selector).toBe('#target');
     expect(mockHtml2canvas).toHaveBeenCalledWith(
       document.querySelector('#target'),
-      expect.any(Object),
+      expect.any(Object)
     );
   });
 
@@ -447,7 +451,7 @@ describe('handleRequestScreenshot', () => {
         logging: false,
         useCORS: true,
         allowTaint: true,
-      }),
+      })
     );
   });
 

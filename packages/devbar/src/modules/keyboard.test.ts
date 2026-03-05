@@ -9,7 +9,8 @@ import type { DevBarState } from './types.js';
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
     options: {
-      showTooltips: true, saveLocation: 'auto',
+      showTooltips: true,
+      saveLocation: 'auto',
       showScreenshot: true,
       showConsoleBadges: true,
       position: 'bottom-left',

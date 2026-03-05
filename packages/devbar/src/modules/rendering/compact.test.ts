@@ -23,7 +23,7 @@ vi.mock('../tooltips.js', () => ({
 }));
 
 vi.mock('./buttons.js', () => ({
-  createConsoleBadge: vi.fn((state: any, type: string, count: number, color: string) => {
+  createConsoleBadge: vi.fn((_state: any, type: string, count: number, _color: string) => {
     const span = document.createElement('span');
     span.className = 'devbar-badge';
     span.dataset.type = type;
@@ -46,7 +46,7 @@ vi.mock('./buttons.js', () => ({
 
 vi.mock('./common.js', () => ({
   captureDotPosition: vi.fn(),
-  createConnectionIndicator: vi.fn((state: any) => {
+  createConnectionIndicator: vi.fn((_state: any) => {
     const indicator = document.createElement('span');
     indicator.className = 'devbar-clickable';
     const dot = document.createElement('span');
@@ -56,10 +56,10 @@ vi.mock('./common.js', () => ({
   }),
 }));
 
-import { renderCompact } from './compact.js';
 import { attachTextTooltip } from '../tooltips.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';
 import { captureDotPosition, createConnectionIndicator } from './common.js';
+import { renderCompact } from './compact.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
   return {
@@ -165,7 +165,14 @@ describe('renderCompact', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);
@@ -183,7 +190,14 @@ describe('renderCompact', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);
@@ -201,7 +215,14 @@ describe('renderCompact', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);
@@ -219,7 +240,14 @@ describe('renderCompact', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);
@@ -237,7 +265,14 @@ describe('renderCompact', () => {
         showScreenshot: true,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);
@@ -372,7 +407,14 @@ describe('renderCompact', () => {
         showScreenshot: false,
         showConsoleBadges: true,
         wsPort: 9223,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
       },
     });
     renderCompact(state);

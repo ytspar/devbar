@@ -27,7 +27,7 @@ vi.mock('../index.js', () => ({
 
 vi.mock('../../browser/screenshotUtils.js', () => ({
   extractBase64FromDataUrl: vi.fn((url: string) =>
-    url.replace(/^data:image\/(png|jpeg);base64,/, ''),
+    url.replace(/^data:image\/(png|jpeg);base64,/, '')
   ),
 }));
 
@@ -55,10 +55,9 @@ describe('handleSaveScreenshot', () => {
   it('creates the screenshot directory recursively', async () => {
     await handleSaveScreenshot(makeScreenshotData());
 
-    expect(mockMkdir).toHaveBeenCalledWith(
-      expect.stringContaining('.tmp/sweetlink-screenshots'),
-      { recursive: true },
-    );
+    expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('.tmp/sweetlink-screenshots'), {
+      recursive: true,
+    });
   });
 
   it('saves the screenshot as a binary JPEG file', async () => {
@@ -96,9 +95,7 @@ describe('handleSaveScreenshot', () => {
   });
 
   it('includes webVitals in metadata when provided', async () => {
-    await handleSaveScreenshot(
-      makeScreenshotData({ webVitals: { fcp: 120, lcp: 450 } }),
-    );
+    await handleSaveScreenshot(makeScreenshotData({ webVitals: { fcp: 120, lcp: 450 } }));
 
     const writeFileCalls = mockWriteFile.mock.calls;
     const metadata = JSON.parse(writeFileCalls[1][1]);
@@ -210,16 +207,12 @@ describe('handleSaveScreenshot', () => {
   it('propagates fs.mkdir errors', async () => {
     mockMkdir.mockRejectedValueOnce(new Error('Permission denied'));
 
-    await expect(handleSaveScreenshot(makeScreenshotData())).rejects.toThrow(
-      'Permission denied',
-    );
+    await expect(handleSaveScreenshot(makeScreenshotData())).rejects.toThrow('Permission denied');
   });
 
   it('propagates fs.writeFile errors', async () => {
     mockWriteFile.mockRejectedValueOnce(new Error('No space left'));
 
-    await expect(handleSaveScreenshot(makeScreenshotData())).rejects.toThrow(
-      'No space left',
-    );
+    await expect(handleSaveScreenshot(makeScreenshotData())).rejects.toThrow('No space left');
   });
 });

@@ -4,6 +4,7 @@
 
 import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
 import { BUTTON_COLORS, CSS_COLORS } from '../../constants.js';
+import type { ConsoleLog } from '../../types.js';
 import {
   createEmptyMessage,
   createModalBox,
@@ -12,17 +13,23 @@ import {
   createModalOverlay,
 } from '../../ui/index.js';
 import { consoleLogsToMarkdown, handleSaveConsoleLogs } from '../screenshot.js';
-import type { ConsoleLog } from '../../types.js';
 import type { DevBarState } from '../types.js';
 
-export function renderConsolePopup(state: DevBarState, consoleCaptureSingleton: ConsoleCapture): void {
+export function renderConsolePopup(
+  state: DevBarState,
+  consoleCaptureSingleton: ConsoleCapture
+): void {
   const filterType = state.consoleFilter;
   if (!filterType) return;
 
   const logs = consoleCaptureSingleton
     .getLogs()
     .filter((log: ConsoleLog) => log.level === filterType);
-  const colorMap = { error: BUTTON_COLORS.error, warn: BUTTON_COLORS.warning, info: BUTTON_COLORS.info };
+  const colorMap = {
+    error: BUTTON_COLORS.error,
+    warn: BUTTON_COLORS.warning,
+    info: BUTTON_COLORS.info,
+  };
   const color = colorMap[filterType];
   const labelMap = { error: 'Errors', warn: 'Warnings', info: 'Info' } as const;
   const label = labelMap[filterType];

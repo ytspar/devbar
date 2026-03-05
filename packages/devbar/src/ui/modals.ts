@@ -4,7 +4,13 @@
  * Modal creation utilities for the devbar UI.
  */
 
-import { CSS_COLORS, DEVBAR_THEME, MODAL_BOX_BASE_STYLES, MODAL_OVERLAY_STYLES, withAlpha } from '../constants.js';
+import {
+  CSS_COLORS,
+  DEVBAR_THEME,
+  MODAL_BOX_BASE_STYLES,
+  MODAL_OVERLAY_STYLES,
+  withAlpha,
+} from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
 import { createCloseButton, createStyledButton } from './buttons.js';
 
@@ -59,8 +65,18 @@ export function createModalBox(color: string): HTMLDivElement {
  * Create modal header with title, copy/save/close buttons
  */
 export function createModalHeader(config: ModalConfig): HTMLDivElement {
-  const { color, title, onClose, onCopyMd, onSave, onClear, sweetlinkConnected = false, saveLocation = 'auto', isSaving, savedPath } =
-    config;
+  const {
+    color,
+    title,
+    onClose,
+    onCopyMd,
+    onSave,
+    onClear,
+    sweetlinkConnected = false,
+    saveLocation = 'auto',
+    isSaving,
+    savedPath,
+  } = config;
   const effectiveSave = resolveSaveLocation(saveLocation, sweetlinkConnected);
 
   const header = document.createElement('div');

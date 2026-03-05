@@ -8,9 +8,9 @@
  * All server I/O is mocked.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
-import type { Plugin, ViteDevServer } from 'vite';
+import type { ViteDevServer } from 'vite';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -28,9 +28,8 @@ vi.mock('./server/index.js', () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { sweetlink, type SweetlinkPluginOptions } from './vite.js';
-import defaultExport from './vite.js';
 import { WS_PORT_OFFSET } from './types.js';
+import defaultExport, { sweetlink } from './vite.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -128,7 +127,7 @@ describe('sweetlink vite plugin', () => {
           expect.objectContaining({
             port: vitePort + WS_PORT_OFFSET,
             appPort: vitePort,
-          }),
+          })
         );
       });
     });
@@ -145,7 +144,7 @@ describe('sweetlink vite plugin', () => {
         expect(mockInitSweetlink).toHaveBeenCalledWith(
           expect.objectContaining({
             port: customPort,
-          }),
+          })
         );
       });
     });
@@ -165,7 +164,7 @@ describe('sweetlink vite plugin', () => {
           expect.objectContaining({
             port: 5173 + WS_PORT_OFFSET,
             appPort: 5173,
-          }),
+          })
         );
       });
     });
@@ -184,7 +183,7 @@ describe('sweetlink vite plugin', () => {
         expect(mockInitSweetlink).toHaveBeenCalledWith(
           expect.objectContaining({
             appPort: 5173,
-          }),
+          })
         );
       });
     });
@@ -219,9 +218,7 @@ describe('sweetlink vite plugin', () => {
       const expectedPort = 5173 + WS_PORT_OFFSET;
       call.onReady(expectedPort + 1);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Using port'),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Using port'));
       consoleSpy.mockRestore();
     });
 
@@ -244,9 +241,7 @@ describe('sweetlink vite plugin', () => {
       const expectedPort = 5173 + WS_PORT_OFFSET;
       call.onReady(expectedPort);
 
-      expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Using port'),
-      );
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using port'));
       consoleSpy.mockRestore();
     });
 
@@ -288,7 +283,7 @@ describe('sweetlink vite plugin', () => {
           expect.objectContaining({
             port: 3000 + WS_PORT_OFFSET,
             appPort: 3000,
-          }),
+          })
         );
       });
     });

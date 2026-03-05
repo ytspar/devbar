@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_WS_PORT, WS_PORT_OFFSET } from '../types.js';
 import {
   destroySweetlinkBridge,
   getSweetlinkBridge,

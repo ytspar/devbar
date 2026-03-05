@@ -108,10 +108,10 @@ vi.mock('../screenshot.js', () => ({
 }));
 
 import {
-  renderOutlineModal,
-  renderSchemaModal,
   renderA11yModal,
   renderDesignReviewConfirmModal,
+  renderOutlineModal,
+  renderSchemaModal,
 } from './modals.js';
 
 // ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ describe('renderOutlineModal', () => {
     const state = createMockState();
     renderOutlineModal(state);
 
-    expect(document.body.textContent).toContain('A'.repeat(60) + '...');
+    expect(document.body.textContent).toContain(`${'A'.repeat(60)}...`);
     expect(document.body.textContent).not.toContain('A'.repeat(61));
   });
 
@@ -602,7 +602,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 0, serious: 1, moderate: 0, minor: 0, total: 1 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 0,
+      serious: 1,
+      moderate: 0,
+      minor: 0,
+      total: 1,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', []],
@@ -648,7 +654,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 1, serious: 1, moderate: 0, minor: 0, total: 2 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 1,
+      serious: 1,
+      moderate: 0,
+      minor: 0,
+      total: 2,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', [violation2]],
@@ -685,7 +697,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 0, serious: 1, moderate: 0, minor: 0, total: 1 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 0,
+      serious: 1,
+      moderate: 0,
+      minor: 0,
+      total: 1,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', []],
@@ -826,7 +844,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 1, serious: 0, moderate: 0, minor: 0, total: 1 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 1,
+      serious: 0,
+      moderate: 0,
+      minor: 0,
+      total: 1,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', [violation]],
@@ -852,9 +876,7 @@ describe('renderA11yModal', () => {
       help: 'Images require alt attributes',
       helpUrl: 'url',
       tags: [],
-      nodes: [
-        { html: '<img src="test.png">', target: ['img'] },
-      ],
+      nodes: [{ html: '<img src="test.png">', target: ['img'] }],
     };
     mockRunA11yAudit.mockResolvedValue({
       violations: [violation],
@@ -864,7 +886,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 0, serious: 1, moderate: 0, minor: 0, total: 1 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 0,
+      serious: 1,
+      moderate: 0,
+      minor: 0,
+      total: 1,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', []],
@@ -905,7 +933,13 @@ describe('renderA11yModal', () => {
       timestamp: '2025-01-01T00:00:00Z',
       url: 'http://localhost:3000',
     });
-    mockGetViolationCounts.mockReturnValue({ critical: 0, serious: 0, moderate: 1, minor: 0, total: 1 });
+    mockGetViolationCounts.mockReturnValue({
+      critical: 0,
+      serious: 0,
+      moderate: 1,
+      minor: 0,
+      total: 1,
+    });
     mockGroupViolationsByImpact.mockReturnValue(
       new Map([
         ['critical', []],

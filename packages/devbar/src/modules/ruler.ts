@@ -146,7 +146,9 @@ export function activateRulerMode(state: DevBarState): () => void {
   let lastTarget: Element | null = null;
 
   function isDevbarElement(el: Element): boolean {
-    return !!el.closest('[data-devbar], [data-devbar-ruler], [data-devbar-overlay], [data-devbar-tooltip]');
+    return !!el.closest(
+      '[data-devbar], [data-devbar-ruler], [data-devbar-overlay], [data-devbar-tooltip]'
+    );
   }
 
   function handleMouseMove(e: MouseEvent) {

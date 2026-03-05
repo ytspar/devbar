@@ -105,20 +105,20 @@ vi.mock('./common.js', () => ({
   }),
 }));
 
-import { renderExpanded } from './expanded.js';
+import { getResponsiveMetricVisibility } from '../performance.js';
 import {
-  createScreenshotButton,
-  createAIReviewButton,
-  createOutlineButton,
-  createSchemaButton,
   createA11yButton,
-  createRulerButton,
-  createSettingsButton,
+  createAIReviewButton,
   createCompactToggleButton,
   createConsoleBadge,
+  createOutlineButton,
+  createRulerButton,
+  createSchemaButton,
+  createScreenshotButton,
+  createSettingsButton,
 } from './buttons.js';
 import { createConnectionIndicator } from './common.js';
-import { getResponsiveMetricVisibility } from '../performance.js';
+import { renderExpanded } from './expanded.js';
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -583,9 +583,7 @@ describe('renderExpanded', () => {
   it('renders custom controls row when controls are provided', () => {
     const state = createMockState();
     const onClick = vi.fn();
-    renderExpanded(state, [
-      { id: 'test', label: 'Test Button', onClick },
-    ]);
+    renderExpanded(state, [{ id: 'test', label: 'Test Button', onClick }]);
 
     // Main row + custom controls row
     expect(state.container!.children.length).toBe(2);
@@ -596,9 +594,7 @@ describe('renderExpanded', () => {
   it('custom control button calls onClick handler', () => {
     const state = createMockState();
     const onClick = vi.fn();
-    renderExpanded(state, [
-      { id: 'my-btn', label: 'My Action', onClick },
-    ]);
+    renderExpanded(state, [{ id: 'my-btn', label: 'My Action', onClick }]);
 
     const customRow = state.container!.children[1] as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
@@ -611,9 +607,7 @@ describe('renderExpanded', () => {
   it('disabled custom control does not call onClick', () => {
     const state = createMockState();
     const onClick = vi.fn();
-    renderExpanded(state, [
-      { id: 'disabled-btn', label: 'Disabled', onClick, disabled: true },
-    ]);
+    renderExpanded(state, [{ id: 'disabled-btn', label: 'Disabled', onClick, disabled: true }]);
 
     const customRow = state.container!.children[1] as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
@@ -625,9 +619,7 @@ describe('renderExpanded', () => {
 
   it('active custom control has styled background', () => {
     const state = createMockState();
-    renderExpanded(state, [
-      { id: 'active', label: 'Active', onClick: vi.fn(), active: true },
-    ]);
+    renderExpanded(state, [{ id: 'active', label: 'Active', onClick: vi.fn(), active: true }]);
 
     const customRow = state.container!.children[1] as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
@@ -737,9 +729,7 @@ describe('renderExpanded', () => {
 
   it('custom control hover sets color to accent on mouseenter', () => {
     const state = createMockState();
-    renderExpanded(state, [
-      { id: 'hover', label: 'Hoverable', onClick: vi.fn() },
-    ]);
+    renderExpanded(state, [{ id: 'hover', label: 'Hoverable', onClick: vi.fn() }]);
 
     const customRow = state.container!.children[1] as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;

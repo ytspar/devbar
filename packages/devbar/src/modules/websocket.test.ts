@@ -5,8 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { connectWebSocket, handleNotification } from './websocket.js';
 import type { DevBarState } from './types.js';
+import { connectWebSocket, handleNotification } from './websocket.js';
 
 /** Create a minimal mock DevBarState for testing */
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
@@ -202,7 +202,9 @@ describe('connectWebSocket', () => {
 
     const ws = instances[0];
     // Simulate server-info that matches our app port
-    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: 3000, projectDir: '/proj' }) });
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'server-info', appPort: 3000, projectDir: '/proj' }),
+    });
 
     expect(state.wsVerified).toBe(true);
     expect(state.sweetlinkConnected).toBe(true);
@@ -584,7 +586,7 @@ describe('connectWebSocket - port scan exhaustion', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith(
       '[GlobalDevBar] Error handling command:',
-      expect.any(SyntaxError),
+      expect.any(SyntaxError)
     );
     consoleSpy.mockRestore();
   });
@@ -707,7 +709,8 @@ describe('connectWebSocket - port scan exhaustion', () => {
     ws.onmessage!({ data: JSON.stringify({ type: 'get-logs' }) });
     // No error should be thrown, and no ws.send should be called after the initial load-settings
     const sendCallsAfterSetup = ws.send.mock.calls.filter(
-      (call: string[]) => !call[0].includes('browser-client-ready') && !call[0].includes('load-settings')
+      (call: string[]) =>
+        !call[0].includes('browser-client-ready') && !call[0].includes('load-settings')
     );
     expect(sendCallsAfterSetup).toHaveLength(0);
   });
@@ -756,7 +759,7 @@ describe('connectWebSocket - port scan exhaustion', () => {
     expect(state.designReviewError).toBe('API key missing');
     expect(consoleSpy).toHaveBeenCalledWith(
       '[GlobalDevBar] Design review failed:',
-      'API key missing',
+      'API key missing'
     );
 
     consoleSpy.mockRestore();
@@ -832,7 +835,7 @@ describe('connectWebSocket - port scan exhaustion', () => {
     expect(state.savingConsoleLogs).toBe(false);
     expect(consoleSpy).toHaveBeenCalledWith(
       '[GlobalDevBar] Console logs save failed:',
-      'Disk full',
+      'Disk full'
     );
     expect(state.render).toHaveBeenCalled();
 
@@ -857,10 +860,7 @@ describe('connectWebSocket - port scan exhaustion', () => {
     });
 
     expect(state.savingA11yAudit).toBe(false);
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[GlobalDevBar] A11y save failed:',
-      'axe-core failed',
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('[GlobalDevBar] A11y save failed:', 'axe-core failed');
 
     consoleSpy.mockRestore();
   });
@@ -881,10 +881,9 @@ describe('connectWebSocket - port scan exhaustion', () => {
       data: JSON.stringify({ type: 'settings-saved', settingsPath: '/proj/.devbar/settings.json' }),
     });
 
-    expect(state.debug.state).toHaveBeenCalledWith(
-      'Settings saved to server',
-      { path: '/proj/.devbar/settings.json' },
-    );
+    expect(state.debug.state).toHaveBeenCalledWith('Settings saved to server', {
+      path: '/proj/.devbar/settings.json',
+    });
   });
 
   it('handles settings-error command', () => {
@@ -906,7 +905,7 @@ describe('connectWebSocket - port scan exhaustion', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith(
       '[GlobalDevBar] Settings operation failed:',
-      'Permission denied',
+      'Permission denied'
     );
 
     consoleSpy.mockRestore();

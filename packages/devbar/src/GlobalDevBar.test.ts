@@ -577,12 +577,9 @@ vi.mock('./modules/theme.js', () => ({
 }));
 
 // Dynamic import after mocks are set up
-const {
-  GlobalDevBar,
-  initGlobalDevBar,
-  getGlobalDevBar,
-  destroyGlobalDevBar,
-} = await import('./GlobalDevBar.js');
+const { GlobalDevBar, initGlobalDevBar, getGlobalDevBar, destroyGlobalDevBar } = await import(
+  './GlobalDevBar.js'
+);
 
 // ============================================================================
 // Constructor & Options Defaults
@@ -950,9 +947,7 @@ describe('GlobalDevBar applySettings', () => {
 describe('GlobalDevBar clearConsoleLogs', () => {
   it('should clear consoleLogs array', () => {
     const bar = new GlobalDevBar();
-    bar.consoleLogs = [
-      { level: 'error', message: 'test error', timestamp: Date.now(), args: [] },
-    ];
+    bar.consoleLogs = [{ level: 'error', message: 'test error', timestamp: Date.now(), args: [] }];
     bar.consoleFilter = 'error';
 
     bar.clearConsoleLogs();

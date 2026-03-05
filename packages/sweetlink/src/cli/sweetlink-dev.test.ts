@@ -39,12 +39,14 @@ let signalHandlers: Record<string, (() => void)[]>;
 
 function captureSignalHandlers() {
   signalHandlers = { SIGTERM: [], SIGINT: [] };
-  vi.spyOn(process, 'on').mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
-    if (event === 'SIGTERM' || event === 'SIGINT') {
-      signalHandlers[event].push(handler as () => void);
+  vi.spyOn(process, 'on').mockImplementation(
+    (event: string, handler: (...args: unknown[]) => void) => {
+      if (event === 'SIGTERM' || event === 'SIGINT') {
+        signalHandlers[event].push(handler as () => void);
+      }
+      return process;
     }
-    return process;
-  });
+  );
 }
 
 /**
@@ -110,7 +112,7 @@ describe('sweetlink-dev CLI', () => {
     expect(mockDotenvConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         path: expect.stringContaining('.env'),
-      }),
+      })
     );
   });
 
@@ -119,9 +121,7 @@ describe('sweetlink-dev CLI', () => {
     delete process.env.PORT;
     await loadModule();
 
-    expect(mockInitSweetlink).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 9223 }),
-    );
+    expect(mockInitSweetlink).toHaveBeenCalledWith(expect.objectContaining({ port: 9223 }));
   });
 
   it('uses SWEETLINK_WS_PORT when set', async () => {
@@ -129,9 +129,7 @@ describe('sweetlink-dev CLI', () => {
     delete process.env.PORT;
     await loadModule();
 
-    expect(mockInitSweetlink).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 9500 }),
-    );
+    expect(mockInitSweetlink).toHaveBeenCalledWith(expect.objectContaining({ port: 9500 }));
   });
 
   it('passes appPort from PORT environment variable', async () => {
@@ -140,7 +138,7 @@ describe('sweetlink-dev CLI', () => {
     await loadModule();
 
     expect(mockInitSweetlink).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 9223, appPort: 3000 }),
+      expect.objectContaining({ port: 9223, appPort: 3000 })
     );
   });
 
@@ -149,9 +147,7 @@ describe('sweetlink-dev CLI', () => {
     delete process.env.PORT;
     await loadModule();
 
-    expect(mockInitSweetlink).toHaveBeenCalledWith(
-      expect.objectContaining({ appPort: undefined }),
-    );
+    expect(mockInitSweetlink).toHaveBeenCalledWith(expect.objectContaining({ appPort: undefined }));
   });
 
   it('logs startup messages to console', async () => {

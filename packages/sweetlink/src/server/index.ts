@@ -279,7 +279,7 @@ interface MessageHandlerContext {
 type MessageHandler = (
   command: SweetlinkCommand,
   ctx: MessageHandlerContext
-) => Promise<boolean | void> | boolean | void;
+) => Promise<boolean | undefined> | boolean | undefined;
 
 // ============================================================================
 // Browser Command Helper
@@ -337,10 +337,7 @@ function browserCommand<TData, TResult>(opts: {
 // ============================================================================
 
 /** Handle browser client identification */
-function handleBrowserClientReady(
-  _command: SweetlinkCommand,
-  ctx: MessageHandlerContext
-): boolean {
+function handleBrowserClientReady(_command: SweetlinkCommand, ctx: MessageHandlerContext): boolean {
   const clientInfo = clients.get(ctx.ws);
   clients.set(ctx.ws, { type: 'browser', id: ctx.clientId, origin: clientInfo?.origin });
   console.log(`[Sweetlink] Browser client identified: ${ctx.clientId}`);
@@ -575,7 +572,10 @@ function handleSubscribe(command: ChannelSubscribeCommand, ctx: MessageHandlerCo
 }
 
 /** Handle channel unsubscription */
-function handleUnsubscribe(command: ChannelUnsubscribeCommand, ctx: MessageHandlerContext): boolean {
+function handleUnsubscribe(
+  command: ChannelUnsubscribeCommand,
+  ctx: MessageHandlerContext
+): boolean {
   const channel = command.channel;
   if (channel && channelSubscriptions.has(channel)) {
     const subs = channelSubscriptions.get(channel)!;
@@ -670,9 +670,7 @@ function handleLogEvent(command: LogEventCommand, ctx: MessageHandlerContext): b
           const regex = safeRegex(sub.filters.pattern);
           if (!regex.test(log.message)) continue;
         } catch {
-          console.warn(
-            `[Sweetlink] Skipping invalid regex pattern: ${sub.filters.pattern}`
-          );
+          console.warn(`[Sweetlink] Skipping invalid regex pattern: ${sub.filters.pattern}`);
         }
       }
       if (sub.filters.source && log.source !== sub.filters.source) continue;
@@ -715,8 +713,8 @@ const messageHandlers: Record<string, MessageHandler> = {
   'load-settings': handleLoadSettingsMsg,
   'request-screenshot': handleRequestScreenshot as MessageHandler,
   'screenshot-response': handleScreenshotResponse as MessageHandler,
-  'subscribe': handleSubscribe as MessageHandler,
-  'unsubscribe': handleUnsubscribe as MessageHandler,
+  subscribe: handleSubscribe as MessageHandler,
+  unsubscribe: handleUnsubscribe as MessageHandler,
   'log-subscribe': handleLogSubscribe as MessageHandler,
   'log-unsubscribe': handleLogUnsubscribe as MessageHandler,
   'hmr-screenshot': handleHmrScreenshotMsg as MessageHandler,
@@ -769,7 +767,9 @@ function setupServerHandlers(server: WebSocketServer): void {
 
     // Validate origin - only accept localhost connections
     if (!origin) {
-      console.warn(`[Sweetlink] Connection from ${clientId} has no Origin header (non-browser client)`);
+      console.warn(
+        `[Sweetlink] Connection from ${clientId} has no Origin header (non-browser client)`
+      );
     }
     if (origin) {
       const isLocalhost =
@@ -871,7 +871,7 @@ export function closeSweetlink(): Promise<void> {
 
     // Broadcast shutdown notice to all connected clients before closing.
     // CLI clients monitoring this connection can use this to abort in-flight work.
-    clients.forEach((info, client) => {
+    clients.forEach((_info, client) => {
       if (client.readyState === WebSocket.OPEN) {
         try {
           client.send(JSON.stringify({ type: 'server-shutdown', timestamp: Date.now() }));

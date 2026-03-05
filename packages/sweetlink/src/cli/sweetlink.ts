@@ -16,23 +16,24 @@ import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
 import type {
-  ScreenshotData,
-  QueryData,
-  LogsData,
-  ExecData,
+  A11yData,
+  CleanupData,
   ClickData,
+  ExecData,
+  LogsData,
+  NetworkData,
+  OutlineData,
+  QueryData,
   RefreshData,
   RulerData,
-  NetworkData,
   SchemaData,
-  OutlineData,
-  A11yData,
-  VitalsData,
-  CleanupData,
-  WaitData,
+  ScreenshotData,
   StatusData,
+  VitalsData,
+  WaitData,
 } from './outputSchemas.js';
 import { emitJson, printOutputSchema } from './outputSchemas.js';
+
 const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
 
 /**
@@ -229,7 +230,10 @@ async function waitForServer(
   );
 }
 
-async function sendCommand(command: SweetlinkCommand, timeoutMs: number = DEFAULT_TIMEOUT): Promise<SweetlinkResponse> {
+async function sendCommand(
+  command: SweetlinkCommand,
+  timeoutMs: number = DEFAULT_TIMEOUT
+): Promise<SweetlinkResponse> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
 
@@ -282,10 +286,7 @@ async function navigateBrowser(
 ): Promise<boolean> {
   // 1. Check current URL
   try {
-    const response = await sendCommand(
-      { type: 'exec-js', code: 'window.location.href' },
-      3000
-    );
+    const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
     if (response.success && response.data != null) {
       const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
       if (urlsMatch(currentUrl, url)) {
@@ -315,10 +316,7 @@ async function navigateBrowser(
   while (Date.now() - startTime < timeout) {
     await new Promise((resolve) => setTimeout(resolve, NAVIGATE_POLL_INTERVAL));
     try {
-      const response = await sendCommand(
-        { type: 'exec-js', code: 'window.location.href' },
-        3000
-      );
+      const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
       if (response.success) {
         // Give devbar time to fully initialize after page load
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -359,7 +357,9 @@ async function waitForSelector(
         const data = response.data as Record<string, unknown>;
         const count = data.count as number;
         if (count > 0) {
-          console.log(`[Sweetlink] ✓ Selector found (${count} element${count > 1 ? 's' : ''}, ${Date.now() - startTime}ms)`);
+          console.log(
+            `[Sweetlink] ✓ Selector found (${count} element${count > 1 ? 's' : ''}, ${Date.now() - startTime}ms)`
+          );
           return;
         }
       }
@@ -399,7 +399,13 @@ async function takePlaywrightScreenshot(
     url: options.url,
   });
   reportScreenshotSuccess(outputPath, result.width, result.height, method, options.selector);
-  return { path: getRelativePath(outputPath), width: result.width, height: result.height, method, selector: options.selector };
+  return {
+    path: getRelativePath(outputPath),
+    width: result.width,
+    height: result.height,
+    method,
+    selector: options.selector,
+  };
 }
 
 async function screenshot(options: {
@@ -553,16 +559,33 @@ async function screenshot(options: {
     const base64Data = (data.screenshot as string).replace(/^data:image\/png;base64,/, '');
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
-    reportScreenshotSuccess(outputPath, data.width as number, data.height as number, 'WebSocket (html2canvas)', data.selector as string | undefined);
+    reportScreenshotSuccess(
+      outputPath,
+      data.width as number,
+      data.height as number,
+      'WebSocket (html2canvas)',
+      data.selector as string | undefined
+    );
 
-    return { path: getRelativePath(outputPath), width: data.width as number, height: data.height as number, method: 'WebSocket (html2canvas)', selector: data.selector as string | undefined };
+    return {
+      path: getRelativePath(outputPath),
+      width: data.width as number,
+      height: data.height as number,
+      method: 'WebSocket (html2canvas)',
+      selector: data.selector as string | undefined,
+    };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }
 
-async function queryDOM(options: { selector: string; property?: string; waitFor?: string; waitTimeout?: number }): Promise<QueryData> {
+async function queryDOM(options: {
+  selector: string;
+  property?: string;
+  waitFor?: string;
+  waitTimeout?: number;
+}): Promise<QueryData> {
   // Wait for selector if requested (handles hydration timing)
   if (options.waitFor) {
     await waitForSelector(options.waitFor, options.waitTimeout);
@@ -625,7 +648,11 @@ async function queryDOM(options: { selector: string; property?: string; waitFor?
       console.log(JSON.stringify(data.results, null, 2));
     }
 
-    return { count: data.count as number, results: data.results as unknown[], property: options.property };
+    return {
+      count: data.count as number,
+      results: data.results as unknown[],
+      property: options.property,
+    };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -714,9 +741,7 @@ function renderLogsAsText(logs: LogEntry[], dedupedLogs: DedupedLog[] | null): v
     logs.forEach((log) => {
       const levelColor = LEVEL_COLORS[log.level] || '\x1b[37m';
       const time = new Date(log.timestamp).toLocaleTimeString();
-      console.log(
-        `  ${levelColor}[${log.level.toUpperCase()}]${reset} ${time} - ${log.message}`
-      );
+      console.log(`  ${levelColor}[${log.level.toUpperCase()}]${reset} ${time} - ${log.message}`);
     });
   }
 }
@@ -760,7 +785,13 @@ async function getLogs(options: {
       } else {
         console.log(jsonStr);
       }
-      return { total: logs.length, format: 'json', deduped: !!options.dedupe, logs: processedLogs, outputPath: options.output };
+      return {
+        total: logs.length,
+        format: 'json',
+        deduped: !!options.dedupe,
+        logs: processedLogs,
+        outputPath: options.output,
+      };
     }
 
     // Summary format - deduplicated with counts, optimized for LLM context
@@ -789,14 +820,26 @@ async function getLogs(options: {
       } else {
         console.log(summaryStr);
       }
-      return { total: logs.length, format: 'summary', deduped: true, logs: deduped, outputPath: options.output };
+      return {
+        total: logs.length,
+        format: 'summary',
+        deduped: true,
+        logs: deduped,
+        outputPath: options.output,
+      };
     }
 
     // Default text format
     const displayLogs = options.dedupe ? deduplicateLogs(logs) : null;
     renderLogsAsText(logs, displayLogs);
 
-    return { total: logs.length, format: 'text', deduped: !!options.dedupe, logs: displayLogs || logs, outputPath: undefined };
+    return {
+      total: logs.length,
+      format: 'text',
+      deduped: !!options.dedupe,
+      logs: displayLogs || logs,
+      outputPath: undefined,
+    };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -816,7 +859,7 @@ function isCspError(error?: string): boolean {
  * Playwright's page.evaluate runs via DevTools protocol, which is not subject to CSP.
  */
 async function execViaPlaywright(code: string): Promise<unknown> {
-  let playwrightModule;
+  let playwrightModule: typeof import('playwright');
   try {
     playwrightModule = await import('playwright');
   } catch {
@@ -826,7 +869,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
   }
 
   const CDP_URL = process.env.CHROME_CDP_URL || 'http://localhost:9222';
-  let browser;
+  let browser: Awaited<ReturnType<typeof playwrightModule.chromium.connectOverCDP>>;
 
   // Try connecting to existing Chrome CDP first (reuse browser, don't close it)
   try {
@@ -838,7 +881,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
 
   try {
     const contexts = browser.contexts();
-    let page;
+    let page: Awaited<ReturnType<typeof browser.newPage>> | undefined;
 
     if (contexts.length > 0) {
       const pages = contexts[0]!.pages();
@@ -892,7 +935,11 @@ async function execViaPlaywrightOrExit(code: string): Promise<unknown> {
   }
 }
 
-async function execJS(options: { code: string; waitFor?: string; waitTimeout?: number }): Promise<ExecData> {
+async function execJS(options: {
+  code: string;
+  waitFor?: string;
+  waitTimeout?: number;
+}): Promise<ExecData> {
   // Wait for selector if requested (handles hydration timing)
   if (options.waitFor) {
     await waitForSelector(options.waitFor, options.waitTimeout);
@@ -936,7 +983,12 @@ async function execJS(options: { code: string; waitFor?: string; waitTimeout?: n
  * Generate JavaScript code that finds elements and clicks the one at the given index.
  * Parameterized by the element-finding strategy: text content search or CSS selector.
  */
-function generateClickCode(strategy: { type: 'text'; text: string; selector: string } | { type: 'selector'; selector: string }, index: number): string {
+function generateClickCode(
+  strategy:
+    | { type: 'text'; text: string; selector: string }
+    | { type: 'selector'; selector: string },
+  index: number
+): string {
   // The element-finding expression differs, but the bounds-check + click + return is shared
   const escapedSelector = JSON.stringify(strategy.selector);
   let findExpression: string;
@@ -967,7 +1019,11 @@ function generateClickCode(strategy: { type: 'text'; text: string; selector: str
     `;
 }
 
-async function click(options: { selector?: string; text?: string; index?: number }): Promise<ClickData> {
+async function click(options: {
+  selector?: string;
+  text?: string;
+  index?: number;
+}): Promise<ClickData> {
   const { selector, text, index = 0 } = options;
 
   if (!selector && !text) {
@@ -1007,7 +1063,12 @@ async function click(options: { selector?: string; text?: string; index?: number
       if (isCspError(response.error)) {
         console.log('[Sweetlink] CSP blocked eval, falling back to Playwright...');
         const playwrightResult = await execViaPlaywrightOrExit(clickCode.trim());
-        const result = playwrightResult as { success?: boolean; clicked?: string; found?: number; error?: string } | null;
+        const result = playwrightResult as {
+          success?: boolean;
+          clicked?: string;
+          found?: number;
+          error?: string;
+        } | null;
         if (result && typeof result === 'object' && 'success' in result) {
           if (!result.success) {
             console.error(`[Sweetlink] ✗ ${result.error}`);
@@ -1035,7 +1096,12 @@ async function click(options: { selector?: string; text?: string; index?: number
     }
 
     if (typeof result === 'object' && 'success' in result) {
-      const clickResult = result as { success?: boolean; clicked?: string; found?: number; error?: string };
+      const clickResult = result as {
+        success?: boolean;
+        clicked?: string;
+        found?: number;
+        error?: string;
+      };
       if (!clickResult.success) {
         console.error(`[Sweetlink] ✗ ${clickResult.error}`);
         process.exit(1);
@@ -1153,7 +1219,12 @@ async function ruler(options: {
       }
     }
 
-    return { summary: result.summary, alignment: result.alignment, results: result.results, screenshotPath: result.screenshotPath };
+    return {
+      summary: result.summary,
+      alignment: result.alignment,
+      results: result.results,
+      screenshotPath: result.screenshotPath,
+    };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
@@ -1439,7 +1510,10 @@ async function cleanup(options: { force?: boolean; verbose?: boolean }): Promise
   return { found: foundServers.length, closed: closedCount, failed: failedCount };
 }
 
-async function getSchema(options: { format?: 'text' | 'json'; output?: string }): Promise<SchemaData> {
+async function getSchema(options: {
+  format?: 'text' | 'json';
+  output?: string;
+}): Promise<SchemaData> {
   console.log('[Sweetlink] Extracting page schema...');
 
   try {
@@ -1478,7 +1552,10 @@ async function getSchema(options: { format?: 'text' | 'json'; output?: string })
   }
 }
 
-async function getOutline(options: { format?: 'text' | 'json' | 'markdown'; output?: string }): Promise<OutlineData> {
+async function getOutline(options: {
+  format?: 'text' | 'json' | 'markdown';
+  output?: string;
+}): Promise<OutlineData> {
   console.log('[Sweetlink] Extracting document outline...');
 
   try {
@@ -1550,9 +1627,16 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }): 
       console.log(`  Violations: ${summary.totalViolations}`);
       console.log(`  Passes: ${summary.totalPasses}`);
       console.log(`  Incomplete: ${summary.totalIncomplete}`);
-      console.log(`  By Impact: critical=${byImpact.critical}, serious=${byImpact.serious}, moderate=${byImpact.moderate}, minor=${byImpact.minor}`);
+      console.log(
+        `  By Impact: critical=${byImpact.critical}, serious=${byImpact.serious}, moderate=${byImpact.moderate}, minor=${byImpact.minor}`
+      );
 
-      const violations = result.violations as { impact: string; help: string; description: string; nodes: unknown[] }[];
+      const violations = result.violations as {
+        impact: string;
+        help: string;
+        description: string;
+        nodes: unknown[];
+      }[];
       if (violations.length > 0) {
         console.log('\n  Violations:');
         const impactOrder = ['critical', 'serious', 'moderate', 'minor'];
@@ -1565,9 +1649,7 @@ async function getA11y(options: { format?: 'text' | 'json'; output?: string }): 
         const reset = '\x1b[0m';
 
         for (const impact of impactOrder) {
-          const filtered = violations.filter(
-            (v) => v.impact === impact
-          );
+          const filtered = violations.filter((v) => v.impact === impact);
           if (filtered.length === 0) continue;
 
           for (const v of filtered) {
@@ -1976,7 +2058,7 @@ function showCommandHelp(command: string): void {
 // CLI argument parsing
 const args = process.argv.slice(2);
 // Skip global flags to find the actual command
-const commandType = args.find(a => !a.startsWith('--')) || args[0];
+const commandType = args.find((a) => !a.startsWith('--')) || args[0];
 
 if (!commandType || commandType === '--help' || commandType === '-h') {
   showHelp();
@@ -2002,9 +2084,31 @@ if (hasFlag('--help') || hasFlag('-h')) {
 // Handle --output-schema before main switch
 if (hasFlag('--output-schema')) {
   // If commandType is a known command, print just that schema; otherwise print all
-  const knownCommands = ['screenshot', 'query', 'logs', 'exec', 'click', 'refresh', 'ruler', 'measure', 'network', 'schema', 'outline', 'a11y', 'accessibility', 'vitals', 'cleanup', 'wait', 'status'];
+  const knownCommands = [
+    'screenshot',
+    'query',
+    'logs',
+    'exec',
+    'click',
+    'refresh',
+    'ruler',
+    'measure',
+    'network',
+    'schema',
+    'outline',
+    'a11y',
+    'accessibility',
+    'vitals',
+    'cleanup',
+    'wait',
+    'status',
+  ];
   const schemaCommand = knownCommands.includes(commandType)
-    ? (commandType === 'measure' ? 'ruler' : commandType === 'accessibility' ? 'a11y' : commandType)
+    ? commandType === 'measure'
+      ? 'ruler'
+      : commandType === 'accessibility'
+        ? 'a11y'
+        : commandType
     : undefined;
   printOutputSchema(schemaCommand);
   process.exit(0);
@@ -2016,21 +2120,30 @@ const jsonMode = hasFlag('--json');
  * Set up JSON mode: suppress console.log/warn, capture errors, and intercept process.exit
  * to emit structured JSON envelopes on failure.
  */
-function setupJsonMode(command: string, startTime: number): { origExit: typeof process.exit; getLastError: () => string } {
+function setupJsonMode(
+  command: string,
+  startTime: number
+): { origExit: typeof process.exit; getLastError: () => string } {
   console.log = () => {};
   console.warn = () => {};
 
   let lastErrorMsg = '';
   const origError = console.error;
   console.error = (...errorArgs: unknown[]) => {
-    lastErrorMsg = errorArgs.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+    lastErrorMsg = errorArgs.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
     origError(...errorArgs);
   };
 
   const origExit = process.exit;
   process.exit = ((code?: number) => {
     if (code && code !== 0) {
-      emitJson({ ok: false, command, data: null, error: lastErrorMsg || `Process exited with code ${code}`, duration: Date.now() - startTime });
+      emitJson({
+        ok: false,
+        command,
+        data: null,
+        error: lastErrorMsg || `Process exited with code ${code}`,
+        duration: Date.now() - startTime,
+      });
     }
     origExit(code);
   }) as typeof process.exit;
@@ -2138,7 +2251,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           selector,
           property: getArg('--property'),
           waitFor: getArg('--wait-for'),
-          waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+          waitTimeout: getArg('--wait-timeout')
+            ? parseInt(getArg('--wait-timeout')!, 10)
+            : undefined,
         });
         break;
       }
@@ -2170,7 +2285,9 @@ async function handleStatusCommand(): Promise<StatusData> {
         result = await execJS({
           code,
           waitFor: getArg('--wait-for'),
-          waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+          waitTimeout: getArg('--wait-timeout')
+            ? parseInt(getArg('--wait-timeout')!, 10)
+            : undefined,
         });
         break;
       }
@@ -2267,7 +2384,13 @@ async function handleStatusCommand(): Promise<StatusData> {
         // Run the setup script to symlink Claude context and skills
         const { execFileSync } = await import('child_process');
         const scriptDir = path.dirname(import.meta.url.replace('file://', ''));
-        const setupScript = path.resolve(scriptDir, '..', '..', 'scripts', 'setup-claude-context.mjs');
+        const setupScript = path.resolve(
+          scriptDir,
+          '..',
+          '..',
+          'scripts',
+          'setup-claude-context.mjs'
+        );
         execFileSync('node', [setupScript], { stdio: 'inherit' });
         break;
       }
@@ -2284,7 +2407,13 @@ async function handleStatusCommand(): Promise<StatusData> {
   } catch (error) {
     if (jsonMode) {
       const msg = error instanceof Error ? error.message : String(error);
-      emitJson({ ok: false, command: commandType, data: null, error: msg, duration: Date.now() - startTime });
+      emitJson({
+        ok: false,
+        command: commandType,
+        data: null,
+        error: msg,
+        duration: Date.now() - startTime,
+      });
       origExit(1);
     }
     console.error('[Sweetlink] Fatal error:', error);

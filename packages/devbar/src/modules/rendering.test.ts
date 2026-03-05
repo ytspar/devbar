@@ -90,7 +90,14 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         position: 'bottom-left',
         themeMode: 'system',
         compactMode: false,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
         showScreenshot: true,
         showConsoleBadges: true,
         showTooltips: true,
@@ -238,11 +245,7 @@ describe('render collapsed state', () => {
     state.getLogCounts = vi.fn(() => ({ errorCount: 3, warningCount: 0, infoCount: 0 }));
     render(state, createMockConsoleCapture(), []);
 
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
-      3,
-      'rgba(239, 68, 68, 0.95)',
-      '-6px',
-    );
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(3, 'rgba(239, 68, 68, 0.95)', '-6px');
   });
 
   it('shifts error badge position when warning badge also exists', () => {
@@ -251,17 +254,9 @@ describe('render collapsed state', () => {
     render(state, createMockConsoleCapture(), []);
 
     // Error badge should be shifted left (12px instead of -6px)
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
-      2,
-      'rgba(239, 68, 68, 0.95)',
-      '12px',
-    );
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(2, 'rgba(239, 68, 68, 0.95)', '12px');
     // Warning badge at standard position
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
-      1,
-      'rgba(245, 158, 11, 0.95)',
-      '-6px',
-    );
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(1, 'rgba(245, 158, 11, 0.95)', '-6px');
   });
 
   it('expands on click', () => {
@@ -441,9 +436,7 @@ describe('render expanded state', () => {
 
   it('renders custom controls row when custom controls provided', () => {
     const state = createMockState();
-    const controls = [
-      { id: 'test', label: 'Test Button', onClick: vi.fn() },
-    ];
+    const controls = [{ id: 'test', label: 'Test Button', onClick: vi.fn() }];
     render(state, createMockConsoleCapture(), controls);
 
     const buttons = state.container!.querySelectorAll('button');

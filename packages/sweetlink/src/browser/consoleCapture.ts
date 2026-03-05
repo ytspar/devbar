@@ -51,7 +51,11 @@ export interface ConsoleCaptureConfig {
 /**
  * Listener callback for log count changes
  */
-export type LogChangeListener = (errorCount: number, warningCount: number, infoCount: number) => void;
+export type LogChangeListener = (
+  errorCount: number,
+  warningCount: number,
+  infoCount: number
+) => void;
 
 // ============================================================================
 // Formatting Utilities
@@ -296,7 +300,10 @@ export class ConsoleCapture {
     const earlyLogs: ConsoleLog[] = window.__sweetlinkEarlyLogs.map((log) => ({
       level: log.level,
       message: log.message,
-      timestamp: typeof log.timestamp === 'string' ? new Date(log.timestamp).getTime() : Number(log.timestamp),
+      timestamp:
+        typeof log.timestamp === 'string'
+          ? new Date(log.timestamp).getTime()
+          : Number(log.timestamp),
     }));
 
     this.importLogs(earlyLogs);
@@ -342,9 +349,10 @@ export class ConsoleCapture {
       const reason = event.reason;
       this.addLog({
         level: 'error',
-        message: reason instanceof Error
-          ? `Unhandled rejection: ${reason.name}: ${reason.message}`
-          : `Unhandled rejection: ${String(reason)}`,
+        message:
+          reason instanceof Error
+            ? `Unhandled rejection: ${reason.name}: ${reason.message}`
+            : `Unhandled rejection: ${String(reason)}`,
         timestamp: Date.now(),
         stack: reason?.stack,
       });
@@ -357,7 +365,11 @@ export class ConsoleCapture {
       // Only handle resource errors, not JS errors (those are ErrorEvent)
       if (event instanceof ErrorEvent) return;
 
-      const target = event.target as HTMLElement & { src?: string; href?: string; tagName?: string };
+      const target = event.target as HTMLElement & {
+        src?: string;
+        href?: string;
+        tagName?: string;
+      };
       if (!target || !target.tagName) return;
 
       // Skip devbar's own resources to avoid feedback loops
@@ -409,4 +421,3 @@ export class ConsoleCapture {
     this.infoCount = 0;
   }
 }
-

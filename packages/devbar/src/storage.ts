@@ -158,6 +158,7 @@ export function deleteSessionStorageItem(key: string): void {
  */
 export function deleteCookie(name: string): void {
   if (typeof document === 'undefined') return;
+  // biome-ignore lint/suspicious/noDocumentCookie: necessary for cookie deletion
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 
@@ -198,7 +199,6 @@ export function formatStorageSummary(data: StorageData): string {
 
   return parts.join(' | ') || 'No storage data';
 }
-
 
 /**
  * Beautify JSON string for display

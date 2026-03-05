@@ -7,9 +7,9 @@
  * origin validation, and message routing. All network I/O is mocked.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IncomingMessage } from 'http';
 import { EventEmitter } from 'events';
+import type { IncomingMessage } from 'http';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Mocks — hoisted so vi.mock factories can reference them
@@ -54,7 +54,7 @@ vi.mock('http', () => ({
 }));
 
 vi.mock('ws', () => ({
-  WebSocketServer: vi.fn(function () { return mockWssInstance; }),
+  WebSocketServer: vi.fn(() => mockWssInstance),
   WebSocket: { OPEN: 1, CLOSED: 3 },
 }));
 
@@ -286,9 +286,9 @@ describe('Sweetlink server module', () => {
       });
       mockHttpServer.close.mockImplementation((cb?: () => void) => cb?.());
 
-      await expect(
-        initSweetlink({ port: 9223, maxPortRetries: 2 }),
-      ).rejects.toThrow(/Could not find available port after 2 attempts/);
+      await expect(initSweetlink({ port: 9223, maxPortRetries: 2 })).rejects.toThrow(
+        /Could not find available port after 2 attempts/
+      );
     });
 
     it('rejects on non-EADDRINUSE server error', async () => {
@@ -461,9 +461,7 @@ describe('Sweetlink server module', () => {
 
       // Should NOT be rejected (just warned)
       expect(ws.close).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('unexpected port'),
-      );
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
       consoleSpy.mockRestore();
     });
 
@@ -475,9 +473,7 @@ describe('Sweetlink server module', () => {
 
       mockWssInstance.emit('connection', ws, req);
 
-      expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('unexpected port'),
-      );
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
       consoleSpy.mockRestore();
     });
 
@@ -491,9 +487,7 @@ describe('Sweetlink server module', () => {
 
       expect(ws.close).not.toHaveBeenCalled();
       // Should not warn about unexpected port
-      expect(consoleSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('unexpected port'),
-      );
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
       consoleSpy.mockRestore();
     });
   });

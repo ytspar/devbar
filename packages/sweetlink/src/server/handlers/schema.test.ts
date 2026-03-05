@@ -10,9 +10,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockSaveMarkdownArtifact } = vi.hoisted(() => ({
-  mockSaveMarkdownArtifact: vi.fn().mockResolvedValue(
-    '/mock/project/.tmp/sweetlink-screenshots/schema-products-2023-11-14T22-13-20-000Z.md',
-  ),
+  mockSaveMarkdownArtifact: vi
+    .fn()
+    .mockResolvedValue(
+      '/mock/project/.tmp/sweetlink-screenshots/schema-products-2023-11-14T22-13-20-000Z.md'
+    ),
 }));
 
 vi.mock('./saveMarkdown.js', () => ({
@@ -136,7 +138,7 @@ describe('handleSaveSchema', () => {
         url: 'https://example.com/',
         title: 'Test',
         timestamp: 1700000000000,
-      }),
+      })
     ).rejects.toThrow('IO error');
   });
 });

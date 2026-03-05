@@ -43,7 +43,10 @@ export function renderSettingsPopover(state: DevBarState): void {
   if (state.container && window.innerWidth > 640) {
     const barRect = state.container.getBoundingClientRect();
     const barCenter = barRect.left + barRect.width / 2;
-    leftPx = Math.max(edgePad, Math.min(barCenter - popoverWidth / 2, window.innerWidth - popoverWidth - edgePad));
+    leftPx = Math.max(
+      edgePad,
+      Math.min(barCenter - popoverWidth / 2, window.innerWidth - popoverWidth - edgePad)
+    );
   } else {
     leftPx = Math.max(edgePad, (window.innerWidth - popoverWidth) / 2);
   }
@@ -123,10 +126,12 @@ function createSettingsHeader(state: DevBarState): HTMLDivElement {
   title.textContent = 'Settings';
   header.appendChild(title);
 
-  header.appendChild(createCloseButton(() => {
-    state.showSettingsPopover = false;
-    state.render();
-  }));
+  header.appendChild(
+    createCloseButton(() => {
+      state.showSettingsPopover = false;
+      state.render();
+    })
+  );
 
   return header;
 }
@@ -155,7 +160,12 @@ function createThemeSection(state: DevBarState): HTMLDivElement {
   return themeSection;
 }
 
-type SettingsPositionValue = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
+type SettingsPositionValue =
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-center';
 
 function createDisplaySection(state: DevBarState): HTMLDivElement {
   const displaySection = createSettingsSection('Display');
@@ -289,8 +299,6 @@ function createCompactModeToggle(state: DevBarState): DocumentFragment {
 }
 
 function createAccentColorPicker(state: DevBarState): HTMLDivElement {
-  const { accentColor } = state.options;
-
   const accentRow = document.createElement('div');
   Object.assign(accentRow.style, { marginBottom: '6px' });
 

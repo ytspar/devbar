@@ -9,9 +9,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockSaveMarkdownArtifact } = vi.hoisted(() => ({
-  mockSaveMarkdownArtifact: vi.fn().mockResolvedValue(
-    '/mock/project/.tmp/sweetlink-screenshots/a11y-homepage-2024-01-15T10-30-00-000Z.md',
-  ),
+  mockSaveMarkdownArtifact: vi
+    .fn()
+    .mockResolvedValue(
+      '/mock/project/.tmp/sweetlink-screenshots/a11y-homepage-2024-01-15T10-30-00-000Z.md'
+    ),
 }));
 
 vi.mock('./saveMarkdown.js', () => ({
@@ -69,12 +71,13 @@ describe('handleSaveA11y', () => {
     expect(mockSaveMarkdownArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         markdown: '_No accessibility violations found_',
-      }),
+      })
     );
   });
 
   it('passes through non-empty markdown without modification', async () => {
-    const markdown = '## Critical\n\n- Buttons without accessible names\n\n## Serious\n\n- Low contrast text';
+    const markdown =
+      '## Critical\n\n- Buttons without accessible names\n\n## Serious\n\n- Low contrast text';
     await handleSaveA11y({
       markdown,
       url: 'https://example.com/dashboard',
@@ -82,9 +85,7 @@ describe('handleSaveA11y', () => {
       timestamp: 1705312200000,
     });
 
-    expect(mockSaveMarkdownArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({ markdown }),
-    );
+    expect(mockSaveMarkdownArtifact).toHaveBeenCalledWith(expect.objectContaining({ markdown }));
   });
 
   it('propagates errors from saveMarkdownArtifact', async () => {
@@ -96,7 +97,7 @@ describe('handleSaveA11y', () => {
         url: 'https://example.com/',
         title: 'Test',
         timestamp: 1705312200000,
-      }),
+      })
     ).rejects.toThrow('Permission denied');
   });
 

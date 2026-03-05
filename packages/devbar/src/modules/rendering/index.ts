@@ -11,12 +11,17 @@ import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
 import { clearAllTooltips } from '../tooltips.js';
 import { closeAllModals, type DevBarState } from '../types.js';
 import { renderCollapsed } from './collapsed.js';
+import { renderGuard, setRenderGuard } from './common.js';
 import { renderCompact } from './compact.js';
 import { renderConsolePopup } from './console.js';
 import { renderExpanded } from './expanded.js';
-import { renderDesignReviewConfirmModal, renderA11yModal, renderOutlineModal, renderSchemaModal } from './modals.js';
+import {
+  renderA11yModal,
+  renderDesignReviewConfirmModal,
+  renderOutlineModal,
+  renderSchemaModal,
+} from './modals.js';
 import { renderSettingsPopover } from './settings.js';
-import { renderGuard, setRenderGuard } from './common.js';
 
 function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapture): void {
   // Safety: only one overlay at a time. First match wins; close the rest.

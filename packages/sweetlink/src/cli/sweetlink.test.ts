@@ -38,7 +38,10 @@ const { MockWebSocket, autoResponse } = vi.hoisted(() => {
    *   shifts the next response. When the queue is empty, falls back to `value`.
    *   Use `null` in the queue to simulate a connection that emits an error.
    */
-  const autoResponse: { value: object | null; queue: (object | null)[] } = { value: null, queue: [] };
+  const autoResponse: { value: object | null; queue: (object | null)[] } = {
+    value: null,
+    queue: [],
+  };
 
   class MockWS extends EE {
     static instances: MockWS[] = [];
@@ -109,7 +112,9 @@ vi.mock('../playwright.js', () => ({
 }));
 
 vi.mock('../ruler.js', () => ({
-  getCardHeaderPreset: vi.fn(() => ({ selectors: ['article h2', 'article header > div:first-child'] })),
+  getCardHeaderPreset: vi.fn(() => ({
+    selectors: ['article h2', 'article header > div:first-child'],
+  })),
   getNavigationPreset: vi.fn(() => ({ selectors: ['.nav-item', '.nav-button'] })),
   measureViaPlaywright: vi.fn().mockResolvedValue({
     summary: '2 selectors measured',
@@ -338,7 +343,7 @@ describe('deduplicateLogs', () => {
     ];
     const result = deduplicateLogs(entries);
     expect(result[0].firstSeen).toBe(5000); // first encountered
-    expect(result[0].lastSeen).toBe(9000);  // max timestamp
+    expect(result[0].lastSeen).toBe(9000); // max timestamp
   });
 });
 
@@ -463,9 +468,21 @@ describe('showHelp', () => {
     await runCLI(['--help']);
     const allOutput = logs.join('\n');
     const expectedCommands = [
-      'screenshot', 'query', 'logs', 'exec', 'click', 'network',
-      'refresh', 'schema', 'outline', 'a11y', 'vitals', 'ruler',
-      'wait', 'status', 'cleanup',
+      'screenshot',
+      'query',
+      'logs',
+      'exec',
+      'click',
+      'network',
+      'refresh',
+      'schema',
+      'outline',
+      'a11y',
+      'vitals',
+      'ruler',
+      'wait',
+      'status',
+      'cleanup',
     ];
     for (const cmd of expectedCommands) {
       expect(allOutput).toContain(cmd);
@@ -910,7 +927,12 @@ describe('a11y command', () => {
       success: true,
       data: {
         result: { url: 'http://localhost:3000', violations: [], passes: [], incomplete: [] },
-        summary: { totalViolations: 0, totalPasses: 0, totalIncomplete: 0, byImpact: { critical: 0, serious: 0, moderate: 0, minor: 0 } },
+        summary: {
+          totalViolations: 0,
+          totalPasses: 0,
+          totalIncomplete: 0,
+          byImpact: { critical: 0, serious: 0, moderate: 0, minor: 0 },
+        },
       },
       timestamp: Date.now(),
     };
@@ -941,10 +963,12 @@ describe('screenshot command via WebSocket', () => {
 
     await runCLI([
       'screenshot',
-      '--selector', '.hero-image',
+      '--selector',
+      '.hero-image',
       '--full-page',
       '--force-ws',
-      '--output', '/tmp/test.png',
+      '--output',
+      '/tmp/test.png',
     ]);
 
     const ws = MockWebSocket.instances[0];
@@ -1044,7 +1068,10 @@ describe('screenshot viewport conversion', () => {
   });
 
   it('converts --width and --height to viewport format', () => {
-    const options: { width?: number; height?: number; viewport?: string } = { width: 375, height: 667 };
+    const options: { width?: number; height?: number; viewport?: string } = {
+      width: 375,
+      height: 667,
+    };
     if (options.width && !options.viewport) {
       const height = options.height || Math.round(options.width * 1.5);
       options.viewport = `${options.width}x${height}`;
@@ -1053,7 +1080,10 @@ describe('screenshot viewport conversion', () => {
   });
 
   it('does not override explicit --viewport', () => {
-    const options: { width?: number; height?: number; viewport?: string } = { width: 768, viewport: 'tablet' };
+    const options: { width?: number; height?: number; viewport?: string } = {
+      width: 768,
+      viewport: 'tablet',
+    };
     if (options.width && !options.viewport) {
       const height = options.height || Math.round(options.width * 1.5);
       options.viewport = `${options.width}x${height}`;
@@ -1083,8 +1113,9 @@ describe('deduplicateLogs edge cases', () => {
 
   it('summary format truncates long messages at 500 chars', () => {
     const longMessage = 'X'.repeat(600);
-    const truncated = longMessage.length > 500 ? `${longMessage.substring(0, 500)}...` : longMessage;
-    expect(truncated).toBe('X'.repeat(500) + '...');
+    const truncated =
+      longMessage.length > 500 ? `${longMessage.substring(0, 500)}...` : longMessage;
+    expect(truncated).toBe(`${'X'.repeat(500)}...`);
     expect(truncated.length).toBe(503);
   });
 });
@@ -1300,9 +1331,12 @@ describe('log level color mapping', () => {
 
   it('falls back to white for unknown levels', () => {
     const levelColors: Record<string, string> = {
-      error: '\x1b[31m', warn: '\x1b[33m', info: '\x1b[36m', log: '\x1b[37m',
+      error: '\x1b[31m',
+      warn: '\x1b[33m',
+      info: '\x1b[36m',
+      log: '\x1b[37m',
     };
-    expect(levelColors['debug'] || '\x1b[37m').toBe('\x1b[37m');
+    expect(levelColors.debug || '\x1b[37m').toBe('\x1b[37m');
   });
 });
 
@@ -1438,7 +1472,9 @@ describe('checkSweetlinkAlive', () => {
   });
 
   it('returns false on fetch timeout (AbortError)', async () => {
-    globalThis.fetch = vi.fn().mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError'));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new DOMException('The operation was aborted.', 'AbortError'));
 
     const result = await checkSweetlinkAlive();
     expect(result).toBe(false);
@@ -1461,10 +1497,7 @@ describe('checkSweetlinkAlive', () => {
     } as unknown as Response);
 
     await checkSweetlinkAlive('ws://localhost:9225');
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://localhost:9225',
-      expect.any(Object)
-    );
+    expect(globalThis.fetch).toHaveBeenCalledWith('http://localhost:9225', expect.any(Object));
   });
 
   it('converts wss:// to https:// for the health check URL', async () => {
@@ -1474,10 +1507,7 @@ describe('checkSweetlinkAlive', () => {
     } as unknown as Response);
 
     await checkSweetlinkAlive('wss://example.com:9223');
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://example.com:9223',
-      expect.any(Object)
-    );
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com:9223', expect.any(Object));
   });
 
   it('returns false when JSON has no name field', async () => {
@@ -1512,7 +1542,8 @@ describe('screenshot pre-flight check calls checkSweetlinkAlive', () => {
   it('screenshot with --force-ws performs pre-flight check before WebSocket', async () => {
     // The screenshot function calls checkSweetlinkAlive before deciding the method.
     // We mock fetch to fail (server not alive), which triggers the warn message.
-    globalThis.fetch = vi.fn()
+    globalThis.fetch = vi
+      .fn()
       .mockResolvedValueOnce({ ok: true, status: 200 } as Response) // waitForServer
       .mockResolvedValueOnce({ ok: false, status: 404 } as Response); // checkSweetlinkAlive
 
@@ -1535,8 +1566,8 @@ describe('screenshot pre-flight check calls checkSweetlinkAlive', () => {
     // Either we see the "not responding" warning or the screenshot succeeds via WS
     expect(
       allWarns.includes('not responding') ||
-      allLogs.includes('Screenshot saved') ||
-      allLogs.includes('Using WebSocket')
+        allLogs.includes('Screenshot saved') ||
+        allLogs.includes('Using WebSocket')
     ).toBe(true);
   });
 });
@@ -1553,7 +1584,7 @@ describe('sendCommand timeout handling', () => {
     // Disable auto-response so no message is sent back
     autoResponse.value = null;
 
-    const DEFAULT_TIMEOUT = 30000;
+    const _DEFAULT_TIMEOUT = 30000;
 
     // Re-implement sendCommand with a configurable short timeout for testing
     function sendCommandWithTimeout(
@@ -1602,10 +1633,7 @@ describe('sendCommand timeout handling', () => {
   });
 
   it('sendCommand resolves immediately when response is received', async () => {
-    function sendCommandImmediate(
-      command: { type: string },
-      response: object
-    ): Promise<object> {
+    function sendCommandImmediate(command: { type: string }, response: object): Promise<object> {
       return new Promise((resolve, reject) => {
         const ws = new MockWebSocket('ws://localhost:9223');
 
@@ -1649,9 +1677,7 @@ describe('sendCommand timeout handling', () => {
   });
 
   it('sendCommand clears timeout on WebSocket error', async () => {
-    function sendCommandWithError(
-      command: { type: string }
-    ): Promise<object> {
+    function sendCommandWithError(command: { type: string }): Promise<object> {
       return new Promise((resolve, reject) => {
         const ws = new MockWebSocket('ws://localhost:9223');
 
@@ -1684,9 +1710,7 @@ describe('sendCommand timeout handling', () => {
       });
     }
 
-    await expect(sendCommandWithError({ type: 'exec-js' })).rejects.toThrow(
-      'Connection refused'
-    );
+    await expect(sendCommandWithError({ type: 'exec-js' })).rejects.toThrow('Connection refused');
   });
 });
 
@@ -1789,17 +1813,17 @@ describe('waitForServer', () => {
   it('throws when server never becomes available (timeout)', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
-    await expect(
-      waitForServer('http://localhost:3000', 100, 10)
-    ).rejects.toThrow(/Server not ready after 100ms/);
+    await expect(waitForServer('http://localhost:3000', 100, 10)).rejects.toThrow(
+      /Server not ready after 100ms/
+    );
   });
 
   it('throws with last error message when timeout occurs', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('DNS resolution failed'));
 
-    await expect(
-      waitForServer('http://localhost:3000', 100, 10)
-    ).rejects.toThrow('DNS resolution failed');
+    await expect(waitForServer('http://localhost:3000', 100, 10)).rejects.toThrow(
+      'DNS resolution failed'
+    );
   });
 
   it('throws with "Connection refused" when no error was captured', async () => {
@@ -1809,9 +1833,9 @@ describe('waitForServer', () => {
       status: 503,
     } as Response);
 
-    await expect(
-      waitForServer('http://localhost:3000', 100, 10)
-    ).rejects.toThrow('Connection refused');
+    await expect(waitForServer('http://localhost:3000', 100, 10)).rejects.toThrow(
+      'Connection refused'
+    );
   });
 
   it('uses the origin of the URL for health check', async () => {
@@ -1854,22 +1878,32 @@ describe('CLI command dispatch', () => {
   it('dispatches "wait" command', async () => {
     // fetch is already mocked as successful in setup()
     await runCLI(['wait', '--url', 'http://localhost:3000', '--timeout', '500']);
-    expect(logs.some((l) => l.includes('Server is ready') || l.includes('Waiting for server'))).toBe(true);
+    expect(
+      logs.some((l) => l.includes('Server is ready') || l.includes('Waiting for server'))
+    ).toBe(true);
   });
 
   it('wait command fails on timeout', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
-    process.argv = ['node', 'sweetlink', 'wait', '--url', 'http://localhost:3000', '--timeout', '200'];
+    process.argv = [
+      'node',
+      'sweetlink',
+      'wait',
+      '--url',
+      'http://localhost:3000',
+      '--timeout',
+      '200',
+    ];
     vi.resetModules();
     await import('./sweetlink.js').catch(() => {});
     // Allow more time for the 200ms timeout + poll intervals to complete
     await new Promise((r) => setTimeout(r, 500));
 
     // Should see error about server not available and process.exit(1)
-    expect(
-      errors.some((e) => e.includes('Server not available') || e.includes('not ready'))
-    ).toBe(true);
+    expect(errors.some((e) => e.includes('Server not available') || e.includes('not ready'))).toBe(
+      true
+    );
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
@@ -1916,7 +1950,9 @@ describe('isCspError', () => {
   }
 
   it('returns true for unsafe-eval error', () => {
-    expect(isCspError("Refused to evaluate a string as JavaScript because 'unsafe-eval' is not allowed")).toBe(true);
+    expect(
+      isCspError("Refused to evaluate a string as JavaScript because 'unsafe-eval' is not allowed")
+    ).toBe(true);
   });
 
   it('returns true for Content Security Policy error', () => {
@@ -2109,12 +2145,17 @@ describe('screenshot --url navigation', () => {
       },
     ];
 
-    await runCLI([
-      'screenshot',
-      '--url', 'http://localhost:3000/about',
-      '--force-ws',
-      '--output', '/tmp/test-nav.png',
-    ], 2000);
+    await runCLI(
+      [
+        'screenshot',
+        '--url',
+        'http://localhost:3000/about',
+        '--force-ws',
+        '--output',
+        '/tmp/test-nav.png',
+      ],
+      2000
+    );
 
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
     expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
@@ -2140,9 +2181,11 @@ describe('screenshot --url navigation', () => {
 
     await runCLI([
       'screenshot',
-      '--url', 'http://localhost:3000/about',
+      '--url',
+      'http://localhost:3000/about',
       '--force-ws',
-      '--output', '/tmp/test-skip.png',
+      '--output',
+      '/tmp/test-skip.png',
     ]);
 
     expect(logs.some((l) => l.includes('already on'))).toBe(true);
@@ -2157,8 +2200,10 @@ describe('screenshot --url navigation', () => {
 
     await runCLI([
       'screenshot',
-      '--url', 'http://localhost:3000/about',
-      '--output', '/tmp/test-escalate.png',
+      '--url',
+      'http://localhost:3000/about',
+      '--output',
+      '/tmp/test-escalate.png',
     ]);
 
     expect(logs.some((l) => l.includes('escalating to Playwright'))).toBe(true);
@@ -2170,9 +2215,11 @@ describe('screenshot --url navigation', () => {
 
     await runCLI([
       'screenshot',
-      '--url', 'http://localhost:3000/about',
+      '--url',
+      'http://localhost:3000/about',
       '--force-ws',
-      '--output', '/tmp/test-force-ws.png',
+      '--output',
+      '/tmp/test-force-ws.png',
     ]);
 
     expect(errors.some((e) => e.includes('Could not navigate browser to'))).toBe(true);
@@ -2202,11 +2249,7 @@ describe('query --url navigation', () => {
       },
     ];
 
-    await runCLI([
-      'query',
-      '--selector', 'h1',
-      '--url', 'http://localhost:3000/about',
-    ], 2000);
+    await runCLI(['query', '--selector', 'h1', '--url', 'http://localhost:3000/about'], 2000);
 
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
   });
@@ -2230,11 +2273,10 @@ describe('exec --url navigation', () => {
       { success: true, data: { result: 'About Page' }, timestamp: Date.now() },
     ];
 
-    await runCLI([
-      'exec',
-      '--code', 'document.title',
-      '--url', 'http://localhost:3000/about',
-    ], 2000);
+    await runCLI(
+      ['exec', '--code', 'document.title', '--url', 'http://localhost:3000/about'],
+      2000
+    );
 
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
   });

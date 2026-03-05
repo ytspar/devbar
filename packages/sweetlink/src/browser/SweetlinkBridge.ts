@@ -34,7 +34,12 @@ import {
 // Constants
 // ============================================================================
 
-import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, PORT_RETRY_DELAY_MS, WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET } from '../types.js';
+import {
+  DEFAULT_WS_PORT,
+  MAX_PORT_RETRIES,
+  PORT_RETRY_DELAY_MS,
+  WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET,
+} from '../types.js';
 
 /** HMR settings */
 const DEFAULT_HMR_DEBOUNCE_MS = 300;

@@ -219,5 +219,5 @@ export function getInitiatorColor(type: string): string {
     iframe: PALETTE.cyan,
     other: PALETTE.gray,
   };
-  return colors[type] ?? colors['other']!;
+  return colors[type] ?? colors.other!;
 }

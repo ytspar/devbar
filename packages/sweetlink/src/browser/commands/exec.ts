@@ -65,10 +65,20 @@ function maybeWrapReturn(code: string): string {
  * If the result is a thenable (Promise), await it with a timeout.
  */
 async function maybeAwaitResult(result: unknown, timeoutMs = 10000): Promise<unknown> {
-  if (result && typeof result === 'object' && 'then' in result && typeof (result as { then: unknown }).then === 'function') {
+  if (
+    result &&
+    typeof result === 'object' &&
+    'then' in result &&
+    typeof (result as { then: unknown }).then === 'function'
+  ) {
     return Promise.race([
-      (result as Promise<unknown>),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Async result timed out after ' + timeoutMs + 'ms')), timeoutMs)),
+      result as Promise<unknown>,
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Async result timed out after ${timeoutMs}ms`)),
+          timeoutMs
+        )
+      ),
     ]);
   }
   return result;

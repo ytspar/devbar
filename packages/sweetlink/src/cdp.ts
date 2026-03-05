@@ -6,12 +6,7 @@
  */
 
 import * as fs from 'fs';
-import type {
-  Browser,
-  HTTPRequest,
-  HTTPResponse,
-  Page,
-} from 'puppeteer-core';
+import type { Browser, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
 import { parseViewport } from './viewportUtils.js';
 
 // ============================================================================
@@ -130,7 +125,11 @@ export async function screenshotViaCDP(options: {
       }
     }
 
-    const screenshotOptions: { type: 'png'; fullPage: boolean; clip?: { x: number; y: number; width: number; height: number } } = {
+    const screenshotOptions: {
+      type: 'png';
+      fullPage: boolean;
+      clip?: { x: number; y: number; width: number; height: number };
+    } = {
       type: 'png',
       fullPage: options.fullPage || false,
     };
@@ -196,7 +195,6 @@ export async function screenshotViaCDP(options: {
     await browser.disconnect();
   }
 }
-
 
 // Maximum allowed code length for CDP execution
 const MAX_CDP_CODE_LENGTH = 10000;
@@ -308,4 +306,3 @@ export async function getNetworkRequestsViaCDP(options?: { filter?: string }): P
     await browser.disconnect();
   }
 }
-

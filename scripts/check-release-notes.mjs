@@ -12,7 +12,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,7 +44,7 @@ if (args.includes('--check')) {
     if (!notes || !notes[version]) {
       console.error(
         `\n  ✘ Missing release note for ${pkg} v${version}` +
-        `\n    Add an entry to packages/playground/src/release-notes.json\n`
+          `\n    Add an entry to packages/playground/src/release-notes.json\n`
       );
       failed = true;
     } else {
@@ -64,8 +64,8 @@ if (args.includes('--check')) {
   if (!notes || !notes[version]) {
     console.error(
       `\n  ✘ Missing release note for ${name} v${version}` +
-      `\n    Add an entry to packages/playground/src/release-notes.json` +
-      `\n    then retry publishing.\n`
+        `\n    Add an entry to packages/playground/src/release-notes.json` +
+        `\n    then retry publishing.\n`
     );
     process.exit(1);
   }

@@ -54,7 +54,13 @@ const { mockLocator, mockPage, mockContext, mockBrowser, mockChromium } = vi.hoi
     launch: vi.fn().mockResolvedValue(browser),
   };
 
-  return { mockLocator: locator, mockPage: page, mockContext: context, mockBrowser: browser, mockChromium: chromium };
+  return {
+    mockLocator: locator,
+    mockPage: page,
+    mockContext: context,
+    mockBrowser: browser,
+    mockChromium: chromium,
+  };
 });
 
 vi.mock('playwright', () => ({
@@ -70,8 +76,8 @@ vi.mock('fs', () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { getBrowser, screenshotViaPlaywright } from './playwright.js';
 import * as fs from 'fs';
+import { getBrowser, screenshotViaPlaywright } from './playwright.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -163,7 +169,7 @@ describe('getBrowser', () => {
       expect(result.page).toBe(newPage);
       expect(newPage.goto).toHaveBeenCalledWith(
         'http://localhost:4000',
-        expect.objectContaining({ waitUntil: 'domcontentloaded' }),
+        expect.objectContaining({ waitUntil: 'domcontentloaded' })
       );
     });
 
@@ -199,9 +205,7 @@ describe('getBrowser', () => {
 
     it('launches a headless browser when CDP connection fails', async () => {
       const result = await getBrowser();
-      expect(mockChromium.launch).toHaveBeenCalledWith(
-        expect.objectContaining({ headless: true }),
-      );
+      expect(mockChromium.launch).toHaveBeenCalledWith(expect.objectContaining({ headless: true }));
       expect(result.isNew).toBe(true);
     });
 
@@ -210,7 +214,7 @@ describe('getBrowser', () => {
       expect(mockBrowser.newContext).toHaveBeenCalledWith(
         expect.objectContaining({
           viewport: { width: 1512, height: 982 },
-        }),
+        })
       );
     });
 
@@ -218,7 +222,7 @@ describe('getBrowser', () => {
       await getBrowser('http://localhost:4000');
       expect(mockPage.goto).toHaveBeenCalledWith(
         'http://localhost:4000',
-        expect.objectContaining({ waitUntil: 'domcontentloaded' }),
+        expect.objectContaining({ waitUntil: 'domcontentloaded' })
       );
     });
 
@@ -231,7 +235,7 @@ describe('getBrowser', () => {
       expect(result.isNew).toBe(true);
       expect(consoleSpy.warn).toHaveBeenCalledWith(
         expect.stringContaining('Navigation timeout or error'),
-        expect.any(Error),
+        expect.any(Error)
       );
     });
   });
@@ -296,15 +300,13 @@ describe('screenshotViaPlaywright', () => {
 
     it('passes fullPage option to page.screenshot', async () => {
       await screenshotViaPlaywright({ fullPage: true });
-      expect(mockPage.screenshot).toHaveBeenCalledWith(
-        expect.objectContaining({ fullPage: true }),
-      );
+      expect(mockPage.screenshot).toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }));
     });
 
     it('passes output path to page.screenshot', async () => {
       await screenshotViaPlaywright({ output: '/tmp/shots/screen.png' });
       expect(mockPage.screenshot).toHaveBeenCalledWith(
-        expect.objectContaining({ path: '/tmp/shots/screen.png' }),
+        expect.objectContaining({ path: '/tmp/shots/screen.png' })
       );
     });
 
@@ -331,7 +333,7 @@ describe('screenshotViaPlaywright', () => {
     it('waits for selector to be visible', async () => {
       await screenshotViaPlaywright({ selector: '.card' });
       expect(mockLocator.waitFor).toHaveBeenCalledWith(
-        expect.objectContaining({ state: 'visible', timeout: 5000 }),
+        expect.objectContaining({ state: 'visible', timeout: 5000 })
       );
     });
 
@@ -352,9 +354,9 @@ describe('screenshotViaPlaywright', () => {
     it('throws when selector is not found within timeout', async () => {
       mockLocator.waitFor.mockRejectedValue(new Error('Timeout 5000ms exceeded'));
 
-      await expect(
-        screenshotViaPlaywright({ selector: '.missing' }),
-      ).rejects.toThrow('Timeout waiting for selector: .missing');
+      await expect(screenshotViaPlaywright({ selector: '.missing' })).rejects.toThrow(
+        'Timeout waiting for selector: .missing'
+      );
     });
 
     it('still closes browser when selector throws', async () => {

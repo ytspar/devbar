@@ -202,35 +202,38 @@ export function extractFavicons(): MetaImage[] {
 export function checkMissingTags(schema: PageSchema): MissingTag[] {
   const missing: MissingTag[] = [];
 
-  const check = (
-    tag: string,
-    present: boolean,
-    severity: 'error' | 'warning',
-    hint: string
-  ) => {
+  const check = (tag: string, present: boolean, severity: 'error' | 'warning', hint: string) => {
     if (!present) missing.push({ tag, severity, hint });
   };
 
   // Critical tags
-  check('og:title', !!schema.openGraph['title'], 'error', 'Required for social media unfurls');
-  check('og:description', !!schema.openGraph['description'], 'error', 'Required for social media unfurls');
-  check('og:image', !!schema.openGraph['image'], 'error', 'Required for social media preview images');
-  check('og:url', !!schema.openGraph['url'], 'warning', 'Canonical URL for the shared page');
-  check('og:type', !!schema.openGraph['type'], 'warning', 'Content type (website, article, etc.)');
+  check('og:title', !!schema.openGraph.title, 'error', 'Required for social media unfurls');
+  check(
+    'og:description',
+    !!schema.openGraph.description,
+    'error',
+    'Required for social media unfurls'
+  );
+  check('og:image', !!schema.openGraph.image, 'error', 'Required for social media preview images');
+  check('og:url', !!schema.openGraph.url, 'warning', 'Canonical URL for the shared page');
+  check('og:type', !!schema.openGraph.type, 'warning', 'Content type (website, article, etc.)');
 
   // Twitter
-  check('twitter:card', !!schema.twitter['card'], 'warning', 'Card type (summary, summary_large_image)');
-  check('twitter:title', !!schema.twitter['title'], 'warning', 'Falls back to og:title if missing');
-  check('twitter:image', !!schema.twitter['image'], 'warning', 'Falls back to og:image if missing');
+  check(
+    'twitter:card',
+    !!schema.twitter.card,
+    'warning',
+    'Card type (summary, summary_large_image)'
+  );
+  check('twitter:title', !!schema.twitter.title, 'warning', 'Falls back to og:title if missing');
+  check('twitter:image', !!schema.twitter.image, 'warning', 'Falls back to og:image if missing');
 
   // Standard
-  check('description', !!schema.metaTags['description'], 'error', 'Essential for SEO');
-  check('viewport', !!schema.metaTags['viewport'], 'error', 'Required for responsive design');
+  check('description', !!schema.metaTags.description, 'error', 'Essential for SEO');
+  check('viewport', !!schema.metaTags.viewport, 'error', 'Required for responsive design');
 
   // Favicon
-  const hasFavicon = !!document.querySelector(
-    'link[rel="icon"], link[rel="shortcut icon"]'
-  );
+  const hasFavicon = !!document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
   check('favicon', hasFavicon, 'warning', '<link rel="icon"> for browser tabs');
 
   // Canonical

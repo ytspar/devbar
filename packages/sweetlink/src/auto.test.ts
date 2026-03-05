@@ -87,14 +87,14 @@ describe('startSweetlink', () => {
   });
 
   it('accepts explicit appPort option', async () => {
-    const mod = await import('./auto.js');
+    const _mod = await import('./auto.js');
     mockInitSweetlink.mockClear();
 
     // Reset internal `started` flag by importing fresh
     vi.resetModules();
     mockInitSweetlink.mockClear();
 
-    const freshMod = await import('./auto.js');
+    const _freshMod = await import('./auto.js');
     // Auto-start already called once, simulate onReady not called yet
     // Actually we need the module to not have started yet
     // Since auto-start already triggered, calling startSweetlink again

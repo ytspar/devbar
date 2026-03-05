@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkMissingTags, extractFavicons, extractPageSchema, isImageKey, schemaToMarkdown } from './schema.js';
 import type { PageSchema } from '../../types.js';
+import {
+  checkMissingTags,
+  extractFavicons,
+  extractPageSchema,
+  isImageKey,
+  schemaToMarkdown,
+} from './schema.js';
 
 describe('extractPageSchema', () => {
   beforeEach(() => {

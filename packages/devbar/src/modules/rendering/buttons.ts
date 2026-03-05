@@ -2,10 +2,11 @@
  * Button creator functions used by both compact and expanded modes.
  */
 
-import { BUTTON_COLORS, CSS_COLORS, FONT_MONO, withAlpha } from '../../constants.js';
+import { preloadAxe } from '../../accessibility.js';
+import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
 import { resolveSaveLocation } from '../../settings.js';
 import { createSvgIcon, getButtonStyles } from '../../ui/index.js';
-import { preloadAxe } from '../../accessibility.js';
+import { activateRulerMode } from '../ruler.js';
 import {
   copyPathToClipboard,
   handleA11yAudit,
@@ -13,11 +14,7 @@ import {
   handlePageSchema,
   showDesignReviewConfirmation,
 } from '../screenshot.js';
-import { activateRulerMode } from '../ruler.js';
-import {
-  attachButtonTooltip,
-  attachTextTooltip,
-} from '../tooltips.js';
+import { attachButtonTooltip, attachTextTooltip } from '../tooltips.js';
 import { closeAllModals, type DevBarState } from '../types.js';
 
 export function createConsoleBadge(
@@ -274,7 +271,10 @@ export function createOutlineButton(state: DevBarState): HTMLButtonElement {
   attachButtonTooltip(state, btn, BUTTON_COLORS.outline, (_tooltip, h) => {
     if (state.lastOutline) {
       const isDownloaded = state.lastOutline.endsWith('downloaded');
-      h.addSuccess(isDownloaded ? 'Outline downloaded!' : 'Outline saved!', isDownloaded ? undefined : state.lastOutline);
+      h.addSuccess(
+        isDownloaded ? 'Outline downloaded!' : 'Outline saved!',
+        isDownloaded ? undefined : state.lastOutline
+      );
       return;
     }
 
@@ -310,7 +310,10 @@ export function createSchemaButton(state: DevBarState): HTMLButtonElement {
   attachButtonTooltip(state, btn, BUTTON_COLORS.schema, (_tooltip, h) => {
     if (state.lastSchema) {
       const isDownloaded = state.lastSchema.endsWith('downloaded');
-      h.addSuccess(isDownloaded ? 'Schema downloaded!' : 'Schema saved!', isDownloaded ? undefined : state.lastSchema);
+      h.addSuccess(
+        isDownloaded ? 'Schema downloaded!' : 'Schema saved!',
+        isDownloaded ? undefined : state.lastSchema
+      );
       return;
     }
 
@@ -350,7 +353,10 @@ export function createA11yButton(state: DevBarState): HTMLButtonElement {
   attachButtonTooltip(state, btn, BUTTON_COLORS.a11y, (_tooltip, h) => {
     if (state.lastA11yAudit) {
       const isDownloaded = state.lastA11yAudit.endsWith('downloaded');
-      h.addSuccess(isDownloaded ? 'A11y report downloaded!' : 'A11y report saved!', isDownloaded ? undefined : state.lastA11yAudit);
+      h.addSuccess(
+        isDownloaded ? 'A11y report downloaded!' : 'A11y report saved!',
+        isDownloaded ? undefined : state.lastA11yAudit
+      );
       return;
     }
 
@@ -479,7 +485,10 @@ export function createSettingsButton(state: DevBarState): HTMLButtonElement {
 export function createCompactToggleButton(state: DevBarState): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.setAttribute('aria-label', state.compactMode ? 'Switch to expanded mode' : 'Switch to compact mode');
+  btn.setAttribute(
+    'aria-label',
+    state.compactMode ? 'Switch to expanded mode' : 'Switch to compact mode'
+  );
 
   const isCompact = state.compactMode;
   const { accentColor } = state.options;

@@ -6,13 +6,13 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  createSvgIcon,
   createDevBarLogo,
-  getDevBarLogoSvg,
-  DEVBAR_LOGO_VIEWBOX,
+  createSvgIcon,
   DEVBAR_LOGO_COLORS,
   DEVBAR_LOGO_PATHS,
   DEVBAR_LOGO_SHAPES,
+  DEVBAR_LOGO_VIEWBOX,
+  getDevBarLogoSvg,
 } from './icons.js';
 
 describe('createSvgIcon', () => {
@@ -235,9 +235,7 @@ describe('createDevBarLogo', () => {
     const polygons = logo.querySelectorAll('polygon');
 
     // Last two polygons are counters with fill=none
-    const counterPolygons = Array.from(polygons).filter(
-      (p) => p.getAttribute('fill') === 'none'
-    );
+    const counterPolygons = Array.from(polygons).filter((p) => p.getAttribute('fill') === 'none');
     expect(counterPolygons.length).toBe(2);
   });
 });

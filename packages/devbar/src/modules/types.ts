@@ -7,13 +7,8 @@
  */
 
 import type { DebugLogger } from '../debug.js';
-import type { SettingsManager, DevBarSettings } from '../settings.js';
-import type {
-  ConsoleLog,
-  GlobalDevBarOptions,
-  SweetlinkCommand,
-  ThemeMode,
-} from '../types.js';
+import type { DevBarSettings, SettingsManager } from '../settings.js';
+import type { ConsoleLog, GlobalDevBarOptions, ThemeMode } from '../types.js';
 
 /** CSS positioning properties for devbar placement */
 export type PositionStyle = {

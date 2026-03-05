@@ -92,7 +92,14 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         position: 'bottom-left',
         themeMode: 'system',
         compactMode: false,
-        showMetrics: { breakpoint: true, fcp: true, lcp: true, cls: true, inp: true, pageSize: true },
+        showMetrics: {
+          breakpoint: true,
+          fcp: true,
+          lcp: true,
+          cls: true,
+          inp: true,
+          pageSize: true,
+        },
         showScreenshot: true,
         showConsoleBadges: true,
         showTooltips: true,
@@ -445,7 +452,11 @@ describe('handleSaveOutline', () => {
     });
     state.options.saveLocation = 'download';
     handleSaveOutline(state);
-    expect(state.handleNotification).toHaveBeenCalledWith('outline', 'outline downloaded', expect.any(Number));
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'outline',
+      'outline downloaded',
+      expect.any(Number)
+    );
   });
 
   it('triggers download when saveLocation is auto and not connected', () => {
@@ -455,7 +466,11 @@ describe('handleSaveOutline', () => {
       ws: null,
     });
     handleSaveOutline(state);
-    expect(state.handleNotification).toHaveBeenCalledWith('outline', 'outline downloaded', expect.any(Number));
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'outline',
+      'outline downloaded',
+      expect.any(Number)
+    );
   });
 });
 
@@ -499,6 +514,10 @@ describe('handleSaveSchema', () => {
     });
     state.options.saveLocation = 'download';
     handleSaveSchema(state);
-    expect(state.handleNotification).toHaveBeenCalledWith('schema', 'schema downloaded', expect.any(Number));
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'schema',
+      'schema downloaded',
+      expect.any(Number)
+    );
   });
 });

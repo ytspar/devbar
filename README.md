@@ -1,5 +1,7 @@
 # devbar
 
+**[devbar.dev](https://devbar.dev)** · **[npm (devbar)](https://www.npmjs.com/package/@ytspar/devbar)** · **[npm (sweetlink)](https://www.npmjs.com/package/@ytspar/sweetlink)** · **[GitHub](https://github.com/ytspar/devbar)**
+
 Development toolbar and AI debugging toolkit. This monorepo contains **devbar** (development toolbar) and **sweetlink** (autonomous AI agent toolkit for browser debugging).
 
 ## What Is This?

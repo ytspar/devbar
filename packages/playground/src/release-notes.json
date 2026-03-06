@@ -15,6 +15,7 @@
     "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
   },
   "sweetlink": {
+    "1.12.0": "App identity: server detects git branch/app name, CLI --app flag targets specific instance for parallel worktree dev",
     "1.11.1": "Biome formatting and lint, README updates",
     "1.11.0": "--url browser navigation, optional peerDeps for puppeteer-core/html2canvas-pro, docs overhaul",
     "1.10.0": "--json and --output-schema flags for structured CLI output",

@@ -154,20 +154,120 @@ interface SweetlinkResponse {
   timestamp: number;
 }
 
-const WS_URL = process.env.SWEETLINK_WS_URL || 'ws://localhost:9223';
+let resolvedWsUrl: string | null = null;
+const DEFAULT_WS_URL = process.env.SWEETLINK_WS_URL || 'ws://localhost:9223';
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const SERVER_READY_TIMEOUT = 30000; // 30 seconds to wait for server
 const SERVER_POLL_INTERVAL = 500; // Poll every 500ms
+
+/** Port range to scan when looking for Sweetlink servers */
+const SCAN_PORT_START = 9223;
+const SCAN_PORT_END = 9233;
+
+interface ServerIdentity {
+  port: number;
+  appPort: number | null;
+  gitBranch: string | null;
+  appName: string | null;
+}
+
+/**
+ * Query a single port for Sweetlink server identity info.
+ * Returns null if no Sweetlink server is running on that port.
+ */
+async function probeServerIdentity(port: number): Promise<ServerIdentity | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500);
+    const response = await fetch(`http://localhost:${port}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data?.name !== '@ytspar/sweetlink') return null;
+    return {
+      port,
+      appPort: data.appPort ?? null,
+      gitBranch: data.gitBranch ?? null,
+      appName: data.appName ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Discover a Sweetlink server matching the given app target.
+ * Target can be a branch name, app name, or partial match.
+ * Scans the default port range and returns the WS URL of the first match.
+ */
+async function discoverServer(target: string): Promise<string> {
+  const probes = [];
+  for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
+    probes.push(probeServerIdentity(port));
+  }
+  // Also probe common offset ports (appPort + 6223)
+  for (const appPort of COMMON_APP_PORTS) {
+    const wsPort = appPort + WS_PORT_OFFSET;
+    if (wsPort < SCAN_PORT_START || wsPort > SCAN_PORT_END) {
+      probes.push(probeServerIdentity(wsPort));
+    }
+  }
+
+  const results = (await Promise.all(probes)).filter(
+    (r): r is ServerIdentity => r !== null
+  );
+
+  if (results.length === 0) {
+    throw new Error('No Sweetlink servers found. Is a dev server running?');
+  }
+
+  const lowerTarget = target.toLowerCase();
+
+  // Exact match on branch or app name
+  const exact = results.find(
+    (r) =>
+      r.gitBranch?.toLowerCase() === lowerTarget ||
+      r.appName?.toLowerCase() === lowerTarget
+  );
+  if (exact) return `ws://localhost:${exact.port}`;
+
+  // Partial match (branch contains target)
+  const partial = results.find(
+    (r) =>
+      r.gitBranch?.toLowerCase().includes(lowerTarget) ||
+      r.appName?.toLowerCase().includes(lowerTarget)
+  );
+  if (partial) return `ws://localhost:${partial.port}`;
+
+  // List available servers for a helpful error
+  const available = results
+    .map((r) => `  port ${r.port}: branch=${r.gitBranch ?? '?'} app=${r.appName ?? '?'}`)
+    .join('\n');
+  throw new Error(
+    `No server matching "${target}" found.\nAvailable servers:\n${available}`
+  );
+}
+
+/**
+ * Resolve the WebSocket URL to use. If --app was provided, scan for
+ * a matching server. Otherwise use the default/env URL.
+ */
+async function getWsUrl(): Promise<string> {
+  if (resolvedWsUrl) return resolvedWsUrl;
+  resolvedWsUrl = DEFAULT_WS_URL;
+  return resolvedWsUrl;
+}
 
 /**
  * Check if the Sweetlink WebSocket server is alive.
  * Uses the HTTP info endpoint (same port as WS) for a fast, non-blocking check.
  * Returns true if the server responds with its package info, false otherwise.
  */
-async function checkSweetlinkAlive(wsUrl: string = WS_URL): Promise<boolean> {
+async function checkSweetlinkAlive(wsUrl?: string): Promise<boolean> {
+  const effectiveUrl = wsUrl ?? (await getWsUrl());
   try {
     // Convert ws:// URL to http:// for the health check
-    const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const httpUrl = effectiveUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
@@ -234,8 +334,9 @@ async function sendCommand(
   command: SweetlinkCommand,
   timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<SweetlinkResponse> {
+  const wsUrl = await getWsUrl();
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(WS_URL);
+    const ws = new WebSocket(wsUrl);
 
     const timer = setTimeout(() => {
       ws.close();
@@ -2007,6 +2108,7 @@ const GLOBAL_HELP = `
 Global Flags:
   --json                  Output structured JSON (envelope with ok, command, data, duration)
   --output-schema         Print TypeScript types for --json output, then exit
+  --app <name>            Target a specific app instance by branch or app name (scans ports)
 
 Screenshot Strategy:
   Tier 1 (Default): html2canvas WebSocket - 131KB, always use first
@@ -2203,6 +2305,18 @@ async function handleStatusCommand(): Promise<StatusData> {
 
 (async () => {
   const startTime = Date.now();
+
+  // Resolve --app flag: discover the matching Sweetlink server by branch/app name
+  const appTarget = getArg('--app');
+  if (appTarget) {
+    try {
+      resolvedWsUrl = await discoverServer(appTarget);
+      console.log(`[Sweetlink] Targeting server: ${resolvedWsUrl}`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
 
   let origExit = process.exit;
   if (jsonMode) {

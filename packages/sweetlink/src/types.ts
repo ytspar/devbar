@@ -368,6 +368,10 @@ export interface ServerInfo {
   appPort: number | null;
   wsPort: number;
   projectDir: string;
+  /** Git branch name (or worktree branch if running inside a git worktree) */
+  gitBranch?: string;
+  /** Logical app name, e.g. "el-lander" (from portless or package.json name) */
+  appName?: string;
   timestamp: number;
 }
 

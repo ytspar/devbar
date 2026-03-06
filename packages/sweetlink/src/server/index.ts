@@ -4,6 +4,9 @@
  * Main server module that handles WebSocket connections and message routing.
  */
 
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 
@@ -91,12 +94,55 @@ import {
 // Re-export types for backwards compatibility
 export type { SweetlinkCommand, SweetlinkResponse, ConsoleLog, HmrScreenshotData };
 
+// ============================================================================
+// Git Identity Detection
+// ============================================================================
+
+/**
+ * Detect the current git branch name.
+ * Works for both regular repos and git worktrees.
+ * Uses execFileSync (no shell) to prevent command injection.
+ */
+function detectGitBranch(cwd: string): string | undefined {
+  try {
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd,
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    return branch && branch !== 'HEAD' ? branch : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Detect the app name from package.json in the project root.
+ * Strips npm scope prefix (e.g. "@el/marketing" -> "marketing").
+ */
+function detectAppName(cwd: string): string | undefined {
+  try {
+    const pkgPath = path.join(cwd, 'package.json');
+    if (!fs.existsSync(pkgPath)) return undefined;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const name: string | undefined = pkg.name;
+    if (!name) return undefined;
+    // Strip scope prefix: "@scope/name" -> "name"
+    return name.replace(/^@[^/]+\//, '');
+  } catch {
+    return undefined;
+  }
+}
+
 // Module-level state
 let wss: WebSocketServer | null = null;
 let httpServer: ReturnType<typeof createServer> | null = null;
 let activePort: number | null = null;
 let associatedAppPort: number | null = null;
 let projectRoot: string | null = null;
+let gitBranch: string | undefined = undefined;
+let appName: string | undefined = undefined;
 const clients = new Map<WebSocket, { type: 'browser' | 'cli'; id: string; origin?: string }>();
 
 // WeakMap for CLI client references (prevents memory leaks)
@@ -147,6 +193,8 @@ export interface InitSweetlinkOptions {
   onReady?: (port: number) => void;
   /** The port of the associated dev server (e.g., Next.js port). Used to validate browser connections. */
   appPort?: number;
+  /** Override the app name (default: auto-detected from package.json) */
+  appName?: string;
 }
 
 /**
@@ -168,6 +216,12 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
     // Capture project root at initialization time (before any cwd changes)
     projectRoot = process.cwd();
     console.log(`[Sweetlink] Project root: ${projectRoot}`);
+
+    // Detect git branch and app name for multi-instance identification
+    gitBranch = detectGitBranch(projectRoot);
+    appName = options.appName ?? detectAppName(projectRoot);
+    if (gitBranch) console.log(`[Sweetlink] Git branch: ${gitBranch}`);
+    if (appName) console.log(`[Sweetlink] App name: ${appName}`);
 
     // Store the associated app port for origin validation
     associatedAppPort = options.appPort ?? null;
@@ -192,6 +246,8 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
               status: 'running',
               port: port,
               appPort: associatedAppPort,
+              gitBranch: gitBranch ?? null,
+              appName: appName ?? null,
               connectedClients: clients.size,
               uptime: process.uptime(),
             },
@@ -252,6 +308,16 @@ export function getSweetlinkPort(): number | null {
 /** Get the associated app port */
 export function getAssociatedAppPort(): number | null {
   return associatedAppPort;
+}
+
+/** Get the detected git branch */
+export function getGitBranch(): string | undefined {
+  return gitBranch;
+}
+
+/** Get the app name */
+export function getAppName(): string | undefined {
+  return appName;
 }
 
 // ============================================================================
@@ -349,6 +415,8 @@ function handleBrowserClientReady(_command: SweetlinkCommand, ctx: MessageHandle
       type: 'server-info',
       appPort: associatedAppPort,
       wsPort: activePort,
+      gitBranch: gitBranch ?? undefined,
+      appName: appName ?? undefined,
       timestamp: Date.now(),
     })
   );

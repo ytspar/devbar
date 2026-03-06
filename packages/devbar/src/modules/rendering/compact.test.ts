@@ -44,17 +44,21 @@ vi.mock('./buttons.js', () => ({
   }),
 }));
 
-vi.mock('./common.js', () => ({
-  captureDotPosition: vi.fn(),
-  createConnectionIndicator: vi.fn((_state: any) => {
-    const indicator = document.createElement('span');
-    indicator.className = 'devbar-clickable';
-    const dot = document.createElement('span');
-    dot.className = 'devbar-conn-dot';
-    indicator.appendChild(dot);
-    return indicator;
-  }),
-}));
+vi.mock('./common.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./common.js')>();
+  return {
+    ...actual,
+    captureDotPosition: vi.fn(),
+    createConnectionIndicator: vi.fn((_state: any) => {
+      const indicator = document.createElement('span');
+      indicator.className = 'devbar-clickable';
+      const dot = document.createElement('span');
+      dot.className = 'devbar-conn-dot';
+      indicator.appendChild(dot);
+      return indicator;
+    }),
+  };
+});
 
 import { attachTextTooltip } from '../tooltips.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';

@@ -94,16 +94,20 @@ vi.mock('./buttons.js', () => {
   };
 });
 
-vi.mock('./common.js', () => ({
-  captureDotPosition: vi.fn(),
-  createConnectionIndicator: vi.fn((state: any) => {
-    const span = document.createElement('span');
-    span.className = 'devbar-clickable';
-    span.setAttribute('data-testid', 'conn-indicator');
-    span.setAttribute('data-connected', String(state.sweetlinkConnected));
-    return span;
-  }),
-}));
+vi.mock('./common.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./common.js')>();
+  return {
+    ...actual,
+    captureDotPosition: vi.fn(),
+    createConnectionIndicator: vi.fn((state: any) => {
+      const span = document.createElement('span');
+      span.className = 'devbar-clickable';
+      span.setAttribute('data-testid', 'conn-indicator');
+      span.setAttribute('data-connected', String(state.sweetlinkConnected));
+      return span;
+    }),
+  };
+});
 
 import { getResponsiveMetricVisibility } from '../performance.js';
 import {

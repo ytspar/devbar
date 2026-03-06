@@ -102,7 +102,7 @@ export function render(
     if (state.collapsed) {
       renderCollapsed(state);
     } else if (state.compactMode) {
-      renderCompact(state);
+      renderCompact(state, customControls);
     } else {
       renderExpanded(state, customControls);
     }

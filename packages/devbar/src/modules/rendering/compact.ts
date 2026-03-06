@@ -3,12 +3,13 @@
  */
 
 import { BUTTON_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../../constants.js';
+import type { DevBarControl } from '../../types.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';
-import { captureDotPosition, createConnectionIndicator } from './common.js';
+import { captureDotPosition, createConnectionIndicator, createControlElement } from './common.js';
 
-export function renderCompact(state: DevBarState): void {
+export function renderCompact(state: DevBarState, customControls: DevBarControl[] = []): void {
   if (!state.container) return;
 
   const { position, accentColor } = state.options;
@@ -84,6 +85,14 @@ export function renderCompact(state: DevBarState): void {
 
   // Settings gear button
   wrapper.appendChild(createSettingsButton(state));
+
+  // Custom controls (registered by host applications)
+  if (customControls.length > 0) {
+    const accentColor = state.options.accentColor;
+    for (const control of customControls) {
+      wrapper.appendChild(createControlElement(control, accentColor));
+    }
+  }
 
   // Expand button (double-arrow)
   const expandBtn = document.createElement('button');

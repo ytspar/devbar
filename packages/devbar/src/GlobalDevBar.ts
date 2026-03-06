@@ -82,8 +82,22 @@ consoleCapture.startErrorHandlers();
 // ============================================================================
 
 export class GlobalDevBar {
-  // Static storage for custom controls
-  private static customControls: DevBarControl[] = [];
+  // Window-backed storage for custom controls.
+  // Using window global instead of a static class property so that custom
+  // controls survive module duplication by bundlers (e.g. Next.js creating
+  // separate copies for different dynamic import() call sites).
+  private static readonly CONTROLS_KEY = '__YTSPAR_DEVBAR_CONTROLS__';
+
+  private static get customControls(): DevBarControl[] {
+    if (typeof window === 'undefined') return [];
+    return ((window as unknown as Record<string, unknown>)[GlobalDevBar.CONTROLS_KEY] as DevBarControl[]) ?? [];
+  }
+
+  private static set customControls(value: DevBarControl[]) {
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>)[GlobalDevBar.CONTROLS_KEY] = value;
+    }
+  }
 
   // -- Public state exposed via DevBarState interface for modules --
   options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug'>> &

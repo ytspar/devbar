@@ -2,7 +2,8 @@
  * Common helpers shared across rendering sub-modules.
  */
 
-import { CSS_COLORS } from '../../constants.js';
+import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
+import type { DevBarControl } from '../../types.js';
 import type { DevBarState } from '../types.js';
 
 /**
@@ -65,4 +66,59 @@ export function clearChildren(el: HTMLElement): void {
   while (el.firstChild) {
     el.removeChild(el.firstChild);
   }
+}
+
+/**
+ * Resolve the color for a custom control based on its variant.
+ */
+export function getControlColor(variant: string | undefined, accentColor: string): string {
+  if (variant === 'warning') return BUTTON_COLORS.warning;
+  if (variant === 'info') return BUTTON_COLORS.info;
+  return accentColor;
+}
+
+/**
+ * Create a single custom control element (button or non-interactive badge).
+ */
+export function createControlElement(control: DevBarControl, accentColor: string): HTMLElement {
+  const color = getControlColor(control.variant, accentColor);
+  const isActive = control.active ?? false;
+  const isDisabled = control.disabled ?? false;
+  const isInteractive = !!control.onClick;
+
+  const el = document.createElement(isInteractive ? 'button' : 'span');
+  if (isInteractive) (el as HTMLButtonElement).type = 'button';
+
+  Object.assign(el.style, {
+    padding: '4px 10px',
+    backgroundColor: isActive ? withAlpha(color, 20) : 'transparent',
+    border: `1px solid ${isActive ? color : withAlpha(color, 38)}`,
+    borderRadius: '6px',
+    color: isActive ? color : withAlpha(color, 60),
+    fontSize: '0.625rem',
+    cursor: isInteractive ? (isDisabled ? 'not-allowed' : 'pointer') : 'default',
+    opacity: isDisabled ? '0.5' : '1',
+    transition: isInteractive ? 'all 150ms' : 'none',
+  });
+
+  el.textContent = control.label;
+
+  if (isInteractive) {
+    (el as HTMLButtonElement).disabled = isDisabled;
+    if (!isDisabled) {
+      el.onmouseenter = () => {
+        el.style.backgroundColor = withAlpha(color, 13);
+        el.style.borderColor = color;
+        el.style.color = color;
+      };
+      el.onmouseleave = () => {
+        el.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
+        el.style.borderColor = isActive ? color : withAlpha(color, 38);
+        el.style.color = isActive ? color : withAlpha(color, 60);
+      };
+      el.onclick = () => control.onClick!();
+    }
+  }
+
+  return el;
 }

@@ -22,6 +22,7 @@ import {
   DEVBAR_STYLES,
   getThemeColors,
   MAX_RECONNECT_ATTEMPTS,
+  PALETTE,
   WS_PORT,
   WS_PORT_OFFSET,
 } from './constants.js';
@@ -283,7 +284,7 @@ export class GlobalDevBar {
       padding: '0 4px',
       borderRadius: '9999px',
       backgroundColor: bgColor,
-      color: '#fff',
+      color: PALETTE.white,
       fontSize: '0.5625rem',
       fontWeight: '600',
       display: 'flex',

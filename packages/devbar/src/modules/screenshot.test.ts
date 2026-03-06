@@ -6,9 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
+  consoleLogsToMarkdown,
   copyPathToClipboard,
+  handleA11yAudit,
+  handleDesignReview,
   handleDocumentOutline,
   handlePageSchema,
+  handleSaveA11yAudit,
+  handleSaveConsoleLogs,
   handleSaveOutline,
   handleSaveSchema,
   handleScreenshot,
@@ -16,6 +21,43 @@ import {
   showDesignReviewConfirmation,
 } from './screenshot.js';
 import type { DevBarState } from './types.js';
+
+// Mock external dependencies
+vi.mock('../lazy/lazyHtml2Canvas.js', () => ({
+  getHtml2Canvas: vi.fn(),
+}));
+
+vi.mock('../utils.js', () => ({
+  canvasToDataUrl: vi.fn(() => 'data:image/jpeg;base64,mock'),
+  copyCanvasToClipboard: vi.fn().mockResolvedValue(undefined),
+  delay: vi.fn().mockResolvedValue(undefined),
+  prepareForCapture: vi.fn(() => vi.fn()),
+  downloadDataUrl: vi.fn(),
+  downloadFile: vi.fn(),
+}));
+
+vi.mock('../settings.js', () => ({
+  resolveSaveLocation: vi.fn((loc: string, connected: boolean) => {
+    if (loc === 'auto') return connected ? 'local' : 'download';
+    return loc;
+  }),
+}));
+
+vi.mock('../outline.js', () => ({
+  extractDocumentOutline: vi.fn(() => [{ tag: 'h1', text: 'Hello' }]),
+  outlineToMarkdown: vi.fn(() => '# Outline\n- h1: Hello'),
+}));
+
+vi.mock('../schema.js', () => ({
+  extractPageSchema: vi.fn(() => ({ title: 'Test' })),
+  checkMissingTags: vi.fn(() => []),
+  extractFavicons: vi.fn(() => []),
+  schemaToMarkdown: vi.fn(() => '# Schema\ntitle: Test'),
+}));
+
+vi.mock('../accessibility.js', () => ({
+  a11yToMarkdown: vi.fn(() => '# A11y Report\nNo issues'),
+}));
 
 /** Create a minimal mock DevBarState for testing */
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
@@ -519,5 +561,484 @@ describe('handleSaveSchema', () => {
       'schema downloaded',
       expect.any(Number)
     );
+  });
+});
+
+describe('handleScreenshot - full flow', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('captures screenshot and sends via WebSocket when connected locally', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { canvasToDataUrl, prepareForCapture, delay } = await import('../utils.js');
+
+    const mockCanvas = {
+      width: 1920,
+      height: 1080,
+      getContext: vi.fn(),
+      toBlob: vi.fn(),
+    };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (canvasToDataUrl as any).mockReturnValue('data:image/jpeg;base64,mock');
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    const sendMock = vi.fn();
+    const state = createMockState({
+      capturing: false,
+      sweetlinkConnected: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+      lcpValue: 200,
+      clsValue: 0.05,
+      inpValue: 100,
+      consoleLogs: [],
+    });
+    state.options.saveLocation = 'local';
+
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') return [{ name: 'first-contentful-paint', startTime: 150 }] as any;
+      if (type === 'navigation') return [{ transferSize: 5000 }] as any;
+      if (type === 'resource') return [{ transferSize: 10000 }] as any;
+      return [];
+    });
+
+    await handleScreenshot(state, false);
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(sendMock.mock.calls[0][0]);
+    expect(sent.type).toBe('save-screenshot');
+    expect(sent.data.screenshot).toBe('data:image/jpeg;base64,mock');
+    expect(sent.data.width).toBe(1920);
+    expect(sent.data.height).toBe(1080);
+    expect(sent.data.webVitals).toBeDefined();
+    expect(sent.data.webVitals.lcp).toBe(200);
+    expect(sent.data.webVitals.fcp).toBe(150);
+    expect(sent.data.webVitals.cls).toBe(0.05);
+    expect(sent.data.webVitals.inp).toBe(100);
+    expect(sent.data.pageSize).toBe(15000);
+    expect(state.capturing).toBe(false);
+  });
+
+  it('falls back to browser download when not connected locally', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { canvasToDataUrl, prepareForCapture, delay, downloadDataUrl } = await import(
+      '../utils.js'
+    );
+
+    const mockCanvas = { width: 800, height: 600, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (canvasToDataUrl as any).mockReturnValue('data:image/jpeg;base64,fallback');
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    const state = createMockState({
+      capturing: false,
+      sweetlinkConnected: false,
+      ws: null,
+    });
+    state.options.saveLocation = 'download';
+
+    await handleScreenshot(state, false);
+
+    expect(downloadDataUrl).toHaveBeenCalledWith(
+      expect.stringContaining('devbar-screenshot-'),
+      'data:image/jpeg;base64,fallback'
+    );
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'screenshot',
+      'screenshot downloaded',
+      expect.any(Number)
+    );
+    expect(state.capturing).toBe(false);
+  });
+
+  it('copies to clipboard when copyToClipboard is true', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { copyCanvasToClipboard, prepareForCapture, delay } = await import('../utils.js');
+
+    const mockCanvas = { width: 100, height: 100, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (copyCanvasToClipboard as any).mockResolvedValue(undefined);
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    vi.useFakeTimers();
+    const state = createMockState({ capturing: false });
+
+    await handleScreenshot(state, true);
+
+    expect(copyCanvasToClipboard).toHaveBeenCalled();
+    expect(state.copiedToClipboard).toBe(true);
+
+    // Timeout should reset copiedToClipboard
+    vi.advanceTimersByTime(3000);
+    expect(state.copiedToClipboard).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('handles clipboard copy failure gracefully', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { copyCanvasToClipboard, prepareForCapture, delay } = await import('../utils.js');
+
+    const mockCanvas = { width: 100, height: 100, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (copyCanvasToClipboard as any).mockRejectedValue(new Error('clipboard denied'));
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const state = createMockState({ capturing: false });
+
+    await handleScreenshot(state, true);
+
+    expect(consoleError).toHaveBeenCalledWith(
+      '[GlobalDevBar] Failed to copy to clipboard:',
+      expect.any(Error)
+    );
+    expect(state.copiedToClipboard).toBe(false);
+    expect(state.capturing).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  it('handles html2canvas failure and calls cleanup', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { prepareForCapture, delay } = await import('../utils.js');
+
+    const cleanupFn = vi.fn();
+    (getHtml2Canvas as any).mockRejectedValue(new Error('canvas failed'));
+    (prepareForCapture as any).mockReturnValue(cleanupFn);
+    (delay as any).mockResolvedValue(undefined);
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const state = createMockState({ capturing: false, sweetlinkConnected: true });
+    state.options.saveLocation = 'download';
+
+    await handleScreenshot(state, false);
+
+    expect(consoleError).toHaveBeenCalledWith(
+      '[GlobalDevBar] Screenshot failed:',
+      expect.any(Error)
+    );
+    expect(cleanupFn).toHaveBeenCalled();
+    expect(state.capturing).toBe(false);
+    consoleError.mockRestore();
+  });
+
+  it('omits webVitals when no metrics are set', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { canvasToDataUrl, prepareForCapture, delay } = await import('../utils.js');
+
+    const mockCanvas = { width: 800, height: 600, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (canvasToDataUrl as any).mockReturnValue('data:image/jpeg;base64,x');
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([]);
+
+    const sendMock = vi.fn();
+    const state = createMockState({
+      capturing: false,
+      sweetlinkConnected: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+      lcpValue: null,
+      clsValue: 0,
+      inpValue: 0,
+    });
+    state.options.saveLocation = 'local';
+
+    await handleScreenshot(state, false);
+
+    const sent = JSON.parse(sendMock.mock.calls[0][0]);
+    expect(sent.data.webVitals).toBeUndefined();
+    expect(sent.data.pageSize).toBeUndefined();
+  });
+
+  it('clears previous screenshotTimeout on clipboard copy', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { copyCanvasToClipboard, prepareForCapture, delay } = await import('../utils.js');
+
+    const mockCanvas = { width: 100, height: 100, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (copyCanvasToClipboard as any).mockResolvedValue(undefined);
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+
+    vi.useFakeTimers();
+    const existingTimeout = setTimeout(() => {}, 10000);
+    const state = createMockState({
+      capturing: false,
+      screenshotTimeout: existingTimeout,
+    });
+
+    await handleScreenshot(state, true);
+
+    expect(state.copiedToClipboard).toBe(true);
+    expect(state.screenshotTimeout).not.toBe(existingTimeout);
+    vi.useRealTimers();
+  });
+});
+
+describe('handleDesignReview', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing if design review is already in progress', async () => {
+    const state = createMockState({
+      designReviewInProgress: true,
+      sweetlinkConnected: true,
+    });
+    await handleDesignReview(state);
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('does nothing if not connected', async () => {
+    const state = createMockState({
+      designReviewInProgress: false,
+      sweetlinkConnected: false,
+    });
+    await handleDesignReview(state);
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('sends design-review-screenshot via WebSocket', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { prepareForCapture, delay, canvasToDataUrl } = await import('../utils.js');
+
+    const mockCanvas = { width: 1024, height: 768, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+    (canvasToDataUrl as any).mockReturnValue('data:image/png;base64,review');
+
+    const sendMock = vi.fn();
+    const state = createMockState({
+      designReviewInProgress: false,
+      sweetlinkConnected: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+      consoleLogs: [{ level: 'error', message: 'test', timestamp: 123 }],
+    });
+
+    await handleDesignReview(state);
+
+    expect(state.designReviewInProgress).toBe(true);
+    expect(state.designReviewError).toBeNull();
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(sendMock.mock.calls[0][0]);
+    expect(sent.type).toBe('design-review-screenshot');
+    expect(sent.data.screenshot).toBe('data:image/png;base64,review');
+    expect(sent.data.width).toBe(1024);
+    expect(sent.data.height).toBe(768);
+    expect(sent.data.url).toBeDefined();
+  });
+
+  it('clears previous error timeout on start', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { prepareForCapture, delay, canvasToDataUrl } = await import('../utils.js');
+
+    const mockCanvas = { width: 100, height: 100, getContext: vi.fn() };
+    (getHtml2Canvas as any).mockResolvedValue(vi.fn().mockResolvedValue(mockCanvas));
+    (prepareForCapture as any).mockReturnValue(vi.fn());
+    (delay as any).mockResolvedValue(undefined);
+    (canvasToDataUrl as any).mockReturnValue('data:image/png;base64,x');
+
+    vi.useFakeTimers();
+    const existingTimeout = setTimeout(() => {}, 10000);
+    const sendMock = vi.fn();
+    const state = createMockState({
+      designReviewInProgress: false,
+      sweetlinkConnected: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+      designReviewErrorTimeout: existingTimeout,
+      designReviewError: 'old error',
+    });
+
+    await handleDesignReview(state);
+
+    expect(state.designReviewError).toBeNull();
+    expect(state.designReviewErrorTimeout).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('handles failure and calls cleanup', async () => {
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    const { prepareForCapture, delay } = await import('../utils.js');
+
+    const cleanupFn = vi.fn();
+    (getHtml2Canvas as any).mockRejectedValue(new Error('review failed'));
+    (prepareForCapture as any).mockReturnValue(cleanupFn);
+    (delay as any).mockResolvedValue(undefined);
+
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const state = createMockState({
+      designReviewInProgress: false,
+      sweetlinkConnected: true,
+    });
+
+    await handleDesignReview(state);
+
+    expect(consoleError).toHaveBeenCalledWith(
+      '[GlobalDevBar] Design review failed:',
+      expect.any(Error)
+    );
+    expect(cleanupFn).toHaveBeenCalled();
+    expect(state.designReviewInProgress).toBe(false);
+    expect(state.render).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
+
+describe('handleA11yAudit', () => {
+  it('toggles a11y modal on', () => {
+    const state = createMockState({ showA11yModal: false } as any);
+    handleA11yAudit(state);
+    expect(state.showA11yModal).toBe(true);
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('toggles a11y modal off', () => {
+    const state = createMockState({ showA11yModal: true } as any);
+    handleA11yAudit(state);
+    expect(state.showA11yModal).toBe(false);
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('closes other modals when opening a11y', () => {
+    const state = createMockState({
+      showA11yModal: false,
+      showOutlineModal: true,
+      showSchemaModal: true,
+    } as any);
+    handleA11yAudit(state);
+    expect(state.showA11yModal).toBe(true);
+    expect(state.showOutlineModal).toBe(false);
+    expect(state.showSchemaModal).toBe(false);
+  });
+});
+
+describe('handleSaveA11yAudit', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing if already saving', () => {
+    const sendMock = vi.fn();
+    const state = createMockState({
+      savingA11yAudit: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+    } as any);
+    handleSaveA11yAudit(state, { violations: [], passes: [], incomplete: [] } as any);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a11y report via WebSocket when connected locally', () => {
+    const sendMock = vi.fn();
+    const state = createMockState({
+      savingA11yAudit: false,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+    } as any);
+    state.options.saveLocation = 'local';
+
+    handleSaveA11yAudit(state, { violations: [], passes: [], incomplete: [] } as any);
+
+    expect(state.savingA11yAudit).toBe(true);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(sendMock.mock.calls[0][0]);
+    expect(sent.type).toBe('save-a11y');
+    expect(sent.data).toHaveProperty('markdown');
+  });
+
+  it('downloads when not connected', () => {
+    const state = createMockState({
+      savingA11yAudit: false,
+      sweetlinkConnected: false,
+      ws: null,
+    } as any);
+
+    handleSaveA11yAudit(state, { violations: [], passes: [], incomplete: [] } as any);
+
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'a11y',
+      'a11y report downloaded',
+      expect.any(Number)
+    );
+  });
+});
+
+describe('handleSaveConsoleLogs', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing if already saving', () => {
+    const sendMock = vi.fn();
+    const state = createMockState({
+      savingConsoleLogs: true,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+    } as any);
+    handleSaveConsoleLogs(state, []);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('sends console logs via WebSocket when connected locally', () => {
+    const sendMock = vi.fn();
+    const state = createMockState({
+      savingConsoleLogs: false,
+      ws: { readyState: WebSocket.OPEN, send: sendMock } as any,
+    } as any);
+    state.options.saveLocation = 'local';
+
+    const logs = [{ level: 'error', message: 'oops', timestamp: 1000 }];
+    handleSaveConsoleLogs(state, logs);
+
+    expect(state.savingConsoleLogs).toBe(true);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(sendMock.mock.calls[0][0]);
+    expect(sent.type).toBe('save-console-logs');
+    expect(sent.data.logs).toEqual(logs);
+    expect(sent.data).toHaveProperty('markdown');
+  });
+
+  it('downloads when not connected', () => {
+    const state = createMockState({
+      savingConsoleLogs: false,
+      sweetlinkConnected: false,
+      ws: null,
+    } as any);
+
+    handleSaveConsoleLogs(state, [{ level: 'info', message: 'test', timestamp: 500 }]);
+
+    expect(state.handleNotification).toHaveBeenCalledWith(
+      'consoleLogs',
+      'console logs downloaded',
+      expect.any(Number)
+    );
+  });
+});
+
+describe('consoleLogsToMarkdown', () => {
+  it('returns "_No logs_" for empty array', () => {
+    expect(consoleLogsToMarkdown([])).toBe('_No logs_');
+  });
+
+  it('formats logs with timestamp, level, and message', () => {
+    const logs = [
+      { level: 'error', message: 'Something broke', timestamp: 1709726400000 },
+      { level: 'info', message: 'All good', timestamp: 1709726401000 },
+    ];
+    const result = consoleLogsToMarkdown(logs);
+
+    expect(result).toContain('`error`');
+    expect(result).toContain('Something broke');
+    expect(result).toContain('`info`');
+    expect(result).toContain('All good');
+    // Each line starts with "- **[" (markdown list with bold timestamp)
+    const lines = result.split('\n');
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line).toMatch(/^- \*\*\[.*\]\*\* `\w+` .+/);
+    }
   });
 });

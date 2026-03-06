@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/sweetlink" },
+    { "path": "packages/devbar" },
+    { "path": "packages/playground" }
+  ]
+}

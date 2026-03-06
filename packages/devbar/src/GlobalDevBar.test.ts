@@ -1047,7 +1047,7 @@ describe('GlobalDevBar createCollapsedBadge', () => {
     const bar = new GlobalDevBar();
     const badge = bar.createCollapsedBadge(3, '#ef4444', '0px');
 
-    expect(badge.style.color).toBe('#fff');
+    expect(badge.style.color).toBe('#ffffff');
   });
 
   it('should handle count of 0', () => {

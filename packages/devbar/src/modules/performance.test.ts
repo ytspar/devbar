@@ -2,8 +2,12 @@
  * Performance module tests
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getResponsiveMetricVisibility, setupBreakpointDetection } from './performance.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getResponsiveMetricVisibility,
+  setupBreakpointDetection,
+  setupPerformanceMonitoring,
+} from './performance.js';
 import type { DevBarState } from './types.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
@@ -270,5 +274,510 @@ describe('getResponsiveMetricVisibility', () => {
     const result = getResponsiveMetricVisibility(state);
     expect(result.visible.length).toBeGreaterThanOrEqual(0);
     expect(result.visible.length + result.hidden.length).toBe(5);
+  });
+});
+
+describe('setupPerformanceMonitoring', () => {
+  let originalReadyState: string;
+  let observerCallbacks: Map<string, (list: any) => void>;
+  let mockObserverInstances: any[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    originalReadyState = document.readyState;
+    observerCallbacks = new Map();
+    mockObserverInstances = [];
+
+    // Mock PerformanceObserver as a proper class (needed for `new` keyword)
+    class MockPerformanceObserver {
+      callback: any;
+      observe: any;
+      disconnect: any;
+      constructor(callback: any) {
+        this.callback = callback;
+        this.observe = vi.fn((opts: any) => {
+          observerCallbacks.set(opts.type, callback);
+        });
+        this.disconnect = vi.fn();
+        mockObserverInstances.push(this);
+      }
+    }
+    vi.stubGlobal('PerformanceObserver', MockPerformanceObserver);
+
+    // Mock performance API
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') {
+        return [{ name: 'first-contentful-paint', startTime: 123.456 }] as any;
+      }
+      if (type === 'navigation') {
+        return [{ transferSize: 5000 }] as any;
+      }
+      if (type === 'resource') {
+        return [{ transferSize: 10000 }, { transferSize: 20000 }] as any;
+      }
+      return [];
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(document, 'readyState', {
+      value: originalReadyState,
+      configurable: true,
+      writable: true,
+    });
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('schedules updatePerfStats via setTimeout when document is complete', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ lcpValue: 250, clsValue: 0.05, inpValue: 80 });
+    setupPerformanceMonitoring(state);
+
+    // Before timer fires, perfStats may still be null
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats).not.toBeNull();
+    expect(state.perfStats!.fcp).toBe('123ms');
+    expect(state.perfStats!.lcp).toBe('250ms');
+    expect(state.perfStats!.cls).toBe('0.050');
+    expect(state.perfStats!.inp).toBe('80ms');
+    expect(state.render).toHaveBeenCalled();
+    expect(state.debug.perf).toHaveBeenCalledWith('Performance stats updated', expect.any(Object));
+  });
+
+  it('registers load event listener when document is not complete', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'loading',
+      configurable: true,
+      writable: true,
+    });
+
+    const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+
+    expect(addEventListenerSpy).toHaveBeenCalledWith('load', expect.any(Function));
+  });
+
+  it('formats FCP as dash when no paint entry exists', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') return [];
+      if (type === 'navigation') return [{ transferSize: 0 }] as any;
+      if (type === 'resource') return [];
+      return [];
+    });
+
+    const state = createMockState({ lcpValue: null });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.fcp).toBe('-');
+  });
+
+  it('formats LCP as dash when lcpValue is null', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ lcpValue: null });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.lcp).toBe('-');
+  });
+
+  it('formats INP as dash when inpValue is 0', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ inpValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.inp).toBe('-');
+  });
+
+  it('formats total size in MB when over 1MB', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') return [];
+      if (type === 'navigation') return [{ transferSize: 1500000 }] as any;
+      if (type === 'resource') return [{ transferSize: 500000 }] as any;
+      return [];
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.totalSize).toMatch(/MB$/);
+  });
+
+  it('formats total size in KB when under 1MB', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') return [];
+      if (type === 'navigation') return [{ transferSize: 5000 }] as any;
+      if (type === 'resource') return [{ transferSize: 10000 }] as any;
+      return [];
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.totalSize).toMatch(/KB$/);
+  });
+
+  it('handles missing navigation entry for total size', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') return [];
+      if (type === 'navigation') return [];
+      if (type === 'resource') return [{ transferSize: 1024 }] as any;
+      return [];
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats!.totalSize).toBe('1 KB');
+  });
+
+  it('creates FCP observer and assigns to state', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+
+    expect(state.fcpObserver).not.toBeNull();
+    expect(state.lcpObserver).not.toBeNull();
+    expect(state.clsObserver).not.toBeNull();
+    expect(state.inpObserver).not.toBeNull();
+  });
+
+  it('FCP observer callback triggers updatePerfStats on matching entry', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    // Trigger the FCP observer callback
+    const fcpCallback = observerCallbacks.get('paint');
+    expect(fcpCallback).toBeDefined();
+    fcpCallback!({
+      getEntries: () => [{ name: 'first-contentful-paint', startTime: 200 }],
+    });
+
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('FCP observer callback ignores non-FCP paint entries', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState();
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const fcpCallback = observerCallbacks.get('paint');
+    fcpCallback!({
+      getEntries: () => [{ name: 'first-paint', startTime: 50 }],
+    });
+
+    // render should not be called for non-FCP paint entries
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('LCP observer updates lcpValue and triggers updatePerfStats', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ lcpValue: null });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const lcpCallback = observerCallbacks.get('largest-contentful-paint');
+    expect(lcpCallback).toBeDefined();
+    lcpCallback!({
+      getEntries: () => [{ startTime: 500 }, { startTime: 750 }],
+    });
+
+    expect(state.lcpValue).toBe(750); // Takes last entry
+    expect(state.debug.perf).toHaveBeenCalledWith('LCP updated', { lcp: 750 });
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('LCP observer ignores empty entries list', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ lcpValue: null });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const lcpCallback = observerCallbacks.get('largest-contentful-paint');
+    lcpCallback!({ getEntries: () => [] });
+
+    expect(state.lcpValue).toBeNull(); // Unchanged
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('CLS observer accumulates layout shift values', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ clsValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const clsCallback = observerCallbacks.get('layout-shift');
+    expect(clsCallback).toBeDefined();
+
+    // First shift
+    clsCallback!({
+      getEntries: () => [{ hadRecentInput: false, value: 0.1 }],
+    });
+    expect(state.clsValue).toBeCloseTo(0.1);
+
+    // Second shift accumulates
+    clsCallback!({
+      getEntries: () => [{ hadRecentInput: false, value: 0.05 }],
+    });
+    expect(state.clsValue).toBeCloseTo(0.15);
+    expect(state.debug.perf).toHaveBeenCalledWith('CLS updated', expect.any(Object));
+  });
+
+  it('CLS observer ignores shifts with recent user input', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ clsValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const clsCallback = observerCallbacks.get('layout-shift');
+    clsCallback!({
+      getEntries: () => [{ hadRecentInput: true, value: 0.5 }],
+    });
+
+    expect(state.clsValue).toBe(0); // Not accumulated
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('CLS observer ignores entries with no value', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ clsValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const clsCallback = observerCallbacks.get('layout-shift');
+    clsCallback!({
+      getEntries: () => [{ hadRecentInput: false, value: 0 }],
+    });
+
+    expect(state.clsValue).toBe(0);
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('INP observer tracks the highest duration interaction', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ inpValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const inpCallback = observerCallbacks.get('event');
+    expect(inpCallback).toBeDefined();
+
+    // First interaction
+    inpCallback!({
+      getEntries: () => [{ duration: 50 }],
+    });
+    expect(state.inpValue).toBe(50);
+
+    // Higher duration replaces
+    inpCallback!({
+      getEntries: () => [{ duration: 120 }],
+    });
+    expect(state.inpValue).toBe(120);
+
+    // Lower duration does NOT replace
+    inpCallback!({
+      getEntries: () => [{ duration: 30 }],
+    });
+    expect(state.inpValue).toBe(120);
+    expect(state.debug.perf).toHaveBeenCalledWith('INP updated', expect.any(Object));
+  });
+
+  it('INP observer ignores entries with no duration', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    const state = createMockState({ inpValue: 0 });
+    setupPerformanceMonitoring(state);
+    vi.advanceTimersByTime(100);
+    (state.render as any).mockClear();
+
+    const inpCallback = observerCallbacks.get('event');
+    inpCallback!({
+      getEntries: () => [{ duration: 0 }],
+    });
+
+    expect(state.inpValue).toBe(0);
+    expect(state.render).not.toHaveBeenCalled();
+  });
+
+  it('handles PerformanceObserver not supported (catches errors)', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'complete',
+      configurable: true,
+      writable: true,
+    });
+
+    // Make PerformanceObserver constructor throw
+    vi.stubGlobal(
+      'PerformanceObserver',
+      vi.fn(() => {
+        throw new Error('Not supported');
+      })
+    );
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const state = createMockState();
+
+    // Should not throw
+    expect(() => setupPerformanceMonitoring(state)).not.toThrow();
+
+    // All four observers should have logged warnings (may also include vitest internal warnings)
+    expect(warnSpy.mock.calls.filter((c) => c[0]?.toString().includes('[GlobalDevBar]'))).toHaveLength(4);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] FCP PerformanceObserver not supported',
+      expect.any(Error)
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] LCP PerformanceObserver not supported',
+      expect.any(Error)
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] CLS PerformanceObserver not supported',
+      expect.any(Error)
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] INP PerformanceObserver not supported',
+      expect.any(Error)
+    );
+
+    // Observers should remain null
+    expect(state.fcpObserver).toBeNull();
+    expect(state.lcpObserver).toBeNull();
+    expect(state.clsObserver).toBeNull();
+    expect(state.inpObserver).toBeNull();
+
+    warnSpy.mockRestore();
+  });
+
+  it('load event handler fires updatePerfStats after timeout', () => {
+    Object.defineProperty(document, 'readyState', {
+      value: 'loading',
+      configurable: true,
+      writable: true,
+    });
+
+    const listeners: Record<string, Function[]> = {};
+    vi.spyOn(window, 'addEventListener').mockImplementation((event: string, handler: any) => {
+      if (!listeners[event]) listeners[event] = [];
+      listeners[event].push(handler);
+    });
+
+    const state = createMockState({ lcpValue: 300 });
+    setupPerformanceMonitoring(state);
+
+    // perfStats should still be null before load fires
+    expect(state.perfStats).toBeNull();
+
+    // Simulate load event
+    listeners['load']?.forEach((fn) => fn());
+    vi.advanceTimersByTime(100);
+
+    expect(state.perfStats).not.toBeNull();
+    expect(state.perfStats!.lcp).toBe('300ms');
   });
 });

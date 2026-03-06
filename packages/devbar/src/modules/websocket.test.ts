@@ -5,6 +5,23 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Mock modules used by command handlers
+vi.mock('../accessibility.js', () => ({
+  runA11yAudit: vi.fn(),
+}));
+vi.mock('../lazy/lazyHtml2Canvas.js', () => ({
+  getHtml2Canvas: vi.fn(),
+}));
+vi.mock('../outline.js', () => ({
+  extractDocumentOutline: vi.fn(() => []),
+  outlineToMarkdown: vi.fn(() => ''),
+}));
+vi.mock('../schema.js', () => ({
+  extractPageSchema: vi.fn(() => ({})),
+  schemaToMarkdown: vi.fn(() => ''),
+}));
+
 import type { DevBarState } from './types.js';
 import { connectWebSocket, handleNotification } from './websocket.js';
 
@@ -28,6 +45,8 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
     sweetlinkConnected: false,
     wsVerified: false,
     serverProjectDir: null,
+    serverGitBranch: null,
+    serverAppName: null,
     reconnectAttempts: 0,
     currentAppPort: 3000,
     baseWsPort: 9223,
@@ -909,5 +928,635 @@ describe('connectWebSocket - port scan exhaustion', () => {
     );
 
     consoleSpy.mockRestore();
+  });
+});
+
+// ============================================================================
+// Command handler tests — lines 218-520+ (previously uncovered)
+// ============================================================================
+
+describe('connectWebSocket - command handlers', () => {
+  let originalWebSocket: typeof WebSocket;
+
+  beforeEach(() => {
+    originalWebSocket = globalThis.WebSocket;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    globalThis.WebSocket = originalWebSocket;
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Helper: connect and verify, then return the ws instance */
+  function connectAndVerify(state: DevBarState) {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+    connectWebSocket(state);
+    const ws = instances[0];
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+    (state.render as any).mockClear();
+    ws.send.mockClear();
+    return { ws, MockWebSocket, instances };
+  }
+
+  it('handles screenshot command with html2canvas', async () => {
+    const mockCanvas = {
+      toDataURL: vi.fn(() => 'data:image/png;base64,abc'),
+      width: 800,
+      height: 600,
+    };
+    const mockHtml2Canvas = vi.fn().mockResolvedValue(mockCanvas);
+
+    // Mock the lazy loader
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    vi.mocked(getHtml2Canvas).mockResolvedValue(mockHtml2Canvas);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'screenshot' }),
+    });
+
+    // Wait for async handler
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockHtml2Canvas).toHaveBeenCalledWith(document.body, {
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+    });
+    expect(ws.send).toHaveBeenCalledWith(
+      expect.stringContaining('"screenshot":"data:image/png;base64,abc"')
+    );
+  });
+
+  it('handles screenshot command with selector', async () => {
+    const targetEl = document.createElement('div');
+    targetEl.id = 'capture-target';
+    document.body.appendChild(targetEl);
+
+    const mockCanvas = {
+      toDataURL: vi.fn(() => 'data:image/png;base64,xyz'),
+      width: 400,
+      height: 300,
+    };
+    const mockHtml2Canvas = vi.fn().mockResolvedValue(mockCanvas);
+
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    vi.mocked(getHtml2Canvas).mockResolvedValue(mockHtml2Canvas);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'screenshot', selector: '#capture-target' }),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockHtml2Canvas).toHaveBeenCalledWith(targetEl, expect.any(Object));
+    targetEl.remove();
+  });
+
+  it('handles screenshot command with non-existent selector (falls back to body)', async () => {
+    const mockCanvas = {
+      toDataURL: vi.fn(() => 'data:image/png;base64,fallback'),
+      width: 100,
+      height: 100,
+    };
+    const mockHtml2Canvas = vi.fn().mockResolvedValue(mockCanvas);
+
+    const { getHtml2Canvas } = await import('../lazy/lazyHtml2Canvas.js');
+    vi.mocked(getHtml2Canvas).mockResolvedValue(mockHtml2Canvas);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'screenshot', selector: '#nonexistent' }),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockHtml2Canvas).toHaveBeenCalledWith(document.body, expect.any(Object));
+  });
+
+  it('handles get-logs command without filter', () => {
+    const logs = [
+      { level: 'error', message: 'err1', timestamp: 'ts1' },
+      { level: 'log', message: 'log1', timestamp: 'ts2' },
+    ];
+    const state = createMockState({ consoleLogs: logs as any });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-logs' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data).toHaveLength(2);
+  });
+
+  it('handles get-logs command with filter', () => {
+    const logs = [
+      { level: 'error', message: 'err1', timestamp: 'ts1' },
+      { level: 'log', message: 'log1', timestamp: 'ts2' },
+      { level: 'warn', message: 'an error occurred', timestamp: 'ts3' },
+    ];
+    const state = createMockState({ consoleLogs: logs as any });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-logs', filter: 'error' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    // 'error' level match + 'an error occurred' message match
+    expect(sent.data).toHaveLength(2);
+  });
+
+  it('handles query-dom command without property', () => {
+    const el = document.createElement('div');
+    el.className = 'test-query';
+    el.id = 'q1';
+    el.textContent = 'Hello World';
+    document.body.appendChild(el);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'query-dom', selector: '.test-query' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.count).toBe(1);
+    expect(sent.data.results[0].tagName).toBe('DIV');
+    expect(sent.data.results[0].id).toBe('q1');
+
+    el.remove();
+  });
+
+  it('handles query-dom command with property', () => {
+    const el = document.createElement('div');
+    el.className = 'test-prop';
+    el.textContent = 'content here';
+    document.body.appendChild(el);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'query-dom', selector: '.test-prop', property: 'textContent' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.results[0]).toBe('content here');
+
+    el.remove();
+  });
+
+  it('handles query-dom with no selector (no-op)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'query-dom' }),
+    });
+
+    // Should not send anything since there's no selector
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('handles exec-js command successfully', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js', code: '2 + 2' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data).toBe(4);
+  });
+
+  it('handles exec-js command with error', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js', code: 'throw new Error("test error")' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toBe('test error');
+  });
+
+  it('handles exec-js with non-Error throw', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js', code: 'throw "string error"' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toBe('Execution failed');
+  });
+
+  it('handles exec-js with code exceeding 10000 chars (no-op)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js', code: 'x'.repeat(10001) }),
+    });
+
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('handles exec-js with no code (no-op)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js' }),
+    });
+
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('handles get-outline command successfully', async () => {
+    const { extractDocumentOutline } = await import('../outline.js');
+    const { outlineToMarkdown } = await import('../outline.js');
+    vi.mocked(extractDocumentOutline).mockReturnValue([{ tag: 'h1', text: 'Title', level: 1 }] as any);
+    vi.mocked(outlineToMarkdown).mockReturnValue('# Title');
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-outline' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.markdown).toBe('# Title');
+  });
+
+  it('handles get-outline command with error', async () => {
+    const { extractDocumentOutline } = await import('../outline.js');
+    vi.mocked(extractDocumentOutline).mockImplementation(() => {
+      throw new Error('outline fail');
+    });
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-outline' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toBe('outline fail');
+  });
+
+  it('handles get-schema command successfully', async () => {
+    const { extractPageSchema } = await import('../schema.js');
+    const { schemaToMarkdown } = await import('../schema.js');
+    vi.mocked(extractPageSchema).mockReturnValue({ title: 'Test' } as any);
+    vi.mocked(schemaToMarkdown).mockReturnValue('## Schema');
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-schema' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.markdown).toBe('## Schema');
+  });
+
+  it('handles get-schema command with error', async () => {
+    const { extractPageSchema } = await import('../schema.js');
+    vi.mocked(extractPageSchema).mockImplementation(() => {
+      throw new Error('schema fail');
+    });
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-schema' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toBe('schema fail');
+  });
+
+  it('handles refresh command', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    // Mock window.location.reload
+    const reloadMock = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, reload: reloadMock },
+      writable: true,
+    });
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'refresh' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+  });
+
+  it('handles design-review-saved command', () => {
+    const state = createMockState({ designReviewInProgress: true } as any);
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'design-review-saved', reviewPath: '/review.md' }),
+    });
+
+    expect(state.designReviewInProgress).toBe(false);
+    expect(state.lastDesignReview).toBe('/review.md');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles design-review-error and clears error after timeout', () => {
+    const state = createMockState({ designReviewInProgress: true } as any);
+    const { ws } = connectAndVerify(state);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'design-review-error', error: 'API limit' }),
+    });
+
+    expect(state.designReviewInProgress).toBe(false);
+    expect(state.designReviewError).toBe('API limit');
+    expect(state.render).toHaveBeenCalled();
+
+    // Error should clear after DESIGN_REVIEW_NOTIFICATION_MS (5000)
+    vi.advanceTimersByTime(5000);
+    expect(state.designReviewError).toBeNull();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('design-review-error clears previous error timeout', () => {
+    const state = createMockState({ designReviewInProgress: true } as any);
+    const { ws } = connectAndVerify(state);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // First error
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'design-review-error', error: 'first' }),
+    });
+    // Second error before timeout
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'design-review-error', error: 'second' }),
+    });
+
+    expect(state.designReviewError).toBe('second');
+
+    // Advance past first timeout - should still show second error only
+    vi.advanceTimersByTime(5000);
+    expect(state.designReviewError).toBeNull();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles api-key-status with defaults for missing fields', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'api-key-status' }),
+    });
+
+    expect(state.apiKeyStatus).toEqual({
+      configured: false,
+      model: undefined,
+      pricing: undefined,
+    });
+  });
+
+  it('handles outline-error command (no savingFlag)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'outline-error', error: 'Outline failed' }),
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Outline save failed:',
+      'Outline failed'
+    );
+    // No savingFlag set, so render should NOT be called (beyond initial verify)
+    expect(state.render).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles schema-error command (no savingFlag)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'schema-error', error: 'Schema failed' }),
+    });
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[GlobalDevBar] Schema save failed:',
+      'Schema failed'
+    );
+    expect(state.render).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles outline-saved command via dispatch', () => {
+    const state = createMockState({ savingOutline: true });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'outline-saved', outlinePath: '/outline.md' }),
+    });
+
+    expect(state.savingOutline).toBe(false);
+    expect(state.lastOutline).toBe('/outline.md');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles schema-saved command via dispatch', () => {
+    const state = createMockState({ savingSchema: true });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'schema-saved', schemaPath: '/schema.md' }),
+    });
+
+    expect(state.savingSchema).toBe(false);
+    expect(state.lastSchema).toBe('/schema.md');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles console-logs-saved command via dispatch', () => {
+    const state = createMockState({ savingConsoleLogs: true });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'console-logs-saved', consoleLogsPath: '/logs.md' }),
+    });
+
+    expect(state.savingConsoleLogs).toBe(false);
+    expect(state.lastConsoleLogs).toBe('/logs.md');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles a11y-saved command via dispatch', () => {
+    const state = createMockState({ savingA11yAudit: true } as any);
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'a11y-saved', a11yPath: '/a11y.md' }),
+    });
+
+    expect(state.savingA11yAudit).toBe(false);
+    expect(state.lastA11yAudit).toBe('/a11y.md');
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles server-info with gitBranch and appName', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ currentAppPort: 3000 });
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'server-info',
+        appPort: 3000,
+        projectDir: '/proj',
+        gitBranch: 'feature/test',
+        appName: 'my-app',
+      }),
+    });
+
+    expect(state.serverGitBranch).toBe('feature/test');
+    expect(state.serverAppName).toBe('my-app');
+  });
+
+  it('handles get-a11y command successfully', async () => {
+    const { runA11yAudit } = await import('../accessibility.js');
+    vi.mocked(runA11yAudit).mockResolvedValue({
+      violations: [
+        { impact: 'critical', id: 'v1', description: 'test', help: '', helpUrl: '', nodes: [] },
+        { impact: 'serious', id: 'v2', description: 'test2', help: '', helpUrl: '', nodes: [] },
+      ],
+      passes: [{ id: 'p1' }],
+      incomplete: [],
+    } as any);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-a11y', forceRefresh: true }),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.summary.totalViolations).toBe(2);
+    expect(sent.data.summary.totalPasses).toBe(1);
+    expect(sent.data.summary.byImpact.critical).toBe(1);
+    expect(sent.data.summary.byImpact.serious).toBe(1);
+  });
+
+  it('handles get-a11y command with error', async () => {
+    const { runA11yAudit } = await import('../accessibility.js');
+    vi.mocked(runA11yAudit).mockRejectedValue(new Error('axe failed'));
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-a11y' }),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toBe('axe failed');
+  });
+
+  it('handles get-vitals command', async () => {
+    // Mock performance APIs
+    const origGetEntriesByType = performance.getEntriesByType;
+    vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
+      if (type === 'paint') {
+        return [{ name: 'first-contentful-paint', startTime: 123.456 }] as any;
+      }
+      if (type === 'resource') {
+        return [{ transferSize: 1024 }] as any;
+      }
+      return [];
+    });
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-vitals' }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(ws.send).toHaveBeenCalled();
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.vitals.fcp).toBe(123);
+  });
+
+  it('handles get-vitals with no paint entries', async () => {
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([]);
+
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'get-vitals' }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    expect(sent.data.vitals.fcp).toBeNull();
   });
 });

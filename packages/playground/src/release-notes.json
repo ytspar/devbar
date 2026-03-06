@@ -1,6 +1,6 @@
 {
   "devbar": {
-    "1.8.3": "Fix custom controls not showing: store controls on window to survive bundler module duplication, render controls in compact mode",
+    "1.8.4": "Fix custom controls not showing: store controls on window to survive bundler module duplication, render controls in compact mode",
     "1.8.0": "Shadow theme tokens, CSS_COLORS theming fixes, function extraction, noUncheckedIndexedAccess",
     "1.7.5": "Correct ruler icon SVG, PALETTE color system centralization",
     "1.7.1": "Ruler tool for measuring element dimensions on-page",

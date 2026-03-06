@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.9.0": "Official plugins (git-branch, app-version), server info on state (gitBranch, appName), PALETTE.white, root tsconfig with project references, 232 new tests",
     "1.8.4": "Fix custom controls not showing: store controls on window to survive bundler module duplication, render controls in compact mode",
     "1.8.0": "Shadow theme tokens, CSS_COLORS theming fixes, function extraction, noUncheckedIndexedAccess",
     "1.7.5": "Correct ruler icon SVG, PALETTE color system centralization",
@@ -15,6 +16,7 @@
     "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
   },
   "sweetlink": {
+    "1.12.1": "Fix navigateBrowser URL verification: poll until actual URL matches target to prevent premature capture on SPAs",
     "1.12.0": "App identity: server detects git branch/app name, CLI --app flag targets specific instance for parallel worktree dev",
     "1.11.1": "Biome formatting and lint, README updates",
     "1.11.0": "--url browser navigation, optional peerDeps for puppeteer-core/html2canvas-pro, docs overhaul",

@@ -1,5 +1,17 @@
 {
-  "files": [],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "include": [],
   "references": [
     { "path": "packages/sweetlink" },
     { "path": "packages/devbar" },

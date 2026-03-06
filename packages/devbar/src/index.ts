@@ -124,6 +124,10 @@ export {
   getDevBarLogoSvg,
 } from './ui/icons.js';
 
+// Official plugins
+export { appVersionPlugin, type AppVersionPluginOptions } from './plugins/appVersion.js';
+export { gitBranchPlugin, type GitBranchPluginOptions } from './plugins/gitBranch.js';
+
 // Re-export utilities for external use
 export {
   canvasToDataUrl,

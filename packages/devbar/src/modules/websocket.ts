@@ -73,9 +73,12 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         state.sweetlinkConnected = true;
         state.reconnectAttempts = 0;
         state.serverProjectDir = message.projectDir ?? null;
+        state.serverGitBranch = message.gitBranch ?? null;
+        state.serverAppName = message.appName ?? null;
         state.debug.ws('Server verified', {
           appPort: serverAppPort ?? 'any',
           projectDir: state.serverProjectDir,
+          gitBranch: state.serverGitBranch,
         });
 
         state.settingsManager.setWebSocket(ws);

@@ -33,6 +33,16 @@
       "types": "./dist/GlobalDevBar.d.ts",
       "import": "./dist/GlobalDevBar.js",
       "default": "./dist/GlobalDevBar.js"
+    },
+    "./plugins/git-branch": {
+      "types": "./dist/plugins/gitBranch.d.ts",
+      "import": "./dist/plugins/gitBranch.js",
+      "default": "./dist/plugins/gitBranch.js"
+    },
+    "./plugins/app-version": {
+      "types": "./dist/plugins/appVersion.d.ts",
+      "import": "./dist/plugins/appVersion.js",
+      "default": "./dist/plugins/appVersion.js"
     }
   },
   "files": [

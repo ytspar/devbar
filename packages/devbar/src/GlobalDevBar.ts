@@ -168,6 +168,8 @@ export class GlobalDevBar {
   readonly baseWsPort: number;
   wsVerified = false;
   serverProjectDir: string | null = null;
+  serverGitBranch: string | null = null;
+  serverAppName: string | null = null;
 
   // Track the position of the connection indicator dot for smooth collapse
   lastDotPosition: { left: number; top: number; bottom: number } | null = null;

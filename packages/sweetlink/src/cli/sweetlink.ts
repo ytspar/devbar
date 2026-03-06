@@ -412,17 +412,23 @@ async function navigateBrowser(
     // Expected — page unloaded before response
   }
 
-  // 3. Poll for reconnection
+  // 3. Poll for reconnection and verify we landed on the correct URL
+  //    SPAs may reconnect on "/" before client-side routing completes,
+  //    so we keep polling until the URL actually matches the target.
   const startTime = Date.now();
   while (Date.now() - startTime < timeout) {
     await new Promise((resolve) => setTimeout(resolve, NAVIGATE_POLL_INTERVAL));
     try {
       const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
-      if (response.success) {
-        // Give devbar time to fully initialize after page load
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log(`[Sweetlink] Browser reconnected on new page`);
-        return true;
+      if (response.success && response.data != null) {
+        const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
+        if (urlsMatch(currentUrl, url)) {
+          // Give devbar time to fully initialize after page load
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          console.log(`[Sweetlink] Browser reconnected on ${url}`);
+          return true;
+        }
+        // Connected but on wrong URL (e.g. SPA redirected to /) — keep polling
       }
     } catch {
       // Still reconnecting — keep polling

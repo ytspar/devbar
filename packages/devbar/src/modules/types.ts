@@ -39,6 +39,8 @@ export interface DevBarState {
   sweetlinkConnected: boolean;
   wsVerified: boolean;
   serverProjectDir: string | null;
+  serverGitBranch: string | null;
+  serverAppName: string | null;
   reconnectAttempts: number;
   readonly currentAppPort: number;
   readonly baseWsPort: number;

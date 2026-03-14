@@ -86,22 +86,30 @@ That's it! The plugin automatically:
 - Detects Vite's port and configures everything
 - DevBar connects automatically
 
-### For Next.js
+### For Next.js (Recommended)
 
-Use the `instrumentation.ts` hook to start the server once on startup:
+Wrap your Next.js config - zero configuration needed:
 
-```typescript
-// src/instrumentation.ts (or instrumentation.ts at root)
-export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    if (process.env.NODE_ENV === 'development') {
-      import('@ytspar/sweetlink/auto');
-    }
-  }
-}
+```javascript
+// next.config.mjs
+import { withSweetlink } from '@ytspar/sweetlink/next';
+
+const nextConfig = { /* your config */ };
+export default withSweetlink(nextConfig);
 ```
 
-This runs once when the Next.js server starts and auto-configures the WebSocket port based on the app port (3000 → 9223).
+That's it! The plugin automatically:
+- Detects the port from `--port` argv (e.g., `next dev --port 3002`)
+- Falls back to `process.env.PORT`, then `3000`
+- Starts the WebSocket server on `appPort + 6223`
+- No-ops in production
+
+Works with other wrappers too:
+
+```javascript
+// With Sentry, MDX, etc.
+export default withSentryConfig(withSweetlink(withMDX(nextConfig)), sentryOptions);
+```
 
 ### For Any Node.js App (Express, Remix, etc.)
 

@@ -16,6 +16,7 @@
     "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
   },
   "sweetlink": {
+    "1.13.0": "Next.js plugin: withSweetlink() config wrapper for zero-config dev server integration, auto-detects port from --port argv",
     "1.12.1": "Fix navigateBrowser URL verification: poll until actual URL matches target to prevent premature capture on SPAs",
     "1.12.0": "App identity: server detects git branch/app name, CLI --app flag targets specific instance for parallel worktree dev",
     "1.11.1": "Biome formatting and lint, README updates",

@@ -1088,7 +1088,7 @@ export function createPackagesSection(): HTMLElement {
         'HMR auto-screenshot on code changes',
         'Claude Vision design review',
         'CLI commands for automation',
-        'Vite plugin for zero-config setup',
+        'Vite + Next.js plugins for zero-config setup',
       ],
     },
   ];
@@ -1135,10 +1135,10 @@ export function createQuickStartSection(): HTMLElement {
   );
   stepsContainer.appendChild(step1);
 
-  // Step 2: Vite setup
+  // Step 2: Framework setup (Vite or Next.js)
   const { card: step2, content: content2 } = createNotchedCard(
     'quickstart-step',
-    '2. Add Vite Plugin'
+    '2. Add Framework Plugin'
   );
   content2.appendChild(
     highlightCode(
@@ -1147,9 +1147,16 @@ import { sweetlink } from '@ytspar/sweetlink/vite'
 
 export default defineConfig({
   plugins: [sweetlink()]
-})`,
+})
+
+// — or for Next.js —
+
+// next.config.mjs
+import { withSweetlink } from '@ytspar/sweetlink/next'
+
+export default withSweetlink(nextConfig)`,
       'typescript',
-      'Vite configuration'
+      'Framework configuration'
     )
   );
   stepsContainer.appendChild(step2);

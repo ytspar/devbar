@@ -399,17 +399,19 @@ export function createLandingHero(): HTMLElement {
  * Fetch and display release info in the hero section
  */
 function fetchReleaseInfo(): void {
-  getNpmTimeline('@ytspar/devbar').then((data) => {
-    if (!data) return;
-    const latest = data['dist-tags'].latest;
-    const dateStr = data.time[latest];
-    if (!dateStr) return;
+  getNpmTimeline('@ytspar/devbar')
+    .then((data) => {
+      if (!data) return;
+      const latest = data['dist-tags'].latest;
+      const dateStr = data.time[latest];
+      if (!dateStr) return;
 
-    const el = document.getElementById('release-meta');
-    if (el) {
-      el.textContent = `Published ${formatRelativeDate(dateStr)} \u00B7 v${latest}`;
-    }
-  });
+      const el = document.getElementById('release-meta');
+      if (el) {
+        el.textContent = `Published ${formatRelativeDate(dateStr)} \u00B7 v${latest}`;
+      }
+    })
+    .catch(() => {});
 }
 
 /**
@@ -707,8 +709,8 @@ function renderReleaseGraph(
  * Fetch both packages' timelines and render the changelog
  */
 function populateChangelog(): void {
-  Promise.all([getNpmTimeline('@ytspar/devbar'), getNpmTimeline('@ytspar/sweetlink')]).then(
-    ([devbarData, sweetlinkData]) => {
+  Promise.all([getNpmTimeline('@ytspar/devbar'), getNpmTimeline('@ytspar/sweetlink')])
+    .then(([devbarData, sweetlinkData]) => {
       // Render the release graph (includes ALL versions — stable, canary, prerelease)
       renderReleaseGraph(devbarData?.time ?? {}, sweetlinkData?.time ?? {});
 
@@ -763,8 +765,8 @@ function populateChangelog(): void {
         row.appendChild(date);
         container.appendChild(row);
       }
-    }
-  );
+    })
+    .catch(() => {});
 }
 
 /**

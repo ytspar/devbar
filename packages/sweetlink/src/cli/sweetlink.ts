@@ -2227,6 +2227,20 @@ const COMMAND_HELP: Record<string, string> = {
 
     Examples:
       pnpm sweetlink fill @e2 "test@example.com"`,
+
+  record: `  record [start|stop|status]
+    Record browser sessions with action timeline.
+
+    Subcommands:
+      start                       Begin recording (captures screenshots at each action)
+      stop                        Stop recording and generate session manifest
+      status                      Show recording status (default)
+
+    Examples:
+      pnpm sweetlink record start
+      pnpm sweetlink snapshot -i
+      pnpm sweetlink click @e3
+      pnpm sweetlink record stop`,
 };
 
 // Aliases that map to canonical command names
@@ -2339,6 +2353,7 @@ if (hasFlag('--output-schema')) {
     'snapshot',
     'fill',
     'console',
+    'record',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2690,6 +2705,36 @@ async function handleStatusCommand(): Promise<StatusData> {
         console.log(data.formatted);
         console.log(`\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`);
         result = data;
+        break;
+      }
+
+      case 'record': {
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        const subcommand = args[1];
+        const state = await ensureDaemon(projRoot, targetUrl);
+
+        if (subcommand === 'start') {
+          const resp = await daemonRequest(state, 'record-start');
+          const data = resp.data as { sessionId: string };
+          console.log(`[Sweetlink] Recording started: ${data.sessionId}`);
+          result = data;
+        } else if (subcommand === 'stop') {
+          const resp = await daemonRequest(state, 'record-stop');
+          const data = resp.data as { manifest: unknown };
+          console.log('[Sweetlink] Recording stopped.');
+          console.log(JSON.stringify(data.manifest, null, 2));
+          result = data;
+        } else {
+          const resp = await daemonRequest(state, 'record-status');
+          const data = resp.data as { recording: boolean; sessionId: string | null; duration: number | null; actionCount: number };
+          if (data.recording) {
+            console.log(`[Sweetlink] Recording in progress: ${data.sessionId} (${Math.round(data.duration ?? 0)}s, ${data.actionCount} actions)`);
+          } else {
+            console.log('[Sweetlink] No recording in progress.');
+          }
+          result = data;
+        }
         break;
       }
 

@@ -19,6 +19,7 @@ import {
   getWarningCount,
   networkBuffer,
 } from './listeners.js';
+import { getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
 import { visualDiff } from './visualDiff.js';
 import {
   buildRefMap,
@@ -208,7 +209,14 @@ async function handleClickRef(
   }
 
   const locator = resolveRef(page, ref);
+  const box = await locator.boundingBox();
   await locator.click();
+
+  // Log action if recording
+  if (isRecording()) {
+    await logAction('click', [ref], page, box ?? undefined);
+  }
+
   return { ok: true, data: { clicked: ref } };
 }
 
@@ -233,7 +241,13 @@ async function handleFillRef(
   }
 
   const locator = resolveRef(page, ref);
+  const box = await locator.boundingBox();
   await locator.fill(value);
+
+  if (isRecording()) {
+    await logAction('fill', [ref, value], page, box ?? undefined);
+  }
+
   return { ok: true, data: { filled: ref, value } };
 }
 
@@ -365,6 +379,26 @@ async function handleScreenshotDevices(
   };
 }
 
+async function handleRecordStart(url: string): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const result = await startRecording(page, '.sweetlink');
+  return { ok: true, data: { sessionId: result.sessionId } };
+}
+
+async function handleRecordStop(): Promise<DaemonResponse> {
+  const manifest = await stopRecording();
+  if (!manifest) {
+    return { ok: false, error: 'No recording in progress' };
+  }
+  return { ok: true, data: { manifest } };
+}
+
+async function handleRecordStatus(): Promise<DaemonResponse> {
+  const status = getRecordingStatus();
+  return { ok: true, data: status };
+}
+
 async function handleVisualDiff(
   params: Record<string, unknown>
 ): Promise<DaemonResponse> {
@@ -429,6 +463,12 @@ async function handleRequest(
       return handleScreenshotDevices(params, url);
     case 'visual-diff':
       return handleVisualDiff(params);
+    case 'record-start':
+      return handleRecordStart(url);
+    case 'record-stop':
+      return handleRecordStop();
+    case 'record-status':
+      return handleRecordStatus();
     default:
       return { ok: false, error: `Unknown action: ${action}` };
   }

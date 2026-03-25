@@ -30,6 +30,7 @@ describe('outputSchemas', () => {
       'snapshot',
       'console',
       'fill',
+      'record',
     ];
 
     it('has an entry for every known command', () => {

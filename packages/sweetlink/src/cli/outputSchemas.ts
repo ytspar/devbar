@@ -252,6 +252,14 @@ export const SCHEMAS: Record<string, string> = {
   filled: string;
   value: string;
 }`,
+
+  record: `interface RecordData {
+  recording: boolean;
+  sessionId?: string;
+  duration?: number;
+  actionCount?: number;
+  manifest?: unknown;
+}`,
 };
 
 // ============================================================================

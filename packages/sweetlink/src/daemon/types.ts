@@ -38,7 +38,10 @@ export type DaemonAction =
   | 'network-read'
   | 'dialog-read'
   | 'screenshot-devices'
-  | 'visual-diff';
+  | 'visual-diff'
+  | 'record-start'
+  | 'record-stop'
+  | 'record-status';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

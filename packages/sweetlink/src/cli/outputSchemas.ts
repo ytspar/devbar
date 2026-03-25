@@ -110,6 +110,20 @@ export interface StatusData {
   statusCode?: number;
 }
 
+export interface DaemonStatusData {
+  running: boolean;
+  pid?: number;
+  port?: number;
+  url?: string;
+  uptime?: number;
+}
+
+export interface SnapshotData {
+  tree: string;
+  refs?: Array<{ ref: string; role: string; name: string }>;
+  diff?: string;
+}
+
 // ============================================================================
 // Schema string registry (for --output-schema)
 // ============================================================================
@@ -210,6 +224,20 @@ export const SCHEMAS: Record<string, string> = {
   url: string;
   running: boolean;
   statusCode?: number;
+}`,
+
+  daemon: `interface DaemonStatusData {
+  running: boolean;
+  pid?: number;
+  port?: number;
+  url?: string;
+  uptime?: number;
+}`,
+
+  snapshot: `interface SnapshotData {
+  tree: string;
+  refs?: Array<{ ref: string; role: string; name: string }>;
+  diff?: string;
 }`,
 };
 

@@ -26,6 +26,8 @@ describe('outputSchemas', () => {
       'cleanup',
       'wait',
       'status',
+      'daemon',
+      'snapshot',
     ];
 
     it('has an entry for every known command', () => {

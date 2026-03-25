@@ -15,10 +15,12 @@ import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
+import { daemonRequest, ensureDaemon, getDaemonStatus, stopDaemon } from '../daemon/client.js';
 import type {
   A11yData,
   CleanupData,
   ClickData,
+  DaemonStatusData,
   ExecData,
   LogsData,
   NetworkData,
@@ -28,6 +30,7 @@ import type {
   RulerData,
   SchemaData,
   ScreenshotData,
+  SnapshotData,
   StatusData,
   VitalsData,
   WaitData,
@@ -521,6 +524,8 @@ async function screenshot(options: {
   fullPage?: boolean;
   forceCDP?: boolean;
   forceWS?: boolean;
+  hifi?: boolean;
+  responsive?: boolean;
   a11y?: boolean;
   viewport?: string;
   width?: number;
@@ -553,6 +558,70 @@ async function screenshot(options: {
       );
       process.exit(1);
     }
+  }
+
+  // ── HiFi / Responsive path (persistent daemon) ──
+  if (options.hifi || options.responsive) {
+    console.log(
+      `[Sweetlink] Taking ${options.responsive ? 'responsive' : 'hifi'} screenshot via daemon...`
+    );
+
+    const daemonState = await ensureDaemon(findProjectRoot(), targetUrl);
+
+    if (options.responsive) {
+      const resp = await daemonRequest(daemonState, 'screenshot-responsive', {
+        fullPage: options.fullPage,
+      });
+      const data = resp.data as {
+        screenshots: Array<{ width: number; height: number; screenshot: string; label: string }>;
+      };
+      const outputDir = options.output
+        ? path.dirname(options.output)
+        : path.join(findProjectRoot(), SCREENSHOT_DIR);
+      ensureDir(path.join(outputDir, 'placeholder'));
+      const paths: string[] = [];
+      for (const shot of data.screenshots) {
+        const filename = `responsive-${shot.label}-${Date.now()}.png`;
+        const outPath = path.join(outputDir, filename);
+        fs.writeFileSync(outPath, Buffer.from(shot.screenshot, 'base64'));
+        paths.push(outPath);
+        console.log(`  ${shot.label} (${shot.width}x${shot.height}): ${getRelativePath(outPath)}`);
+      }
+      const first = data.screenshots[0]!;
+      return {
+        path: getRelativePath(paths[0]!),
+        width: first.width,
+        height: first.height,
+        method: 'Daemon (responsive)',
+      };
+    }
+
+    // Single hifi screenshot
+    const resp = await daemonRequest(daemonState, 'screenshot', {
+      selector: options.selector,
+      fullPage: options.fullPage,
+      viewport: options.viewport,
+    });
+    const data = resp.data as { screenshot: string; width: number; height: number };
+    const outputPath = options.output || getDefaultScreenshotPath();
+    ensureDir(outputPath);
+    fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
+
+    reportScreenshotSuccess(
+      outputPath,
+      data.width,
+      data.height,
+      'Daemon (hifi)',
+      options.selector
+    );
+
+    return {
+      path: getRelativePath(outputPath),
+      width: data.width,
+      height: data.height,
+      method: 'Daemon (hifi)',
+      selector: options.selector,
+    };
   }
 
   console.log('[Sweetlink] Taking screenshot...');
@@ -1867,6 +1936,8 @@ const COMMAND_HELP: Record<string, string> = {
       --viewport <preset|WxH>     Viewport preset for Playwright (mobile, tablet, desktop) or WIDTHxHEIGHT
       --force-cdp                 Force Playwright/CDP method
       --force-ws                  Force WebSocket/html2canvas method (default)
+      --hifi                      Pixel-perfect via persistent Playwright daemon (~150ms after startup)
+      --responsive                Screenshots at 3 breakpoints (375/768/1280px) via daemon
       --no-wait                   Skip server readiness check (use if server is already running)
       --wait-timeout <ms>         Max time to wait for server (default: 30000ms)
 
@@ -1874,6 +1945,7 @@ const COMMAND_HELP: Record<string, string> = {
       Tier 1 (WS, viewport):     ~50-300KB PNG at 0.5x scale
       Tier 1 (WS, --full-page):  ~1-5MB PNG (entire page)
       Tier 2 (Playwright):       ~200-800KB PNG at native resolution
+      Tier 3 (--hifi):           ~200-800KB PNG, persistent daemon, fastest repeat shots
 
     Examples:
       pnpm sweetlink screenshot                                            # Viewport screenshot (small)
@@ -1881,7 +1953,9 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink screenshot --selector ".company-card"                 # Element screenshot
       pnpm sweetlink screenshot --full-page                                # Full scrollable page
       pnpm sweetlink screenshot --force-cdp --viewport tablet              # Playwright at 768x1024
-      pnpm sweetlink screenshot --force-cdp --width 375 --height 667       # Playwright at iPhone SE`,
+      pnpm sweetlink screenshot --force-cdp --width 375 --height 667       # Playwright at iPhone SE
+      pnpm sweetlink screenshot --hifi                                     # Pixel-perfect via daemon
+      pnpm sweetlink screenshot --responsive                               # 3 breakpoints via daemon`,
 
   query: `  query --selector <css-selector> [options]
     Query DOM elements and return data
@@ -2102,6 +2176,31 @@ const COMMAND_HELP: Record<string, string> = {
 
     Examples:
       pnpm sweetlink setup`,
+
+  daemon: `  daemon [start|stop|status] [options]
+    Manage the persistent Playwright daemon process.
+    The daemon auto-starts on first --hifi command and auto-stops after 30min idle.
+
+    Subcommands:
+      start                       Start the daemon (if not already running)
+      stop                        Stop the daemon
+      status                      Show daemon status (default)
+
+    Options:
+      --url <url>                 Dev server URL (default: http://localhost:3000)
+
+    Examples:
+      pnpm sweetlink daemon                    # Show status
+      pnpm sweetlink daemon start --url http://localhost:5173
+      pnpm sweetlink daemon stop`,
+
+  snapshot: `  snapshot [options]
+    Capture accessibility tree snapshot with element refs (requires daemon).
+    Phase 2: will support -i (interactive refs), -D (diff), -a (annotated).
+
+    Examples:
+      pnpm sweetlink snapshot -i               # List interactive elements with @refs
+      pnpm sweetlink snapshot -D               # Diff against previous snapshot`,
 };
 
 // Aliases that map to canonical command names
@@ -2210,6 +2309,8 @@ if (hasFlag('--output-schema')) {
     'cleanup',
     'wait',
     'status',
+    'daemon',
+    'snapshot',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2341,6 +2442,8 @@ async function handleStatusCommand(): Promise<StatusData> {
           fullPage: hasFlag('--full-page'),
           forceCDP: hasFlag('--force-cdp'),
           forceWS: hasFlag('--force-ws'),
+          hifi: hasFlag('--hifi'),
+          responsive: hasFlag('--responsive'),
           a11y: hasFlag('--a11y'),
           viewport: getArg('--viewport'),
           width: getArg('--width') ? parseInt(getArg('--width')!, 10) : undefined,
@@ -2512,6 +2615,49 @@ async function handleStatusCommand(): Promise<StatusData> {
           'setup-claude-context.mjs'
         );
         execFileSync('node', [setupScript], { stdio: 'inherit' });
+        break;
+      }
+
+      case 'daemon': {
+        const subcommand = args[1];
+        const projRoot = findProjectRoot();
+        if (subcommand === 'stop') {
+          const stopped = await stopDaemon(projRoot);
+          console.log(stopped ? '[Sweetlink] Daemon stopped.' : '[Sweetlink] No daemon running.');
+          result = { running: false } satisfies DaemonStatusData;
+        } else if (subcommand === 'start') {
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const state = await ensureDaemon(projRoot, targetUrl);
+          console.log(`[Sweetlink] Daemon running on port ${state.port} (PID: ${state.pid})`);
+          result = {
+            running: true,
+            pid: state.pid,
+            port: state.port,
+            url: state.url,
+          } satisfies DaemonStatusData;
+        } else {
+          // Default: status
+          const status = await getDaemonStatus(projRoot);
+          if (status.running) {
+            console.log(
+              `[Sweetlink] Daemon running: port=${status.port} pid=${status.pid} uptime=${status.uptime}s`
+            );
+          } else {
+            console.log('[Sweetlink] No daemon running.');
+          }
+          result = status satisfies DaemonStatusData;
+        }
+        break;
+      }
+
+      case 'snapshot': {
+        // Phase 2 stub — full ref system coming later
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        console.log('[Sweetlink] snapshot command requires daemon (Phase 2)');
+        const state = await ensureDaemon(projRoot, targetUrl);
+        console.log(`[Sweetlink] Daemon ready on port ${state.port}`);
+        result = { tree: 'Snapshot command will be available in Phase 2' } satisfies SnapshotData;
         break;
       }
 

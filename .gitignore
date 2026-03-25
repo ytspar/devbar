@@ -31,6 +31,9 @@ test-results/
 # DevBar settings (user-specific)
 .devbar/
 
+# Sweetlink daemon state
+.sweetlink/
+
 # Environment variables
 .env
 .env.*

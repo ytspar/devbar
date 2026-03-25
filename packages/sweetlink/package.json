@@ -84,11 +84,20 @@
     "./next": {
       "types": "./dist/next.d.ts",
       "import": "./dist/next.js"
+    },
+    "./daemon": {
+      "types": "./dist/daemon/types.d.ts",
+      "import": "./dist/daemon/types.js"
+    },
+    "./daemon/client": {
+      "types": "./dist/daemon/client.d.ts",
+      "import": "./dist/daemon/client.js"
     }
   },
   "bin": {
     "sweetlink": "./dist/cli/sweetlink.js",
-    "sweetlink-dev": "./dist/cli/sweetlink-dev.js"
+    "sweetlink-dev": "./dist/cli/sweetlink-dev.js",
+    "sweetlink-daemon": "./dist/daemon/index.js"
   },
   "files": [
     "dist",

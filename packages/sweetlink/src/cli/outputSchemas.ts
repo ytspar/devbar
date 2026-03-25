@@ -253,6 +253,10 @@ export const SCHEMAS: Record<string, string> = {
   value: string;
 }`,
 
+  proof: `interface ProofData {
+  commentUrl: string;
+}`,
+
   record: `interface RecordData {
   recording: boolean;
   sessionId?: string;

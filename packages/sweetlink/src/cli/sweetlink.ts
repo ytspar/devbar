@@ -16,6 +16,7 @@ import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
 import { daemonRequest, ensureDaemon, getDaemonStatus, stopDaemon } from '../daemon/client.js';
+import { uploadEvidence } from '../daemon/evidence.js';
 import type {
   A11yData,
   CleanupData,
@@ -2228,6 +2229,18 @@ const COMMAND_HELP: Record<string, string> = {
     Examples:
       pnpm sweetlink fill @e2 "test@example.com"`,
 
+  proof: `  proof --pr <number> [options]
+    Upload session evidence to a GitHub PR.
+    Posts a formatted comment with action timeline and error summary.
+
+    Options:
+      --pr <number>               PR number (required)
+      --session <dir>             Session directory (default: .sweetlink)
+      --repo <owner/repo>         Repository (default: current repo)
+
+    Examples:
+      pnpm sweetlink proof --pr 123`,
+
   record: `  record [start|stop|status]
     Record browser sessions with action timeline.
 
@@ -2354,6 +2367,7 @@ if (hasFlag('--output-schema')) {
     'fill',
     'console',
     'record',
+    'proof',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2705,6 +2719,45 @@ async function handleStatusCommand(): Promise<StatusData> {
         console.log(data.formatted);
         console.log(`\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`);
         result = data;
+        break;
+      }
+
+      case 'proof': {
+        const prNum = getArg('--pr');
+        if (!prNum) {
+          console.error('[Sweetlink] Error: --pr <number> is required');
+          process.exit(1);
+        }
+        const sessionDirArg = getArg('--session') ?? '.sweetlink';
+        // Find latest session manifest
+        const sessionFiles = fs.readdirSync(sessionDirArg)
+          .filter((f: string) => f.startsWith('session-'))
+          .sort()
+          .reverse();
+        if (sessionFiles.length === 0) {
+          console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+          process.exit(1);
+        }
+        const latestSession = path.join(sessionDirArg, sessionFiles[0]!);
+        const manifestPath = path.join(latestSession, 'sweetlink-session.json');
+        if (!fs.existsSync(manifestPath)) {
+          console.error(`[Sweetlink] No manifest found at ${manifestPath}`);
+          process.exit(1);
+        }
+        const manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+        try {
+          const { commentUrl } = await uploadEvidence(
+            manifestData,
+            latestSession,
+            parseInt(prNum, 10),
+            { repo: getArg('--repo') ?? undefined }
+          );
+          console.log(`[Sweetlink] Evidence posted: ${commentUrl}`);
+          result = { commentUrl };
+        } catch (error) {
+          console.error('[Sweetlink] Failed to upload evidence:', error instanceof Error ? error.message : error);
+          process.exit(1);
+        }
         break;
       }
 

@@ -31,6 +31,7 @@ describe('outputSchemas', () => {
       'console',
       'fill',
       'record',
+      'proof',
     ];
 
     it('has an entry for every known command', () => {

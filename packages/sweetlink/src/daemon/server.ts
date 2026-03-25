@@ -8,10 +8,13 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { closeBrowser, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
+import { annotateScreenshot, diffSnapshots } from './diff.js';
 import {
   buildRefMap,
   checkRefStale,
   formatRefMap,
+  getBaseline,
+  getCurrentRefMap,
   resolveRef,
   setBaseline,
 } from './refs.js';
@@ -113,11 +116,55 @@ async function handleSnapshot(
   await initBrowser(url);
   const page = getPage();
   const interactive = params.interactive as boolean | undefined;
+  const diff = params.diff as boolean | undefined;
+  const annotate = params.annotate as boolean | undefined;
 
-  const refMap = buildRefMap(page, { interactive: interactive !== false });
-  const resolved = await refMap;
+  // If diffing, we need the baseline before taking new snapshot
+  const baseline = diff ? getBaseline() : null;
 
-  // Auto-set baseline on every snapshot (for diffing)
+  const resolved = await buildRefMap(page, { interactive: interactive !== false });
+
+  // Handle diff mode
+  if (diff) {
+    if (!baseline) {
+      return {
+        ok: false,
+        error: 'No baseline snapshot to diff against. Run `snapshot` first, then make changes, then `snapshot -D`.',
+      };
+    }
+    const diffText = diffSnapshots(baseline, resolved);
+    setBaseline(); // Update baseline for next diff
+    return {
+      ok: true,
+      data: {
+        diff: diffText,
+        tree: formatRefMap(resolved),
+        refs: resolved.entries,
+        count: resolved.entries.length,
+      },
+    };
+  }
+
+  // Handle annotated screenshot mode
+  if (annotate) {
+    const currentRefs = getCurrentRefMap();
+    if (!currentRefs || currentRefs.entries.length === 0) {
+      return { ok: false, error: 'No refs to annotate. Run `snapshot -i` first.' };
+    }
+    const buffer = await annotateScreenshot(page, currentRefs);
+    setBaseline();
+    return {
+      ok: true,
+      data: {
+        screenshot: buffer.toString('base64'),
+        tree: formatRefMap(resolved),
+        refs: resolved.entries,
+        count: resolved.entries.length,
+      },
+    };
+  }
+
+  // Default: set as baseline for future diffs
   setBaseline();
 
   return {

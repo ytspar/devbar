@@ -2692,18 +2692,36 @@ async function handleStatusCommand(): Promise<StatusData> {
         const projRoot = findProjectRoot();
         const targetUrl = getArg('--url') ?? 'http://localhost:3000';
         const interactive = hasFlag('-i') || hasFlag('--interactive');
+        const doDiff = hasFlag('-D') || hasFlag('--diff');
+        const doAnnotate = hasFlag('-a') || hasFlag('--annotate');
         const state = await ensureDaemon(projRoot, targetUrl);
-        const resp = await daemonRequest(state, 'snapshot', { interactive });
+        const resp = await daemonRequest(state, 'snapshot', {
+          interactive,
+          diff: doDiff,
+          annotate: doAnnotate,
+        });
         const data = resp.data as {
           tree: string;
+          diff?: string;
+          screenshot?: string;
           refs: Array<{ ref: string; role: string; name: string }>;
           count: number;
         };
-        console.log(data.tree);
+
+        if (doDiff && data.diff) {
+          console.log(data.diff);
+        } else if (doAnnotate && data.screenshot) {
+          const outputPath = getArg('--output') ?? getArg('-o') ?? 'annotated-snapshot.png';
+          fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
+          console.log(`[Sweetlink] Annotated screenshot saved: ${outputPath}`);
+        } else {
+          console.log(data.tree);
+        }
         console.log(`\n${data.count} elements found`);
         result = {
           tree: data.tree,
           refs: data.refs,
+          diff: data.diff,
         } satisfies SnapshotData;
         break;
       }

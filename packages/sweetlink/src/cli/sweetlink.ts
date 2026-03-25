@@ -2311,6 +2311,7 @@ if (hasFlag('--output-schema')) {
     'status',
     'daemon',
     'snapshot',
+    'fill',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2515,13 +2516,25 @@ async function handleStatusCommand(): Promise<StatusData> {
         break;
       }
 
-      case 'click':
-        result = await click({
-          selector: getArg('--selector'),
-          text: getArg('--text'),
-          index: getArg('--index') ? parseInt(getArg('--index')!, 10) : undefined,
-        });
+      case 'click': {
+        const clickTarget = getArg('--selector') ?? args[1];
+        // Route @e refs to daemon
+        if (clickTarget && /^@e\d+$/.test(clickTarget)) {
+          const projRoot = findProjectRoot();
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const state = await ensureDaemon(projRoot, targetUrl);
+          await daemonRequest(state, 'click-ref', { ref: clickTarget });
+          console.log(`[Sweetlink] Clicked ${clickTarget}`);
+          result = { clicked: clickTarget, found: 1, index: 0 } satisfies ClickData;
+        } else {
+          result = await click({
+            selector: clickTarget,
+            text: getArg('--text'),
+            index: getArg('--index') ? parseInt(getArg('--index')!, 10) : undefined,
+          });
+        }
         break;
+      }
 
       case 'network':
         result = await getNetwork({
@@ -2650,14 +2663,48 @@ async function handleStatusCommand(): Promise<StatusData> {
         break;
       }
 
+      case 'fill': {
+        const fillTarget = getArg('--selector') ?? args[1];
+        const fillValue = getArg('--value') ?? args[2];
+        if (!fillTarget) {
+          console.error('[Sweetlink] Error: fill requires a target (@ref or --selector)');
+          process.exit(1);
+        }
+        if (fillValue === undefined) {
+          console.error('[Sweetlink] Error: fill requires a value (--value or positional arg)');
+          process.exit(1);
+        }
+        if (/^@e\d+$/.test(fillTarget)) {
+          const projRoot = findProjectRoot();
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const state = await ensureDaemon(projRoot, targetUrl);
+          await daemonRequest(state, 'fill-ref', { ref: fillTarget, value: fillValue });
+          console.log(`[Sweetlink] Filled ${fillTarget} with "${fillValue}"`);
+          result = { clicked: fillTarget, found: 1, index: 0 } satisfies ClickData;
+        } else {
+          console.error('[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.');
+          process.exit(1);
+        }
+        break;
+      }
+
       case 'snapshot': {
-        // Phase 2 stub — full ref system coming later
         const projRoot = findProjectRoot();
         const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        console.log('[Sweetlink] snapshot command requires daemon (Phase 2)');
+        const interactive = hasFlag('-i') || hasFlag('--interactive');
         const state = await ensureDaemon(projRoot, targetUrl);
-        console.log(`[Sweetlink] Daemon ready on port ${state.port}`);
-        result = { tree: 'Snapshot command will be available in Phase 2' } satisfies SnapshotData;
+        const resp = await daemonRequest(state, 'snapshot', { interactive });
+        const data = resp.data as {
+          tree: string;
+          refs: Array<{ ref: string; role: string; name: string }>;
+          count: number;
+        };
+        console.log(data.tree);
+        console.log(`\n${data.count} elements found`);
+        result = {
+          tree: data.tree,
+          refs: data.refs,
+        } satisfies SnapshotData;
         break;
       }
 

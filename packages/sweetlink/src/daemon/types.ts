@@ -28,7 +28,12 @@ export type DaemonAction =
   | 'ping'
   | 'shutdown'
   | 'screenshot'
-  | 'screenshot-responsive';
+  | 'screenshot-responsive'
+  | 'snapshot'
+  | 'click-ref'
+  | 'fill-ref'
+  | 'hover-ref'
+  | 'press-key';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

@@ -7,7 +7,14 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
-import { closeBrowser, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
+import { closeBrowser, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
+import {
+  buildRefMap,
+  checkRefStale,
+  formatRefMap,
+  resolveRef,
+  setBaseline,
+} from './refs.js';
 import type {
   DaemonAction,
   DaemonResponse,
@@ -96,6 +103,120 @@ async function handleResponsiveScreenshot(
 }
 
 // ============================================================================
+// Ref System Handlers
+// ============================================================================
+
+async function handleSnapshot(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const interactive = params.interactive as boolean | undefined;
+
+  const refMap = buildRefMap(page, { interactive: interactive !== false });
+  const resolved = await refMap;
+
+  // Auto-set baseline on every snapshot (for diffing)
+  setBaseline();
+
+  return {
+    ok: true,
+    data: {
+      tree: formatRefMap(resolved),
+      refs: resolved.entries,
+      count: resolved.entries.length,
+      rawSnapshot: resolved.rawSnapshot,
+    },
+  };
+}
+
+async function handleClickRef(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const ref = params.ref as string;
+
+  if (!ref) return { ok: false, error: 'Missing ref parameter' };
+
+  const stale = await checkRefStale(page, ref);
+  if (stale) {
+    return {
+      ok: false,
+      error: `Ref ${ref} is stale — element no longer exists. Run \`snapshot\` to get fresh refs.`,
+    };
+  }
+
+  const locator = resolveRef(page, ref);
+  await locator.click();
+  return { ok: true, data: { clicked: ref } };
+}
+
+async function handleFillRef(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const ref = params.ref as string;
+  const value = params.value as string;
+
+  if (!ref) return { ok: false, error: 'Missing ref parameter' };
+  if (value === undefined) return { ok: false, error: 'Missing value parameter' };
+
+  const stale = await checkRefStale(page, ref);
+  if (stale) {
+    return {
+      ok: false,
+      error: `Ref ${ref} is stale — element no longer exists. Run \`snapshot\` to get fresh refs.`,
+    };
+  }
+
+  const locator = resolveRef(page, ref);
+  await locator.fill(value);
+  return { ok: true, data: { filled: ref, value } };
+}
+
+async function handleHoverRef(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const ref = params.ref as string;
+
+  if (!ref) return { ok: false, error: 'Missing ref parameter' };
+
+  const stale = await checkRefStale(page, ref);
+  if (stale) {
+    return {
+      ok: false,
+      error: `Ref ${ref} is stale — element no longer exists. Run \`snapshot\` to get fresh refs.`,
+    };
+  }
+
+  const locator = resolveRef(page, ref);
+  await locator.hover();
+  return { ok: true, data: { hovered: ref } };
+}
+
+async function handlePressKey(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const key = params.key as string;
+
+  if (!key) return { ok: false, error: 'Missing key parameter' };
+
+  await page.keyboard.press(key);
+  return { ok: true, data: { pressed: key } };
+}
+
+// ============================================================================
 // Request Handling
 // ============================================================================
 
@@ -113,6 +234,16 @@ async function handleRequest(
       return handleScreenshot(params as unknown as ScreenshotParams, url);
     case 'screenshot-responsive':
       return handleResponsiveScreenshot(params as unknown as ResponsiveScreenshotParams, url);
+    case 'snapshot':
+      return handleSnapshot(params, url);
+    case 'click-ref':
+      return handleClickRef(params, url);
+    case 'fill-ref':
+      return handleFillRef(params, url);
+    case 'hover-ref':
+      return handleHoverRef(params, url);
+    case 'press-key':
+      return handlePressKey(params, url);
     default:
       return { ok: false, error: `Unknown action: ${action}` };
   }

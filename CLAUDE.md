@@ -98,6 +98,17 @@ packages/
 │   │   ├── browser/           # Browser-side command handlers
 │   │   │   └── commands/      # exec.ts, dom.ts, screenshot.ts, etc.
 │   │   ├── server/            # WebSocket server + request handlers
+│   │   ├── daemon/            # Persistent Playwright daemon (v2)
+│   │   │   ├── server.ts      # HTTP server with bearer auth
+│   │   │   ├── browser.ts     # Persistent browser/page management
+│   │   │   ├── client.ts      # CLI client for daemon communication
+│   │   │   ├── refs.ts        # @ref system from accessibility tree
+│   │   │   ├── diff.ts        # Snapshot diffing + annotated screenshots
+│   │   │   ├── ringBuffer.ts  # Always-on console/network/dialog capture
+│   │   │   ├── listeners.ts   # Page event listeners → ring buffers
+│   │   │   ├── recording.ts   # Session recording with action timeline
+│   │   │   ├── viewer.ts      # Self-contained HTML viewer generator
+│   │   │   └── evidence.ts    # PR evidence upload + terminal capture
 │   │   └── types.ts           # Shared types
 │   └── package.json
 └── playground/      # devbar.dev website (Vite)
@@ -116,7 +127,7 @@ All hardcoded colors should use the `PALETTE` constant from `packages/devbar/src
 ## Testing
 
 - Framework: Vitest with happy-dom environment
-- 69 test files, ~1800 tests
+- 77 test files, ~2089 tests
 - Tests are colocated with source files (e.g., `expanded.test.ts` next to `expanded.ts`)
 - Mock pattern: `vi.mock('./module.js', () => ({ ... }))` — note `.js` extensions for ESM
 

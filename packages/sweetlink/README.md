@@ -24,6 +24,12 @@ Sweetlink enables Claude AI agents to autonomously debug, test, and iterate on w
 - **🎯 Token Efficient** - ~1000 tokens/screenshot vs ~5000 for MCP tools
 - **📝 LLM-Optimized Output** - Summary format with deduplication for context efficiency
 - **🚀 Zero Setup** - Works immediately with any web app
+- **🖥️ Persistent Daemon** - Playwright daemon stays alive between commands (~150ms screenshots)
+- **🏷️ @Ref System** - Accessibility tree refs for click/fill without CSS selectors
+- **📊 Ring Buffers** - Always-on console/network/dialog capture (50K entries)
+- **🎬 Session Recording** - Record actions with screenshots, generate interactive viewer
+- **🔍 Snapshot Diffing** - Text diff of accessibility tree after actions
+- **📱 Device Emulation** - Named presets (iPhone 14, Pixel 7, iPad Pro) for batch screenshots
 
 ## Screenshot Button
 
@@ -308,6 +314,71 @@ pnpm sweetlink network
 
 # Filter by URL
 pnpm sweetlink network --filter "/api/"
+```
+
+### Persistent Daemon (v2)
+
+Sweetlink v2 adds a persistent Playwright daemon for high-fidelity operations. The daemon auto-starts on first use and auto-stops after 30min idle.
+
+```bash
+# Pixel-perfect screenshot via persistent daemon (~150ms after startup)
+pnpm sweetlink screenshot --hifi
+
+# Responsive screenshots at 3 breakpoints (375/768/1280)
+pnpm sweetlink screenshot --responsive
+
+# Manage daemon lifecycle
+pnpm sweetlink daemon status
+pnpm sweetlink daemon stop
+```
+
+### Accessibility Snapshots & Refs
+
+```bash
+# List interactive elements with @refs
+pnpm sweetlink snapshot -i
+#   @e1 [link] "Home"
+#   @e2 [button] "Submit"
+#   @e3 [textbox] "Email"
+
+# Click/fill by ref (no CSS selector needed)
+pnpm sweetlink click @e2
+pnpm sweetlink fill @e3 "user@example.com"
+
+# Diff against previous snapshot
+pnpm sweetlink snapshot -D
+
+# Annotated screenshot with red ref labels
+pnpm sweetlink snapshot -a -o annotated.png
+```
+
+### Console & Network (Ring Buffers)
+
+Always-on capture from daemon start — no "start watching" needed.
+
+```bash
+# Console messages (captured since daemon start)
+pnpm sweetlink console
+pnpm sweetlink console --errors
+pnpm sweetlink console --last 20
+
+# Failed network requests
+pnpm sweetlink network --failed
+```
+
+### Session Recording
+
+```bash
+pnpm sweetlink record start
+# ... do actions (click, fill, snapshot) ...
+pnpm sweetlink record stop
+# Generates .sweetlink/<session-id>/viewer.html
+```
+
+### PR Evidence
+
+```bash
+pnpm sweetlink proof --pr 123
 ```
 
 ## Chrome DevTools Protocol (CDP) Setup

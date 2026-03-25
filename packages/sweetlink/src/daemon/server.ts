@@ -20,6 +20,7 @@ import {
   networkBuffer,
 } from './listeners.js';
 import { getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
+import { generateViewer } from './viewer.js';
 import { visualDiff } from './visualDiff.js';
 import {
   buildRefMap,
@@ -391,12 +392,49 @@ async function handleRecordStop(): Promise<DaemonResponse> {
   if (!manifest) {
     return { ok: false, error: 'No recording in progress' };
   }
-  return { ok: true, data: { manifest } };
+
+  // Auto-generate viewer HTML
+  const sessionDir = `.sweetlink/${manifest.sessionId}`;
+  try {
+    const viewerPath = await generateViewer(manifest, {
+      sessionDir,
+      consoleEntries: consoleBuffer.toArray(),
+      networkEntries: networkBuffer.toArray(),
+    });
+    return { ok: true, data: { manifest, viewerPath } };
+  } catch {
+    // Viewer generation is optional — still return the manifest
+    return { ok: true, data: { manifest } };
+  }
 }
 
 async function handleRecordStatus(): Promise<DaemonResponse> {
   const status = getRecordingStatus();
   return { ok: true, data: status };
+}
+
+async function handleGenerateViewer(
+  params: Record<string, unknown>
+): Promise<DaemonResponse> {
+  const sessionDir = params.sessionDir as string;
+  const outputPath = params.outputPath as string | undefined;
+
+  if (!sessionDir) return { ok: false, error: 'Missing sessionDir parameter' };
+
+  try {
+    const { promises: fsp } = await import('fs');
+    const manifestRaw = await fsp.readFile(`${sessionDir}/sweetlink-session.json`, 'utf-8');
+    const manifest = JSON.parse(manifestRaw);
+    const viewerPath = await generateViewer(manifest, {
+      sessionDir,
+      outputPath,
+      consoleEntries: consoleBuffer.toArray(),
+      networkEntries: networkBuffer.toArray(),
+    });
+    return { ok: true, data: { viewerPath } };
+  } catch (error) {
+    return { ok: false, error: `Failed to generate viewer: ${error instanceof Error ? error.message : error}` };
+  }
 }
 
 async function handleVisualDiff(
@@ -469,6 +507,8 @@ async function handleRequest(
       return handleRecordStop();
     case 'record-status':
       return handleRecordStatus();
+    case 'generate-viewer':
+      return handleGenerateViewer(params);
     default:
       return { ok: false, error: `Unknown action: ${action}` };
   }

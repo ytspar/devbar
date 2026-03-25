@@ -41,7 +41,8 @@ export type DaemonAction =
   | 'visual-diff'
   | 'record-start'
   | 'record-stop'
-  | 'record-status';
+  | 'record-status'
+  | 'generate-viewer';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

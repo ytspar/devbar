@@ -9,6 +9,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { closeBrowser, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
 import { annotateScreenshot, diffSnapshots } from './diff.js';
+import { takeDeviceScreenshots } from './devices.js';
 import {
   consoleBuffer,
   dialogBuffer,
@@ -18,6 +19,7 @@ import {
   getWarningCount,
   networkBuffer,
 } from './listeners.js';
+import { visualDiff } from './visualDiff.js';
 import {
   buildRefMap,
   checkRefStale,
@@ -335,6 +337,60 @@ async function handleDialogRead(): Promise<DaemonResponse> {
   };
 }
 
+async function handleScreenshotDevices(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+  const page = getPage();
+  const devices = params.devices as string[] | undefined;
+  if (!devices || devices.length === 0) {
+    return { ok: false, error: 'Missing devices parameter' };
+  }
+
+  const results = await takeDeviceScreenshots(page, devices, {
+    fullPage: params.fullPage as boolean | undefined,
+  });
+
+  return {
+    ok: true,
+    data: {
+      screenshots: results.map((r) => ({
+        device: r.device.name,
+        width: r.device.viewport.width,
+        height: r.device.viewport.height,
+        screenshot: r.buffer.toString('base64'),
+      })),
+    },
+  };
+}
+
+async function handleVisualDiff(
+  params: Record<string, unknown>
+): Promise<DaemonResponse> {
+  const baseline = params.baseline as string | undefined;
+  const current = params.current as string | undefined;
+  const threshold = params.threshold as number | undefined;
+
+  if (!baseline || !current) {
+    return { ok: false, error: 'Missing baseline or current parameter (base64 encoded PNG)' };
+  }
+
+  const baselineBuffer = Buffer.from(baseline, 'base64');
+  const currentBuffer = Buffer.from(current, 'base64');
+  const result = await visualDiff(baselineBuffer, currentBuffer, { threshold });
+
+  return {
+    ok: true,
+    data: {
+      mismatchPercentage: result.mismatchPercentage,
+      mismatchCount: result.mismatchCount,
+      totalPixels: result.totalPixels,
+      pass: result.pass,
+    },
+  };
+}
+
 // ============================================================================
 // Request Handling
 // ============================================================================
@@ -369,6 +425,10 @@ async function handleRequest(
       return handleNetworkRead(params);
     case 'dialog-read':
       return handleDialogRead();
+    case 'screenshot-devices':
+      return handleScreenshotDevices(params, url);
+    case 'visual-diff':
+      return handleVisualDiff(params);
     default:
       return { ok: false, error: `Unknown action: ${action}` };
   }

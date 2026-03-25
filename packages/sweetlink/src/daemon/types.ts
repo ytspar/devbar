@@ -36,7 +36,9 @@ export type DaemonAction =
   | 'press-key'
   | 'console-read'
   | 'network-read'
-  | 'dialog-read';
+  | 'dialog-read'
+  | 'screenshot-devices'
+  | 'visual-diff';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

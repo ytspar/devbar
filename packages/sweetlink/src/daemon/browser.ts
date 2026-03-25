@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_VIEWPORT, parseViewport } from '../viewportUtils.js';
+import { installCursorHighlight } from './cursor.js';
 import { installListeners } from './listeners.js';
 
 // ============================================================================
@@ -68,8 +69,9 @@ export async function initBrowser(url: string): Promise<void> {
   });
   page = await context.newPage();
 
-  // Install always-on event listeners
+  // Install always-on event listeners and cursor highlight
   installListeners(page);
+  await installCursorHighlight(page);
 
   await navigateTo(url);
   console.error('[Daemon] Browser ready.');

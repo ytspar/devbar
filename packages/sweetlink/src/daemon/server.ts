@@ -10,6 +10,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { closeBrowser, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
 import { annotateScreenshot, diffSnapshots } from './diff.js';
 import {
+  consoleBuffer,
+  dialogBuffer,
+  formatConsoleEntries,
+  formatNetworkEntries,
+  getErrorCount,
+  getWarningCount,
+  networkBuffer,
+} from './listeners.js';
+import {
   buildRefMap,
   checkRefStale,
   formatRefMap,
@@ -264,6 +273,69 @@ async function handlePressKey(
 }
 
 // ============================================================================
+// Ring Buffer Handlers
+// ============================================================================
+
+async function handleConsoleRead(
+  params: Record<string, unknown>
+): Promise<DaemonResponse> {
+  const errorsOnly = params.errors as boolean | undefined;
+  const last = params.last as number | undefined;
+
+  let entries = errorsOnly
+    ? consoleBuffer.filter((e) => e.level === 'error')
+    : consoleBuffer.toArray();
+
+  if (last) {
+    entries = entries.slice(-last);
+  }
+
+  return {
+    ok: true,
+    data: {
+      entries,
+      formatted: formatConsoleEntries(entries),
+      total: consoleBuffer.size,
+      errorCount: getErrorCount(),
+      warningCount: getWarningCount(),
+    },
+  };
+}
+
+async function handleNetworkRead(
+  params: Record<string, unknown>
+): Promise<DaemonResponse> {
+  const failedOnly = params.failed as boolean | undefined;
+  const last = params.last as number | undefined;
+
+  let entries = failedOnly
+    ? networkBuffer.filter((e) => e.status >= 400 || e.status === 0)
+    : networkBuffer.toArray();
+
+  if (last) {
+    entries = entries.slice(-last);
+  }
+
+  return {
+    ok: true,
+    data: {
+      entries,
+      formatted: formatNetworkEntries(entries),
+      total: networkBuffer.size,
+      failedCount: networkBuffer.filter((e) => e.status >= 400 || e.status === 0).length,
+    },
+  };
+}
+
+async function handleDialogRead(): Promise<DaemonResponse> {
+  const entries = dialogBuffer.toArray();
+  return {
+    ok: true,
+    data: { entries, total: dialogBuffer.size },
+  };
+}
+
+// ============================================================================
 // Request Handling
 // ============================================================================
 
@@ -291,6 +363,12 @@ async function handleRequest(
       return handleHoverRef(params, url);
     case 'press-key':
       return handlePressKey(params, url);
+    case 'console-read':
+      return handleConsoleRead(params);
+    case 'network-read':
+      return handleNetworkRead(params);
+    case 'dialog-read':
+      return handleDialogRead();
     default:
       return { ok: false, error: `Unknown action: ${action}` };
   }

@@ -33,7 +33,10 @@ export type DaemonAction =
   | 'click-ref'
   | 'fill-ref'
   | 'hover-ref'
-  | 'press-key';
+  | 'press-key'
+  | 'console-read'
+  | 'network-read'
+  | 'dialog-read';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

@@ -239,6 +239,19 @@ export const SCHEMAS: Record<string, string> = {
   refs?: Array<{ ref: string; role: string; name: string }>;
   diff?: string;
 }`,
+
+  console: `interface ConsoleData {
+  formatted: string;
+  total: number;
+  errorCount: number;
+  warningCount: number;
+  entries: unknown[];
+}`,
+
+  fill: `interface FillData {
+  filled: string;
+  value: string;
+}`,
 };
 
 // ============================================================================

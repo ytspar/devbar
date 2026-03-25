@@ -2196,11 +2196,37 @@ const COMMAND_HELP: Record<string, string> = {
 
   snapshot: `  snapshot [options]
     Capture accessibility tree snapshot with element refs (requires daemon).
-    Phase 2: will support -i (interactive refs), -D (diff), -a (annotated).
+
+    Options:
+      -i, --interactive           Show only interactive elements with @e refs
+      -D, --diff                  Diff against previous snapshot
+      -a, --annotate              Annotated screenshot with ref labels
+      -o, --output <path>         Output path for annotated screenshot
 
     Examples:
       pnpm sweetlink snapshot -i               # List interactive elements with @refs
-      pnpm sweetlink snapshot -D               # Diff against previous snapshot`,
+      pnpm sweetlink snapshot -D               # Diff against previous snapshot
+      pnpm sweetlink snapshot -a -o /tmp/annotated.png`,
+
+  console: `  console [options]
+    Read console messages from daemon ring buffer (always-on capture).
+    Replaces /console-check-sweetlink with better coverage.
+
+    Options:
+      --errors                    Show only errors
+      --last <n>                  Show only last N entries
+      --url <url>                 Dev server URL (default: http://localhost:3000)
+
+    Examples:
+      pnpm sweetlink console                   # All console messages
+      pnpm sweetlink console --errors          # Errors only
+      pnpm sweetlink console --last 20         # Last 20 entries`,
+
+  fill: `  fill <@ref> <value> [options]
+    Fill an input element by @ref (requires daemon + snapshot).
+
+    Examples:
+      pnpm sweetlink fill @e2 "test@example.com"`,
 };
 
 // Aliases that map to canonical command names
@@ -2312,6 +2338,7 @@ if (hasFlag('--output-schema')) {
     'daemon',
     'snapshot',
     'fill',
+    'console',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2536,11 +2563,28 @@ async function handleStatusCommand(): Promise<StatusData> {
         break;
       }
 
-      case 'network':
-        result = await getNetwork({
-          filter: getArg('--filter'),
-        });
+      case 'network': {
+        // If --failed flag is present and daemon is running, use daemon ring buffer
+        if (hasFlag('--failed')) {
+          const projRoot = findProjectRoot();
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
+          const state = await ensureDaemon(projRoot, targetUrl);
+          const resp = await daemonRequest(state, 'network-read', {
+            failed: true,
+            last: lastN,
+          });
+          const data = resp.data as { formatted: string; total: number; failedCount: number };
+          console.log(data.formatted);
+          console.log(`\nTotal: ${data.total} | Failed: ${data.failedCount}`);
+          result = data;
+        } else {
+          result = await getNetwork({
+            filter: getArg('--filter'),
+          });
+        }
         break;
+      }
 
       case 'refresh':
         result = await refresh({
@@ -2628,6 +2672,24 @@ async function handleStatusCommand(): Promise<StatusData> {
           'setup-claude-context.mjs'
         );
         execFileSync('node', [setupScript], { stdio: 'inherit' });
+        break;
+      }
+
+      case 'console': {
+        // Route to daemon ring buffer when daemon is alive
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        const errorsOnly = hasFlag('--errors');
+        const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
+        const state = await ensureDaemon(projRoot, targetUrl);
+        const resp = await daemonRequest(state, 'console-read', {
+          errors: errorsOnly,
+          last: lastN,
+        });
+        const data = resp.data as { formatted: string; total: number; errorCount: number; warningCount: number };
+        console.log(data.formatted);
+        console.log(`\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`);
+        result = data;
         break;
       }
 

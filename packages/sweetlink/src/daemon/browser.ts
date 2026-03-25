@@ -7,6 +7,7 @@
  */
 
 import { DEFAULT_VIEWPORT, parseViewport } from '../viewportUtils.js';
+import { installListeners } from './listeners.js';
 
 // ============================================================================
 // Lazy Playwright Import
@@ -66,6 +67,9 @@ export async function initBrowser(url: string): Promise<void> {
     viewport: DEFAULT_VIEWPORT,
   });
   page = await context.newPage();
+
+  // Install always-on event listeners
+  installListeners(page);
 
   await navigateTo(url);
   console.error('[Daemon] Browser ready.');

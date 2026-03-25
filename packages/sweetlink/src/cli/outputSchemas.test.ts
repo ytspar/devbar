@@ -28,6 +28,8 @@ describe('outputSchemas', () => {
       'status',
       'daemon',
       'snapshot',
+      'console',
+      'fill',
     ];
 
     it('has an entry for every known command', () => {

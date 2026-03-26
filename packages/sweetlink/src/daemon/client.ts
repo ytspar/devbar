@@ -19,7 +19,8 @@ import { acquireLock, isDaemonAlive, readDaemonState, releaseLock } from './stat
  */
 export async function ensureDaemon(
   projectRoot: string,
-  url: string
+  url: string,
+  options?: { headed?: boolean }
 ): Promise<DaemonState> {
   // Check if daemon is already running
   const existing = readDaemonState(projectRoot);
@@ -31,13 +32,17 @@ export async function ensureDaemon(
     console.log('[Sweetlink] Stale daemon state found. Starting fresh...');
   }
 
-  return spawnDaemon(projectRoot, url);
+  return spawnDaemon(projectRoot, url, options);
 }
 
 /**
  * Spawn a new daemon process and wait for it to be ready.
  */
-async function spawnDaemon(projectRoot: string, url: string): Promise<DaemonState> {
+async function spawnDaemon(
+  projectRoot: string,
+  url: string,
+  options?: { headed?: boolean }
+): Promise<DaemonState> {
   // Acquire lock to prevent concurrent starts
   if (!acquireLock(projectRoot)) {
     // Another process is starting the daemon — wait for state file
@@ -52,14 +57,17 @@ async function spawnDaemon(projectRoot: string, url: string): Promise<DaemonStat
     const thisFile = fileURLToPath(import.meta.url);
     const daemonEntry = path.join(path.dirname(thisFile), 'index.js');
 
-    const child = fork(daemonEntry, ['--url', url, '--project-root', projectRoot], {
+    const forkArgs = ['--url', url, '--project-root', projectRoot];
+    if (options?.headed) forkArgs.push('--headed');
+
+    const child = fork(daemonEntry, forkArgs, {
       detached: true,
-      stdio: 'ignore',
+      stdio: options?.headed ? 'inherit' : 'ignore',
     });
 
     // Unref so the CLI process can exit without waiting for the daemon
     child.unref();
-    child.disconnect();
+    if (child.connected) child.disconnect();
 
     // Wait for the daemon to write its state file
     return await waitForDaemon(projectRoot);

@@ -9,6 +9,7 @@
  */
 
 import * as crypto from 'crypto';
+import { setHeadedMode } from './browser.js';
 import { startServer } from './server.js';
 import { removeDaemonState, releaseLock, writeDaemonState } from './stateFile.js';
 import { DAEMON_PORT_MAX, DAEMON_PORT_MIN } from './types.js';
@@ -22,9 +23,19 @@ function getArg(name: string): string | undefined {
   const idx = args.indexOf(name);
   return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : undefined;
 }
+function hasFlag(name: string): boolean {
+  return args.includes(name);
+}
 
 const url = getArg('--url') ?? 'http://localhost:3000';
 const projectRoot = getArg('--project-root') ?? process.cwd();
+const headed = hasFlag('--headed');
+
+// Configure headed mode before any browser init
+if (headed) {
+  setHeadedMode(true);
+  console.error('[Daemon] Headed mode enabled — browser window will be visible');
+}
 
 // ============================================================================
 // Startup

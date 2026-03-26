@@ -2800,7 +2800,8 @@ async function handleStatusCommand(): Promise<StatusData> {
           result = { running: false } satisfies DaemonStatusData;
         } else if (subcommand === 'start') {
           const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-          const state = await ensureDaemon(projRoot, targetUrl);
+          const headedFlag = hasFlag('--headed');
+          const state = await ensureDaemon(projRoot, targetUrl, { headed: headedFlag });
           console.log(`[Sweetlink] Daemon running on port ${state.port} (PID: ${state.pid})`);
           result = {
             running: true,

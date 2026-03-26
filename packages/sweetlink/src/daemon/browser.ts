@@ -53,6 +53,14 @@ const NAVIGATION_TIMEOUT_MS = 30_000;
 // Public API
 // ============================================================================
 
+/** Whether to launch in headed mode (set once at daemon start) */
+let headedMode = false;
+
+/** Configure headed mode before first initBrowser() call */
+export function setHeadedMode(headed: boolean): void {
+  headedMode = headed;
+}
+
 /**
  * Initialize the persistent browser and navigate to the target URL.
  * Called once when the daemon starts or on first command.
@@ -61,9 +69,13 @@ export async function initBrowser(url: string): Promise<void> {
   if (browser) return;
 
   const { chromium } = await getPlaywright();
-  console.error('[Daemon] Launching headless Chromium...');
+  const headless = !headedMode;
+  console.error(`[Daemon] Launching ${headless ? 'headless' : 'HEADED'} Chromium...`);
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless,
+    ...(headedMode && { slowMo: 50 }), // Slow down so you can see actions
+  });
   context = await browser.newContext({
     viewport: DEFAULT_VIEWPORT,
   });

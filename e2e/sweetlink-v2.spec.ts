@@ -8,7 +8,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { execFileSync } from 'child_process';
+import { execFileSync, fork } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -77,12 +77,36 @@ test.beforeAll(async () => {
   fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  // Ensure daemon is running against playground
-  cli('daemon', 'start', '--url', 'http://localhost:5173');
-  const state = readState();
-  expect(state).not.toBeNull();
-  daemon = state!;
-  console.log(`  Daemon ready on port ${daemon.port} (PID: ${daemon.pid})`);
+  // Start daemon in headed mode so you can watch the browser
+  const daemonEntry = path.join(PROJECT_ROOT, 'packages/sweetlink/dist/daemon/index.js');
+  const child = fork(
+    daemonEntry,
+    ['--url', 'http://localhost:5173', '--project-root', PROJECT_ROOT, '--headed'],
+    { detached: true, stdio: 'inherit' }
+  );
+  child.unref();
+
+  // Poll for state file
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const state = readState();
+    if (state) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${state.port}/api/ping`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.token}` },
+          body: '{}',
+        });
+        if (res.ok) {
+          daemon = state;
+          break;
+        }
+      } catch { /* not ready yet */ }
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+  expect(daemon).toBeDefined();
+  console.log(`  Daemon ready on port ${daemon.port} (PID: ${daemon.pid}) — HEADED`);
 });
 
 test.afterAll(async () => {
@@ -440,19 +464,38 @@ test.describe('Phase 5: Visual Enhancements', () => {
   });
 
   test('visual diff compares two screenshots', async () => {
-    // Take two screenshots (same page, should be very similar)
+    // Take a screenshot and diff it against itself (identical bytes)
     const shot1 = await daemonReq(daemon, 'screenshot', {});
-    const shot2 = await daemonReq(daemon, 'screenshot', {});
+    const base64 = shot1.screenshot as string;
 
+    // Same buffer vs itself = 0% mismatch
     const diffResult = await daemonReq(daemon, 'visual-diff', {
-      baseline: shot1.screenshot,
-      current: shot2.screenshot,
-      threshold: 0.05, // 5% tolerance
+      baseline: base64,
+      current: base64,
+      threshold: 0,
     });
 
     expect(diffResult.pass).toBe(true);
-    expect(diffResult.mismatchPercentage).toBeLessThan(5);
-    console.log(`  Visual diff: ${diffResult.mismatchPercentage}% mismatch (threshold: 5%)`);
+    expect(diffResult.mismatchPercentage).toBe(0);
+    console.log(`  Visual diff (identical): ${diffResult.mismatchPercentage}% mismatch`);
+
+    // Now diff against a different screenshot (after clicking)
+    const snap = await daemonReq(daemon, 'snapshot', { interactive: true });
+    const refs = snap.refs as Array<{ ref: string; role: string; name: string }>;
+    const btn = refs.find(r => r.role === 'button');
+    if (btn) await daemonReq(daemon, 'click-ref', { ref: btn.ref });
+    await new Promise(r => setTimeout(r, 200));
+
+    const shot2 = await daemonReq(daemon, 'screenshot', {});
+    const diffResult2 = await daemonReq(daemon, 'visual-diff', {
+      baseline: base64,
+      current: shot2.screenshot as string,
+      threshold: 0,
+    });
+
+    // After a click, there should be some difference
+    expect(diffResult2.mismatchPercentage).toBeGreaterThan(0);
+    console.log(`  Visual diff (after click): ${diffResult2.mismatchPercentage}% mismatch`);
   });
 });
 

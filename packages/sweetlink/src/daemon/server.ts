@@ -20,6 +20,7 @@ import {
   networkBuffer,
 } from './listeners.js';
 import { getRecordingPage, getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
+import { detectServerErrors } from './errorPatterns.js';
 import { generateSummary } from './summary.js';
 import { generateViewer } from './viewer.js';
 import { visualDiff } from './visualDiff.js';
@@ -417,10 +418,23 @@ async function handleRecordStop(): Promise<DaemonResponse> {
 
     // Generate SUMMARY.md
     const { promises: fsp } = await import('fs');
+    // Detect server errors from console log messages
+    const consoleText = consoleLogs.map(e => e.message).join('\n');
+    const serverErrors = detectServerErrors(consoleText);
+    if (serverErrors.length > 0) {
+      manifest.errors.server = serverErrors.length;
+    }
+
     const summaryMd = generateSummary({
       manifest,
       consoleEntries: consoleLogs,
       networkEntries: networkLogs,
+      serverErrors: serverErrors.map(e => ({
+        source: 'server' as const,
+        message: e.line,
+        timestamp: Date.now(),
+        code: e.language,
+      })),
       gitBranch: manifest.gitBranch,
       gitCommit: manifest.gitCommit,
     });

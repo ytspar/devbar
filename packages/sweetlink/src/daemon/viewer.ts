@@ -94,46 +94,71 @@ export async function generateViewer(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sweetlink Session: ${escapeHtml(manifest.sessionId)}</title>
 <style>
+  /* Design System: devbar (Departure Mono, emerald accent, dark terminal aesthetic) */
+  :root {
+    --color-primary: #10b981;
+    --color-primary-hover: #059669;
+    --color-primary-glow: rgba(16, 185, 129, 0.4);
+    --color-error: #ef4444;
+    --color-warning: #f59e0b;
+    --color-info: #3b82f6;
+    --color-purple: #a855f7;
+    --color-bg: #0a0f1a;
+    --color-bg-card: rgba(17, 24, 39, 0.95);
+    --color-bg-elevated: rgba(17, 24, 39, 0.98);
+    --color-text: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+    --color-text-muted: #6b7280;
+    --color-border: rgba(16, 185, 129, 0.2);
+    --color-border-subtle: rgba(255, 255, 255, 0.05);
+    --font-mono: 'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 12px;
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.1);
+    --transition-fast: 150ms;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
-  header { background: #1a1a1a; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; flex-shrink: 0; }
-  header h1 { font-size: 14px; font-weight: 600; }
-  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-  .badge.green { background: #064e3b; color: #6ee7b7; }
-  .badge.red { background: #7f1d1d; color: #fca5a5; }
+  body { font-family: var(--font-mono); background: var(--color-bg); color: var(--color-text); height: 100vh; display: flex; flex-direction: column; font-size: 0.6875rem; letter-spacing: 0.05em; }
+  header { background: var(--color-bg-card); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+  header h1 { font-size: 0.75rem; font-weight: 600; color: var(--color-primary); letter-spacing: 0.1em; text-transform: uppercase; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 9999px; font-size: 0.625rem; font-weight: 600; letter-spacing: 0.05em; }
+  .badge.green { background: rgba(16, 185, 129, 0.15); color: var(--color-primary); border: 1px solid rgba(16, 185, 129, 0.3); }
+  .badge.red { background: rgba(239, 68, 68, 0.15); color: var(--color-error); border: 1px solid rgba(239, 68, 68, 0.3); }
   .main { display: flex; flex: 1; overflow: hidden; }
-  .video-pane { flex: 62%; display: flex; flex-direction: column; border-right: 1px solid #333; position: relative; }
-  .video-container { flex: 1; position: relative; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-  .video-container video, .video-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .video-pane { flex: 62%; display: flex; flex-direction: column; border-right: 1px solid var(--color-border); position: relative; }
+  .video-container { flex: 1; position: relative; background: var(--color-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .video-container video, .video-container img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); }
   .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-  .controls { height: 56px; background: #1a1a1a; border-top: 1px solid #333; display: flex; flex-direction: column; padding: 4px 16px; flex-shrink: 0; }
-  .scrub-track { position: relative; height: 12px; background: #333; border-radius: 6px; margin-bottom: 6px; cursor: pointer; }
-  .scrub-fill { position: absolute; top: 0; left: 0; height: 100%; background: #3b82f6; border-radius: 6px; pointer-events: none; }
-  .scrub-marker { position: absolute; top: -3px; width: 4px; height: 18px; background: #f59e0b; border-radius: 2px; transform: translateX(-50%); cursor: pointer; z-index: 2; }
+  .controls { height: 56px; background: var(--color-bg-card); border-top: 1px solid var(--color-border); display: flex; flex-direction: column; padding: 4px 16px; flex-shrink: 0; }
+  .scrub-track { position: relative; height: 10px; background: var(--color-border-subtle); border-radius: 5px; margin-bottom: 6px; cursor: pointer; border: 1px solid var(--color-border); }
+  .scrub-fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--color-primary); border-radius: 5px; pointer-events: none; opacity: 0.6; }
+  .scrub-marker { position: absolute; top: -3px; width: 4px; height: 16px; background: var(--color-warning); border-radius: 2px; transform: translateX(-50%); cursor: pointer; z-index: 2; box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
   .scrub-marker:hover { background: #fbbf24; transform: translateX(-50%) scaleX(1.5); }
-  .control-row { display: flex; align-items: center; gap: 12px; font-size: 12px; }
-  .btn { background: #333; border: none; color: #e0e0e0; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-  .btn:hover { background: #444; }
-  .btn.active { background: #3b82f6; }
-  .time-display { font-family: monospace; color: #888; min-width: 100px; }
-  .sidebar { flex: 38%; display: flex; flex-direction: column; }
-  .tabs { display: flex; background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; }
-  .tab { padding: 8px 16px; font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent; color: #888; }
-  .tab.active { color: #e0e0e0; border-bottom-color: #3b82f6; }
+  .control-row { display: flex; align-items: center; gap: 12px; font-size: 0.625rem; }
+  .btn { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--color-border); color: var(--color-text-secondary); padding: 4px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.625rem; font-family: var(--font-mono); letter-spacing: 0.05em; transition: all var(--transition-fast); }
+  .btn:hover { background: rgba(16, 185, 129, 0.2); color: var(--color-text); border-color: var(--color-primary); }
+  .btn.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .time-display { color: var(--color-text-muted); min-width: 100px; }
+  .sidebar { flex: 38%; display: flex; flex-direction: column; background: var(--color-bg-card); }
+  .tabs { display: flex; background: var(--color-bg-elevated); border-bottom: 1px solid var(--color-border); flex-shrink: 0; }
+  .tab { padding: 8px 16px; font-size: 0.625rem; cursor: pointer; border-bottom: 2px solid transparent; color: var(--color-text-muted); font-family: var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; transition: all var(--transition-fast); }
+  .tab:hover { color: var(--color-text-secondary); }
+  .tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
   .tab-content { flex: 1; overflow-y: auto; padding: 8px; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
-  .action-item { padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-family: monospace; margin-bottom: 2px; display: flex; gap: 8px; align-items: center; }
-  .action-item:hover { background: #1a1a1a; }
-  .action-item.active { background: #1e3a5f; border-left: 3px solid #3b82f6; }
-  .action-ts { color: #888; min-width: 45px; flex-shrink: 0; }
-  .action-cmd { color: #93c5fd; }
-  .action-pos { color: #555; font-size: 10px; }
-  .log-entry { padding: 3px 8px; font-size: 11px; font-family: monospace; border-bottom: 1px solid #1a1a1a; }
-  .log-entry.error { color: #fca5a5; }
-  .log-entry.warning { color: #fcd34d; }
-  .empty { color: #666; text-align: center; padding: 40px; }
-  .toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-family: monospace; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 10; }
+  .action-item { padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.6875rem; margin-bottom: 2px; display: flex; gap: 8px; align-items: center; transition: background var(--transition-fast); border-left: 3px solid transparent; }
+  .action-item:hover { background: rgba(16, 185, 129, 0.05); }
+  .action-item.active { background: rgba(16, 185, 129, 0.1); border-left-color: var(--color-primary); }
+  .action-ts { color: var(--color-text-muted); min-width: 45px; flex-shrink: 0; }
+  .action-cmd { color: var(--color-primary); }
+  .action-pos { color: var(--color-text-muted); font-size: 0.625rem; opacity: 0.6; }
+  .log-entry { padding: 3px 8px; font-size: 0.6875rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-secondary); }
+  .log-entry.error { color: var(--color-error); }
+  .log-entry.warning { color: var(--color-warning); }
+  .empty { color: var(--color-text-muted); text-align: center; padding: 40px; letter-spacing: 0.05em; }
+  .toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: var(--color-bg-elevated); color: var(--color-primary); padding: 6px 16px; border-radius: var(--radius-md); font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 10; border: 1px solid var(--color-border); box-shadow: var(--shadow-md); }
   .toast.show { opacity: 1; }
   @keyframes ripple { 0% { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%,-50%) scale(3); opacity: 0; } }
 </style>
@@ -142,7 +167,7 @@ export async function generateViewer(
 <header>
   <h1>Sweetlink Session</h1>
   <div style="display:flex;gap:12px;align-items:center">
-    <span style="font-size:12px;color:#888">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
+    <span style="font-size:0.625rem;color:var(--color-text-muted)">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
     <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : totalErrors + ' errors'}</span>
   </div>
 </header>
@@ -267,13 +292,13 @@ function drawClickRipple(bb) {
     var alpha = 1 - progress;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(239, 68, 68, ' + alpha + ')';
+    ctx.strokeStyle = 'rgba(16, 185, 129, ' + alpha + ')';
     ctx.lineWidth = 3;
     ctx.stroke();
     // Dot
     ctx.beginPath();
     ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(239, 68, 68, ' + (alpha * 0.6) + ')';
+    ctx.fillStyle = 'rgba(16, 185, 129, ' + (alpha * 0.6) + ')';
     ctx.fill();
     frame++;
     requestAnimationFrame(animate);

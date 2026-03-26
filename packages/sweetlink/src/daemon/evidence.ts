@@ -149,13 +149,14 @@ export async function captureTerminal(
 <meta charset="UTF-8">
 <title>Terminal: ${command} ${args.join(' ')}</title>
 <style>
-  body { margin: 0; background: #1a1a2e; color: #e0e0e0; font-family: monospace; }
-  .header { padding: 12px 20px; background: #16213e; border-bottom: 1px solid #333; font-size: 13px; }
-  .header span { color: #888; }
-  pre { padding: 20px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; }
-  .ansi-red { color: #ff6b6b; }
-  .ansi-green { color: #51cf66; }
-  .ansi-yellow { color: #ffd43b; }
+  body { margin: 0; background: #0a0f1a; color: #f1f5f9; font-family: 'Departure Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .header { padding: 12px 20px; background: rgba(17, 24, 39, 0.95); border-bottom: 1px solid rgba(16, 185, 129, 0.2); font-size: 0.75rem; letter-spacing: 0.05em; }
+  .header strong { color: #10b981; }
+  .header span { color: #6b7280; }
+  pre { padding: 20px; font-size: 0.6875rem; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; color: #94a3b8; }
+  .ansi-red { color: #ef4444; }
+  .ansi-green { color: #10b981; }
+  .ansi-yellow { color: #f59e0b; }
 </style>
 </head><body>
 <div class="header">

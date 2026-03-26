@@ -151,16 +151,16 @@ export async function annotateScreenshot(
       if (!element) continue;
       const rect = element.getBoundingClientRect();
 
-      // Create label
+      // Create label (emerald accent from design system)
       const label = document.createElement('div');
       label.style.cssText = `
         position: fixed;
         left: ${rect.left}px;
         top: ${Math.max(0, rect.top - 18)}px;
-        background: rgba(220, 38, 38, 0.9);
-        color: white;
+        background: rgba(16, 185, 129, 0.9);
+        color: #0a0f1a;
         font-size: 11px;
-        font-family: monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-weight: bold;
         padding: 1px 4px;
         border-radius: 2px;
@@ -178,7 +178,7 @@ export async function annotateScreenshot(
         top: ${rect.top}px;
         width: ${rect.width}px;
         height: ${rect.height}px;
-        border: 2px solid rgba(220, 38, 38, 0.7);
+        border: 2px solid rgba(16, 185, 129, 0.7);
         border-radius: 2px;
         z-index: 999998;
         pointer-events: none;

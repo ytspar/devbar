@@ -811,6 +811,83 @@ async function handleRecordCommand(
 }
 
 // ============================================================================
+// Demo Proxy (Browser → Daemon for screenshots, local for init)
+// ============================================================================
+
+async function handleDemoCommand(
+  command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+
+  if (command.type === 'demo-init') {
+    // Initialize demo locally (no daemon needed)
+    try {
+      const data = (command as unknown as Record<string, unknown>).data as { title?: string } | undefined;
+      const title = data?.title ?? 'Untitled Demo';
+      const demoDir = path.join(getProjectRoot(), '.sweetlink', 'demo');
+      const demoMod = await import('../daemon/demo.js');
+      const demoState = await demoMod.initDemo(title, demoDir);
+      await demoMod.writeDemo(demoState);
+      sendSuccess(ctx.ws, 'demo-init-response', { filePath: demoState.filePath, title });
+    } catch (error) {
+      sendError(ctx.ws, 'demo-init', getErrorMessage(error));
+    }
+    return true;
+  }
+
+  if (command.type === 'demo-screenshot') {
+    // Take screenshot via daemon and add to demo
+    const stateDir = path.join(getProjectRoot(), '.sweetlink', 'demo');
+    const stateFile = path.join(stateDir, 'demo-state.json');
+
+    try {
+      const demoMod = await import('../daemon/demo.js');
+      const raw = fs.readFileSync(stateFile, 'utf-8');
+      const demoState = JSON.parse(raw);
+
+      // Get screenshot from daemon
+      const daemonStateFile = path.join(getProjectRoot(), '.sweetlink', 'daemon.json');
+      let daemonState: { port: number; token: string } | null = null;
+      try { daemonState = JSON.parse(fs.readFileSync(daemonStateFile, 'utf-8')); } catch { /* try port-scoped */ }
+      if (!daemonState) {
+        // Try to find any daemon-*.json
+        const files = fs.readdirSync(path.join(getProjectRoot(), '.sweetlink'))
+          .filter((f: string) => f.startsWith('daemon-') && f.endsWith('.json'));
+        if (files[0]) {
+          daemonState = JSON.parse(fs.readFileSync(path.join(getProjectRoot(), '.sweetlink', files[0]), 'utf-8'));
+        }
+      }
+
+      if (!daemonState) {
+        sendError(ctx.ws, 'demo-screenshot', 'Daemon not running');
+        return true;
+      }
+
+      const resp = await fetch(`http://127.0.0.1:${daemonState.port}/api/screenshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${daemonState.token}` },
+        body: '{}',
+      });
+      const body = await resp.json() as { ok: boolean; data?: { screenshot: string } };
+      if (!body.ok || !body.data) {
+        sendError(ctx.ws, 'demo-screenshot', 'Screenshot failed');
+        return true;
+      }
+
+      const updated = await demoMod.addScreenshot(demoState, Buffer.from(body.data.screenshot, 'base64'), 'Screenshot');
+      await demoMod.writeDemo(updated);
+      sendSuccess(ctx.ws, 'demo-screenshot-response', { sections: updated.sections.length });
+    } catch (error) {
+      sendError(ctx.ws, 'demo-screenshot', getErrorMessage(error));
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
 // Dispatch Map
 // ============================================================================
 
@@ -843,6 +920,8 @@ const messageHandlers: Record<string, MessageHandler> = {
   'log-event': handleLogEvent as MessageHandler,
   'record-start': handleRecordCommand as MessageHandler,
   'record-stop': handleRecordCommand as MessageHandler,
+  'demo-init': handleDemoCommand as MessageHandler,
+  'demo-screenshot': handleDemoCommand as MessageHandler,
 };
 
 /**

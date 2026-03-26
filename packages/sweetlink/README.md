@@ -485,6 +485,38 @@ pnpm sweetlink record stop
 # Generates .sweetlink/<session-id>/viewer.html
 ```
 
+### Demo Documents
+
+Build a Markdown tutorial/proof document step-by-step (inspired by [Showboat](https://simonwillison.net/2026/Feb/10/showboat-and-rodney/)):
+
+```bash
+# Start a new demo
+pnpm sweetlink demo init "How to use the search feature"
+
+# Add narrative prose
+pnpm sweetlink demo note "First, run the tests to see them pass."
+
+# Run a command and capture output inline
+pnpm sweetlink demo exec "pnpm test -- --grep search"
+
+# Take a screenshot and embed it
+pnpm sweetlink demo screenshot --url http://localhost:5173 --caption "Search results"
+
+# Capture accessibility tree
+pnpm sweetlink demo snapshot --url http://localhost:5173
+
+# Remove last section if it's wrong
+pnpm sweetlink demo pop
+
+# Re-run all commands to verify outputs haven't changed
+pnpm sweetlink demo verify
+
+# Check status
+pnpm sweetlink demo status
+```
+
+Result: a `DEMO.md` with embedded command outputs and screenshots that serves as both documentation and a regression test.
+
 ### PR Evidence
 
 ```bash

@@ -125,6 +125,11 @@ export interface DevBarState {
   lastViewerPath: string | null;
   pendingViewerWindow: Window | null;
 
+  // Demo
+  demoActive: boolean;
+  demoTitle: string | null;
+  demoSectionCount: number;
+
   // Ruler
   rulerMode: boolean;
   rulerOverlay: HTMLDivElement | null;

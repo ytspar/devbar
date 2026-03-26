@@ -2272,6 +2272,33 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink report --clipboard
       pnpm sweetlink report --serve
       pnpm sweetlink report --webhook https://hooks.slack.com/...`,
+
+  demo: `  demo <subcommand> [options]
+    Build a Markdown demo document step-by-step.
+    Each command appends a section. The result is a reproducible
+    tutorial/proof document with embedded outputs and screenshots.
+
+    Subcommands:
+      init <title>              Start a new demo document
+      note <text>               Add a prose note section
+      exec <command>            Run command, capture output inline
+      screenshot [--caption]    Take hifi screenshot and embed
+      snapshot                  Capture accessibility tree inline
+      pop                       Remove the last section
+      verify                    Re-run all exec sections and verify outputs
+      status                    Show current demo state
+
+    Options:
+      --url <url>               Dev server URL (for screenshots/snapshots)
+      --output <dir>            Output directory (default: .sweetlink/demo)
+      --caption <text>          Caption for screenshot
+
+    Examples:
+      pnpm sweetlink demo init "How to use the search feature"
+      pnpm sweetlink demo note "First, navigate to the search page."
+      pnpm sweetlink demo exec "pnpm test -- --grep search"
+      pnpm sweetlink demo screenshot --caption "Search results"
+      pnpm sweetlink demo verify`,
 };
 
 // Aliases that map to canonical command names
@@ -2387,6 +2414,7 @@ if (hasFlag('--output-schema')) {
     'record',
     'proof',
     'report',
+    'demo',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2936,6 +2964,102 @@ async function handleStatusCommand(): Promise<StatusData> {
           const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
           process.stdout.write(summaryContent);
           result = { mode: 'stdout', session: reportSessions[0] };
+        }
+        break;
+      }
+
+      case 'demo': {
+        const sub = args[1];
+        const projRoot = findProjectRoot();
+        const demoDir = getArg('--output') ?? path.join(projRoot, '.sweetlink', 'demo');
+        const stateFile = path.join(demoDir, 'demo-state.json');
+
+        // Lazy import demo module
+        const demoMod = await import('../daemon/demo.js');
+
+        if (sub === 'init') {
+          const title = args[2];
+          if (!title) { console.error('[Sweetlink] Error: demo init requires a title'); process.exit(1); }
+          const demoState = await demoMod.initDemo(title, demoDir, { url: getArg('--url') });
+          await demoMod.writeDemo(demoState);
+          console.log(`[Sweetlink] Demo initialized: ${demoState.filePath}`);
+          result = { filePath: demoState.filePath };
+        } else if (sub === 'note') {
+          const text = args.slice(2).join(' ');
+          if (!text) { console.error('[Sweetlink] Error: demo note requires text'); process.exit(1); }
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const updated = demoMod.addNote(state, text);
+          await demoMod.writeDemo(updated);
+          console.log(`[Sweetlink] Note added (${updated.sections.length} sections)`);
+          result = { sections: updated.sections.length };
+        } else if (sub === 'exec') {
+          const cmd = args.slice(2).join(' ');
+          if (!cmd) { console.error('[Sweetlink] Error: demo exec requires a command'); process.exit(1); }
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const updated = await demoMod.addExec(state, cmd, []);
+          await demoMod.writeDemo(updated);
+          const lastSection = updated.sections[updated.sections.length - 1]!;
+          console.log(`[Sweetlink] Exec added: ${cmd} (exit ${lastSection.exitCode ?? 0})`);
+          result = { sections: updated.sections.length, exitCode: lastSection.exitCode };
+        } else if (sub === 'screenshot') {
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const caption = getArg('--caption') ?? 'Screenshot';
+          const daemonState = await ensureDaemon(projRoot, targetUrl);
+          const resp = await daemonRequest(daemonState, 'screenshot', {});
+          const data = resp.data as { screenshot: string };
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const updated = await demoMod.addScreenshot(state, Buffer.from(data.screenshot, 'base64'), caption);
+          await demoMod.writeDemo(updated);
+          console.log(`[Sweetlink] Screenshot added: ${caption}`);
+          result = { sections: updated.sections.length };
+        } else if (sub === 'snapshot') {
+          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+          const daemonState = await ensureDaemon(projRoot, targetUrl);
+          const resp = await daemonRequest(daemonState, 'snapshot', { interactive: true });
+          const data = resp.data as { tree: string };
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const updated = demoMod.addSnapshot(state, data.tree);
+          await demoMod.writeDemo(updated);
+          console.log(`[Sweetlink] Snapshot added (${updated.sections.length} sections)`);
+          result = { sections: updated.sections.length };
+        } else if (sub === 'pop') {
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const updated = demoMod.popSection(state);
+          await demoMod.writeDemo(updated);
+          console.log(`[Sweetlink] Last section removed (${updated.sections.length} remaining)`);
+          result = { sections: updated.sections.length };
+        } else if (sub === 'verify') {
+          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+          const verifyResult = await demoMod.verifyDemo(state);
+          if (verifyResult.passed) {
+            console.log('[Sweetlink] Demo verified: all outputs match');
+          } else {
+            console.log(`[Sweetlink] Demo verification FAILED: ${verifyResult.failures.length} mismatch(es)`);
+            for (const f of verifyResult.failures) {
+              console.log(`  Section ${f.index}: ${f.command}`);
+              console.log(`    Expected: ${f.expected.substring(0, 80)}...`);
+              console.log(`    Actual:   ${f.actual.substring(0, 80)}...`);
+            }
+          }
+          result = verifyResult;
+        } else {
+          // status
+          if (fs.existsSync(stateFile)) {
+            const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+            console.log(`[Sweetlink] Demo: "${state.title}" (${state.sections.length} sections)`);
+            console.log(`  File: ${state.filePath}`);
+            for (const s of state.sections) {
+              const preview = s.type === 'note' ? s.content.substring(0, 60) :
+                s.type === 'exec' ? `$ ${s.command}` :
+                s.type === 'screenshot' ? `[image] ${s.screenshotFile}` :
+                '[snapshot]';
+              console.log(`  ${s.type.padEnd(12)} ${preview}`);
+            }
+            result = state;
+          } else {
+            console.log('[Sweetlink] No demo in progress. Run `demo init <title>` to start.');
+            result = null;
+          }
         }
         break;
       }

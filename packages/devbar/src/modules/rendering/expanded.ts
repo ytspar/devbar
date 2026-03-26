@@ -25,6 +25,7 @@ import {
   createAIReviewButton,
   createCompactToggleButton,
   createConsoleBadge,
+  createDemoButton,
   createOutlineButton,
   createRecordButton,
   createRulerButton,
@@ -468,6 +469,7 @@ function createActionButtonsContainer(
   actionsContainer.appendChild(createA11yButton(state));
   actionsContainer.appendChild(createRulerButton(state));
   actionsContainer.appendChild(createRecordButton(state));
+  actionsContainer.appendChild(createDemoButton(state));
   actionsContainer.appendChild(createSettingsButton(state));
   actionsContainer.appendChild(createCompactToggleButton(state));
   return actionsContainer;

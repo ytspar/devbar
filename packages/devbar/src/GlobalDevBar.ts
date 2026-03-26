@@ -149,6 +149,11 @@ export class GlobalDevBar {
   lastViewerPath: string | null = null;
   pendingViewerWindow: Window | null = null;
 
+  // Demo
+  demoActive = false;
+  demoTitle: string | null = null;
+  demoSectionCount = 0;
+
   // Ruler
   rulerMode = false;
   rulerOverlay: HTMLDivElement | null = null;

@@ -274,6 +274,15 @@ export interface RecordStopCommand {
   type: 'record-stop';
 }
 
+export interface DemoInitCommand {
+  type: 'demo-init';
+  data?: { title?: string };
+}
+
+export interface DemoScreenshotCommand {
+  type: 'demo-screenshot';
+}
+
 /**
  * Commands that can be sent over the Sweetlink WebSocket connection.
  *
@@ -325,7 +334,9 @@ export type SweetlinkCommand =
   | A11ySavedCommand
   | A11yErrorCommand
   | RecordStartCommand
-  | RecordStopCommand;
+  | RecordStopCommand
+  | DemoInitCommand
+  | DemoScreenshotCommand;
 
 /**
  * Response structure for Sweetlink commands

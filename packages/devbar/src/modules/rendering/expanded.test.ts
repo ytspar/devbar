@@ -83,6 +83,7 @@ vi.mock('./buttons.js', () => {
     createA11yButton: vi.fn(() => makeBtn('Accessibility Audit')),
     createRulerButton: vi.fn(() => makeBtn('Ruler')),
     createRecordButton: vi.fn(() => makeBtn('Record')),
+    createDemoButton: vi.fn(() => makeBtn('Demo')),
     createSettingsButton: vi.fn(() => makeBtn('Settings')),
     createCompactToggleButton: vi.fn(() => makeBtn('compact-toggle')),
     createConsoleBadge: vi.fn((_state: any, type: string, count: number, _color: string) => {
@@ -117,6 +118,7 @@ import {
   createCompactToggleButton,
   createConsoleBadge,
   createOutlineButton,
+  createDemoButton,
   createRecordButton,
   createRulerButton,
   createSchemaButton,

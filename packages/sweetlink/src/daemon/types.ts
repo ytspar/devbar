@@ -42,7 +42,15 @@ export type DaemonAction =
   | 'record-start'
   | 'record-stop'
   | 'record-status'
-  | 'generate-viewer';
+  | 'generate-viewer'
+  | 'demo-init'
+  | 'demo-note'
+  | 'demo-exec'
+  | 'demo-screenshot'
+  | 'demo-snapshot'
+  | 'demo-pop'
+  | 'demo-verify'
+  | 'demo-status';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

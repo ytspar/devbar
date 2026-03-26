@@ -537,6 +537,68 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
 }
 
 /**
+ * Create the demo document button.
+ * Pencil icon when idle, section count when active.
+ */
+export function createDemoButton(state: DevBarState): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', state.demoActive ? 'Demo in progress' : 'Start Demo');
+
+  const isActive = state.demoActive;
+
+  attachButtonTooltip(state, btn, BUTTON_COLORS.info, (_tooltip, h) => {
+    if (isActive) {
+      h.addTitle(`Demo: "${state.demoTitle ?? 'Untitled'}"`);
+      h.addShortcut(`${state.demoSectionCount} sections`, '');
+      h.addShortcut('Click', 'Add screenshot to demo');
+    } else {
+      h.addTitle('Demo Document');
+      h.addShortcut('Click', 'Start demo (prompts for title)');
+    }
+  });
+
+  Object.assign(btn.style, {
+    ...getButtonStyles(BUTTON_COLORS.info, isActive, false),
+  });
+
+  btn.onclick = () => {
+    if (!state.ws || !state.sweetlinkConnected) return;
+
+    if (isActive) {
+      // Add a screenshot to the current demo
+      state.ws.send(JSON.stringify({ type: 'demo-screenshot' }));
+      state.demoSectionCount++;
+      state.render();
+    } else {
+      // Start a new demo
+      const title = prompt('Demo title:');
+      if (!title) return;
+      state.ws.send(JSON.stringify({ type: 'demo-init', data: { title } }));
+      state.demoActive = true;
+      state.demoTitle = title;
+      state.demoSectionCount = 0;
+      state.render();
+    }
+  };
+
+  if (isActive) {
+    btn.textContent = String(state.demoSectionCount);
+    btn.style.fontSize = '0.6rem';
+  } else {
+    // Pencil/document icon
+    btn.appendChild(
+      createSvgIcon(
+        'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z',
+        { stroke: true, strokeWidth: '2' }
+      )
+    );
+  }
+
+  return btn;
+}
+
+/**
  * Create the settings gear button.
  */
 export function createSettingsButton(state: DevBarState): HTMLButtonElement {

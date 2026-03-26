@@ -266,6 +266,14 @@ export interface GetVitalsCommand {
   type: 'get-vitals';
 }
 
+export interface RecordStartCommand {
+  type: 'record-start';
+}
+
+export interface RecordStopCommand {
+  type: 'record-stop';
+}
+
 /**
  * Commands that can be sent over the Sweetlink WebSocket connection.
  *
@@ -315,7 +323,9 @@ export type SweetlinkCommand =
   | GetVitalsCommand
   | SaveA11yCommand
   | A11ySavedCommand
-  | A11yErrorCommand;
+  | A11yErrorCommand
+  | RecordStartCommand
+  | RecordStopCommand;
 
 /**
  * Response structure for Sweetlink commands

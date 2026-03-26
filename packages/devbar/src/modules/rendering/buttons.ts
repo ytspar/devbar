@@ -442,6 +442,98 @@ export function createRulerButton(state: DevBarState): HTMLButtonElement {
 }
 
 /**
+ * Create the record button for session recording.
+ * Red circle when idle, pulsing red when recording.
+ */
+export function createRecordButton(state: DevBarState): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', state.recordingActive ? 'Stop Recording' : 'Start Recording');
+
+  const isActive = state.recordingActive;
+
+  attachButtonTooltip(state, btn, BUTTON_COLORS.error, (_tooltip, h) => {
+    if (isActive) {
+      const elapsed = state.recordingStartedAt
+        ? ((Date.now() - state.recordingStartedAt) / 1000).toFixed(0)
+        : '0';
+      h.addTitle(`Recording: ${elapsed}s`);
+      h.addShortcut('Click', 'Stop recording & open viewer');
+    } else if (state.lastViewerPath) {
+      h.addSuccess('Last session recorded');
+      h.addShortcut('Click', 'Start new recording');
+      h.addShortcut('Shift+Click', 'Open last viewer');
+    } else {
+      h.addTitle('Session Recording');
+      h.addShortcut('Click', 'Start recording (video + actions)');
+    }
+  });
+
+  Object.assign(btn.style, {
+    ...getButtonStyles('#ef4444', isActive, false),
+    borderColor: isActive ? '#ef4444' : withAlpha('#ef4444', 50),
+    backgroundColor: isActive ? withAlpha('#ef4444', 20) : 'transparent',
+    color: isActive ? '#ef4444' : withAlpha('#ef4444', 60),
+    ...(isActive && { animation: 'devbar-pulse 1.5s ease-in-out infinite' }),
+  });
+
+  btn.onclick = (e) => {
+    if (e.shiftKey && state.lastViewerPath && !isActive) {
+      // Open last viewer
+      window.open(state.lastViewerPath, '_blank');
+      return;
+    }
+
+    if (!state.ws || !state.sweetlinkConnected) return;
+
+    if (isActive) {
+      // Stop recording
+      state.ws.send(JSON.stringify({ type: 'record-stop' }));
+      if (state.recordingTimer) clearInterval(state.recordingTimer);
+      state.recordingActive = false;
+      state.recordingTimer = null;
+      state.recordingStartedAt = null;
+      state.render();
+    } else {
+      // Start recording
+      state.ws.send(JSON.stringify({ type: 'record-start' }));
+      state.recordingActive = true;
+      state.recordingStartedAt = Date.now();
+      state.recordingSessionId = null;
+      // Timer to re-render every second (updates tooltip duration)
+      state.recordingTimer = setInterval(() => state.render(), 1000);
+      state.render();
+    }
+  };
+
+  if (isActive) {
+    // Filled red circle
+    const dot = document.createElement('span');
+    Object.assign(dot.style, {
+      display: 'block',
+      width: '8px',
+      height: '8px',
+      borderRadius: '50%',
+      backgroundColor: '#ef4444',
+    });
+    btn.appendChild(dot);
+  } else {
+    // Outlined red circle (record icon)
+    const dot = document.createElement('span');
+    Object.assign(dot.style, {
+      display: 'block',
+      width: '8px',
+      height: '8px',
+      borderRadius: '50%',
+      border: '2px solid currentColor',
+    });
+    btn.appendChild(dot);
+  }
+
+  return btn;
+}
+
+/**
  * Create the settings gear button.
  */
 export function createSettingsButton(state: DevBarState): HTMLButtonElement {

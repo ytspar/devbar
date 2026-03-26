@@ -757,6 +757,60 @@ function handleLogEvent(command: LogEventCommand, ctx: MessageHandlerContext): b
 }
 
 // ============================================================================
+// Recording Proxy (Browser → Daemon)
+// ============================================================================
+
+/**
+ * Proxy record-start / record-stop from browser to daemon HTTP API.
+ * Reads daemon state from .sweetlink/daemon.json to find port/token.
+ */
+async function handleRecordCommand(
+  command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+
+  const stateDir = path.join(getProjectRoot(), '.sweetlink');
+  const stateFile = path.join(stateDir, 'daemon.json');
+
+  let daemonState: { port: number; token: string } | null = null;
+  try {
+    const raw = fs.readFileSync(stateFile, 'utf-8');
+    daemonState = JSON.parse(raw);
+  } catch {
+    sendError(ctx.ws, command.type, 'Daemon not running. Start it with: sweetlink daemon start --headed');
+    return true;
+  }
+
+  if (!daemonState) {
+    sendError(ctx.ws, command.type, 'Daemon not running');
+    return true;
+  }
+
+  try {
+    const action = command.type === 'record-start' ? 'record-start' : 'record-stop';
+    const response = await fetch(`http://127.0.0.1:${daemonState.port}/api/${action}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${daemonState.token}`,
+      },
+      body: '{}',
+    });
+    const body = await response.json();
+
+    if (body.ok) {
+      sendSuccess(ctx.ws, `${command.type}-response`, body.data ?? {});
+    } else {
+      sendError(ctx.ws, command.type, body.error ?? 'Daemon request failed');
+    }
+  } catch (error) {
+    sendError(ctx.ws, command.type, `Daemon communication failed: ${getErrorMessage(error)}`);
+  }
+  return true;
+}
+
+// ============================================================================
 // Dispatch Map
 // ============================================================================
 
@@ -787,6 +841,8 @@ const messageHandlers: Record<string, MessageHandler> = {
   'log-unsubscribe': handleLogUnsubscribe as MessageHandler,
   'hmr-screenshot': handleHmrScreenshotMsg as MessageHandler,
   'log-event': handleLogEvent as MessageHandler,
+  'record-start': handleRecordCommand as MessageHandler,
+  'record-stop': handleRecordCommand as MessageHandler,
 };
 
 /**

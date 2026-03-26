@@ -117,6 +117,13 @@ export interface DevBarState {
   themeMediaQuery: MediaQueryList | null;
   themeMediaHandler: ((e: MediaQueryListEvent) => void) | null;
 
+  // Recording
+  recordingActive: boolean;
+  recordingSessionId: string | null;
+  recordingStartedAt: number | null;
+  recordingTimer: ReturnType<typeof setInterval> | null;
+  lastViewerPath: string | null;
+
   // Ruler
   rulerMode: boolean;
   rulerOverlay: HTMLDivElement | null;

@@ -141,6 +141,13 @@ export class GlobalDevBar {
   savingA11yAudit = false;
   a11yTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Recording
+  recordingActive = false;
+  recordingSessionId: string | null = null;
+  recordingStartedAt: number | null = null;
+  recordingTimer: ReturnType<typeof setInterval> | null = null;
+  lastViewerPath: string | null = null;
+
   // Ruler
   rulerMode = false;
   rulerOverlay: HTMLDivElement | null = null;

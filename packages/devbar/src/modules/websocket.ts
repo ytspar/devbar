@@ -94,6 +94,28 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         return;
       }
 
+      // Handle recording responses (not in SweetlinkCommand union)
+      if (message.type === 'record-start-response' && message.success) {
+        state.recordingActive = true;
+        state.recordingSessionId = (message as Record<string, unknown>).sessionId as string ?? null;
+        state.recordingStartedAt = Date.now();
+        state.recordingTimer = setInterval(() => state.render(), 1000);
+        state.render();
+        return;
+      }
+      if (message.type === 'record-stop-response' && message.success) {
+        state.recordingActive = false;
+        if (state.recordingTimer) clearInterval(state.recordingTimer);
+        state.recordingTimer = null;
+        state.recordingStartedAt = null;
+        const viewerPath = (message as Record<string, unknown>).viewerPath as string | undefined;
+        if (viewerPath) {
+          state.lastViewerPath = viewerPath;
+        }
+        state.render();
+        return;
+      }
+
       const command = message as SweetlinkCommand;
       state.debug.ws('Received command', { type: command.type });
       await handleSweetlinkCommand(state, command);

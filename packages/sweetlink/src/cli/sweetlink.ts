@@ -2254,6 +2254,24 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink snapshot -i
       pnpm sweetlink click @e3
       pnpm sweetlink record stop`,
+
+  report: `  report [options]
+    Print or share the latest session report.
+
+    Modes:
+      (default)                   Print SUMMARY.md to stdout
+      --clipboard                 Copy SUMMARY.md to clipboard (pbcopy on macOS, xclip on Linux)
+      --serve                     Start a temporary HTTP server serving viewer.html
+      --webhook <url>             POST session data as JSON to a webhook URL
+
+    Options:
+      --session <dir>             Session directory (default: .sweetlink)
+
+    Examples:
+      pnpm sweetlink report
+      pnpm sweetlink report --clipboard
+      pnpm sweetlink report --serve
+      pnpm sweetlink report --webhook https://hooks.slack.com/...`,
 };
 
 // Aliases that map to canonical command names
@@ -2368,6 +2386,7 @@ if (hasFlag('--output-schema')) {
     'console',
     'record',
     'proof',
+    'report',
   ];
   const schemaCommand = knownCommands.includes(commandType)
     ? commandType === 'measure'
@@ -2801,6 +2820,109 @@ async function handleStatusCommand(): Promise<StatusData> {
             console.log('[Sweetlink] No recording in progress.');
           }
           result = data;
+        }
+        break;
+      }
+
+      case 'report': {
+        const sessionDirArg = getArg('--session') ?? '.sweetlink';
+        // Find latest session directory
+        if (!fs.existsSync(sessionDirArg)) {
+          console.error(`[Sweetlink] Session directory not found: ${sessionDirArg}`);
+          process.exit(1);
+        }
+        const reportSessions = fs.readdirSync(sessionDirArg)
+          .filter((f: string) => f.startsWith('session-'))
+          .sort()
+          .reverse();
+        if (reportSessions.length === 0) {
+          console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+          process.exit(1);
+        }
+        const reportSessionDir = path.join(sessionDirArg, reportSessions[0]!);
+
+        if (hasFlag('--clipboard')) {
+          // Copy SUMMARY.md to clipboard
+          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+          if (!fs.existsSync(summaryPath)) {
+            console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
+            process.exit(1);
+          }
+          const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
+          const { execFileSync } = await import('child_process');
+          const clipCmd = process.platform === 'darwin' ? 'pbcopy' : 'xclip';
+          const clipArgs = process.platform === 'darwin' ? [] : ['-selection', 'clipboard'];
+          try {
+            execFileSync(clipCmd, clipArgs, { input: summaryContent });
+            console.log('[Sweetlink] SUMMARY.md copied to clipboard.');
+          } catch (err) {
+            console.error(`[Sweetlink] Failed to copy to clipboard (${clipCmd}):`, err instanceof Error ? err.message : err);
+            process.exit(1);
+          }
+          result = { mode: 'clipboard', session: reportSessions[0] };
+        } else if (hasFlag('--serve')) {
+          // Serve viewer.html on a random port
+          const viewerPath = path.join(reportSessionDir, 'viewer.html');
+          if (!fs.existsSync(viewerPath)) {
+            console.error(`[Sweetlink] viewer.html not found at ${viewerPath}`);
+            process.exit(1);
+          }
+          const viewerContent = fs.readFileSync(viewerPath, 'utf-8');
+          const http = await import('http');
+          const port = 10000 + Math.floor(Math.random() * 50000);
+          const server = http.createServer((_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(viewerContent);
+          });
+          server.listen(port, () => {
+            const url = `http://localhost:${port}`;
+            console.log(`[Sweetlink] Serving viewer at ${url}`);
+            console.log('  Press Ctrl+C to stop.');
+          });
+          // Keep running until Ctrl+C
+          await new Promise(() => {});
+        } else if (getArg('--webhook')) {
+          // POST session data to webhook
+          const webhookUrl = getArg('--webhook')!;
+          const manifestPath = path.join(reportSessionDir, 'sweetlink-session.json');
+          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+          if (!fs.existsSync(manifestPath)) {
+            console.error(`[Sweetlink] Manifest not found at ${manifestPath}`);
+            process.exit(1);
+          }
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+          const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : '';
+          const payload: { summary: string; manifest: object; viewerHtml?: string } = { summary, manifest };
+          // Include viewer HTML for Slack/Discord webhooks
+          if (/slack|discord/i.test(webhookUrl)) {
+            const viewerPath = path.join(reportSessionDir, 'viewer.html');
+            if (fs.existsSync(viewerPath)) {
+              payload.viewerHtml = fs.readFileSync(viewerPath, 'utf-8');
+            }
+          }
+          const body = JSON.stringify(payload);
+          const res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+          });
+          if (res.ok) {
+            console.log(`[Sweetlink] Report posted to ${webhookUrl} (${res.status})`);
+          } else {
+            console.error(`[Sweetlink] Webhook failed: ${res.status} ${res.statusText}`);
+            process.exit(1);
+          }
+          result = { mode: 'webhook', url: webhookUrl, status: res.status };
+        } else {
+          // Default: print SUMMARY.md to stdout
+          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+          if (!fs.existsSync(summaryPath)) {
+            console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
+            process.exit(1);
+          }
+          const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
+          process.stdout.write(summaryContent);
+          result = { mode: 'stdout', session: reportSessions[0] };
         }
         break;
       }

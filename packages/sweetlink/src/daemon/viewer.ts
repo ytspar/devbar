@@ -17,6 +17,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { SessionManifest } from './session.js';
 import type { ConsoleEntry, NetworkEntry } from './listeners.js';
+import { generateSummary } from './summary.js';
 
 export interface ViewerOptions {
   sessionDir: string;
@@ -86,6 +87,13 @@ export async function generateViewer(
   }).join('\n');
 
   const hasVideo = videoBase64 !== null;
+
+  // Generate summary markdown for clipboard copy
+  const summaryMd = generateSummary({
+    manifest,
+    consoleEntries: options.consoleEntries,
+    networkEntries: options.networkEntries,
+  });
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -166,6 +174,9 @@ export async function generateViewer(
   .toggle-knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: var(--color-text); border-radius: 50%; transition: left var(--transition-fast); }
   .toggle.on .toggle-knob { left: 14px; }
   .git-info { font-size: 0.625rem; color: var(--color-text-muted); opacity: 0.7; }
+  .share-btn { background: none; border: 1px solid var(--color-border); color: var(--color-text-muted); padding: 3px 10px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-mono); font-size: 0.575rem; letter-spacing: 0.05em; transition: all var(--transition-fast); }
+  .share-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+  .share-btn.copied { color: var(--color-primary); border-color: var(--color-primary); }
   @keyframes ripple { 0% { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%,-50%) scale(3); opacity: 0; } }
   @media (max-width: 768px) {
     .main { flex-direction: column; }
@@ -184,6 +195,8 @@ export async function generateViewer(
     ${manifest.gitBranch ? `<span class="git-info">${escapeHtml(manifest.gitBranch)}${manifest.gitCommit ? ' @ ' + escapeHtml(manifest.gitCommit) : ''}</span><span style="color:var(--color-border)">|</span>` : ''}
     <span style="font-size:0.625rem;color:var(--color-text-muted)">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
     <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : totalErrors + ' errors'}</span>
+    <button class="share-btn" id="btn-copy-report" title="Copy summary report to clipboard">Copy Report</button>
+    <button class="share-btn" id="btn-download" title="Download this viewer as a file">Download</button>
   </div>
 </header>
 <div class="main">
@@ -245,6 +258,7 @@ var actions = ${JSON.stringify(manifest.commands.map(c => ({
 var screenshots = ${JSON.stringify(screenshots.map(s => s.data))};
 var duration = ${manifest.duration};
 var hasVideo = ${hasVideo};
+var summaryReport = ${JSON.stringify(summaryMd)};
 var consoleEntries = ${JSON.stringify(sanitizedConsole)};
 var networkEntries = ${JSON.stringify(sanitizedNetwork)};
 
@@ -509,6 +523,43 @@ document.addEventListener('keydown', function(e) {
 });
 
 // Start at first action
+// Share buttons
+var btnCopyReport = document.getElementById('btn-copy-report');
+if (btnCopyReport) {
+  btnCopyReport.addEventListener('click', function() {
+    navigator.clipboard.writeText(summaryReport).then(function() {
+      btnCopyReport.textContent = 'Copied!';
+      btnCopyReport.classList.add('copied');
+      setTimeout(function() {
+        btnCopyReport.textContent = 'Copy Report';
+        btnCopyReport.classList.remove('copied');
+      }, 2000);
+    }, function() {
+      btnCopyReport.textContent = 'Failed';
+      setTimeout(function() { btnCopyReport.textContent = 'Copy Report'; }, 2000);
+    });
+  });
+}
+
+var btnDownload = document.getElementById('btn-download');
+if (btnDownload) {
+  btnDownload.addEventListener('click', function() {
+    var blob = new Blob([document.documentElement.outerHTML], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'sweetlink-session.html';
+    a.click();
+    URL.revokeObjectURL(url);
+    btnDownload.textContent = 'Downloaded!';
+    btnDownload.classList.add('copied');
+    setTimeout(function() {
+      btnDownload.textContent = 'Download';
+      btnDownload.classList.remove('copied');
+    }, 2000);
+  });
+}
+
 if (actions.length > 0) goToAction(0);
 </script>
 </body>

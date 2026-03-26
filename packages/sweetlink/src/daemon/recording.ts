@@ -41,6 +41,7 @@ let sessionDir: string | null = null;
 let recordingContext: BrowserContext | null = null;
 let recordingPage: Page | null = null;
 let recordingVideoPath: string | null = null;
+let recordingUrl: string | null = null;
 
 // ============================================================================
 // Public API
@@ -87,6 +88,7 @@ export async function startRecording(
   startedAt = Date.now();
   actions = [];
   screenshotPaths = [];
+  recordingUrl = url;
 
   console.error(`[Daemon] Recording started: ${sessionId} (video: ${RECORDING_VIEWPORT.width}x${RECORDING_VIEWPORT.height})`);
   return { sessionId };
@@ -184,6 +186,7 @@ export async function stopRecording(): Promise<SessionManifest | null> {
 
   const manifest: SessionManifest = {
     sessionId,
+    url: recordingUrl ?? undefined,
     startedAt: new Date(startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     duration,
@@ -209,6 +212,7 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   recordingContext = null;
   recordingPage = null;
   recordingVideoPath = null;
+  recordingUrl = null;
 
   return result;
 }

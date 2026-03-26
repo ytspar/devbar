@@ -31,6 +31,8 @@ export interface ActionEntry {
 
 export interface SessionManifest {
   sessionId: string;
+  /** Target app URL that was recorded */
+  url?: string;
   startedAt: string;
   endedAt: string;
   /** Duration in seconds */

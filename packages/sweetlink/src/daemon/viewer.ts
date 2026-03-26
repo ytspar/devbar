@@ -165,7 +165,10 @@ export async function generateViewer(
 </head>
 <body>
 <header>
-  <h1>Sweetlink Session</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    ${manifest.url ? `<a href="${escapeHtml(manifest.url)}" style="color:var(--color-text-muted);text-decoration:none;font-size:0.75rem;transition:color var(--transition-fast)" onmouseover="this.style.color='var(--color-primary)'" onmouseout="this.style.color='var(--color-text-muted)'">&larr; Back to app</a><span style="color:var(--color-border)">|</span>` : ''}
+    <h1>Sweetlink Session</h1>
+  </div>
   <div style="display:flex;gap:12px;align-items:center">
     <span style="font-size:0.625rem;color:var(--color-text-muted)">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
     <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : totalErrors + ' errors'}</span>

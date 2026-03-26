@@ -60,8 +60,11 @@ if (args.includes('--check')) {
   const name = shortName(pkg.name);
   const version = pkg.version;
 
+  // Strip prerelease suffix for canary versions: 1.15.0-canary.abc → 1.15.0
+  const baseVersion = version.replace(/-.*$/, '');
+
   const notes = releaseNotes[name];
-  if (!notes || !notes[version]) {
+  if (!notes || !(notes[version] || notes[baseVersion])) {
     console.error(
       `\n  ✘ Missing release note for ${name} v${version}` +
         `\n    Add an entry to packages/playground/src/release-notes.json` +
@@ -70,5 +73,6 @@ if (args.includes('--check')) {
     process.exit(1);
   }
 
-  console.log(`  ✔ Release note found for ${name} v${version}: ${notes[version]}`);
+  const matchedVersion = notes[version] ? version : baseVersion;
+  console.log(`  ✔ Release note found for ${name} v${matchedVersion}: ${notes[matchedVersion]}`);
 }

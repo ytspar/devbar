@@ -518,7 +518,7 @@ function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
-    const MAX_BODY = 1024 * 1024; // 1MB max
+    const MAX_BODY = 10 * 1024 * 1024; // 10MB max (visual-diff sends two screenshots)
 
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;

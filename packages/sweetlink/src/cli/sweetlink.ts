@@ -2774,9 +2774,23 @@ async function handleStatusCommand(): Promise<StatusData> {
           result = data;
         } else if (subcommand === 'stop') {
           const resp = await daemonRequest(state, 'record-stop');
-          const data = resp.data as { manifest: unknown };
-          console.log('[Sweetlink] Recording stopped.');
-          console.log(JSON.stringify(data.manifest, null, 2));
+          const data = resp.data as { manifest: { sessionId: string; duration: number; commands: unknown[]; video?: string }; viewerPath?: string };
+          const m = data.manifest;
+          console.log(`[Sweetlink] Recording stopped: ${m.sessionId}`);
+          console.log(`  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ' | Video: ' + m.video : ''}`);
+
+          // Auto-open the viewer
+          if (data.viewerPath && !hasFlag('--no-open')) {
+            console.log(`  Viewer: ${data.viewerPath}`);
+            const { execFile } = await import('child_process');
+            const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+            execFile(openCmd, [data.viewerPath], (err) => {
+              if (err) console.error('  Could not open viewer:', err.message);
+            });
+            console.log(`  Opened in browser.`);
+          } else if (data.viewerPath) {
+            console.log(`  Viewer: ${data.viewerPath}`);
+          }
           result = data;
         } else {
           const resp = await daemonRequest(state, 'record-status');

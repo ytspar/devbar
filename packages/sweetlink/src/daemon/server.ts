@@ -20,6 +20,7 @@ import {
   networkBuffer,
 } from './listeners.js';
 import { getRecordingPage, getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
+import { generateSummary } from './summary.js';
 import { generateViewer } from './viewer.js';
 import { visualDiff } from './visualDiff.js';
 import {
@@ -398,19 +399,38 @@ async function handleRecordStop(): Promise<DaemonResponse> {
     return { ok: false, error: 'No recording in progress' };
   }
 
-  // Auto-generate viewer HTML
+  // Auto-generate viewer HTML + summary report
   const sessionDir = `.sweetlink/${manifest.sessionId}`;
+  let viewerPath: string | undefined;
+  let summaryPath: string | undefined;
+
   try {
-    const viewerPath = await generateViewer(manifest, {
+    const consoleLogs = consoleBuffer.toArray();
+    const networkLogs = networkBuffer.toArray();
+
+    viewerPath = await generateViewer(manifest, {
       sessionDir,
-      consoleEntries: consoleBuffer.toArray(),
-      networkEntries: networkBuffer.toArray(),
+      consoleEntries: consoleLogs,
+      networkEntries: networkLogs,
     });
-    return { ok: true, data: { manifest, viewerPath } };
-  } catch {
-    // Viewer generation is optional — still return the manifest
-    return { ok: true, data: { manifest } };
+
+    // Generate SUMMARY.md
+    const { promises: fsp } = await import('fs');
+    const summaryMd = generateSummary({
+      manifest,
+      consoleEntries: consoleLogs,
+      networkEntries: networkLogs,
+      gitBranch: manifest.gitBranch,
+      gitCommit: manifest.gitCommit,
+    });
+    summaryPath = `${sessionDir}/SUMMARY.md`;
+    await fsp.writeFile(summaryPath, summaryMd, 'utf-8');
+    console.error(`[Daemon] Summary saved: ${summaryPath}`);
+  } catch (e) {
+    console.error('[Daemon] Report generation error:', e);
   }
+
+  return { ok: true, data: { manifest, viewerPath, summaryPath } };
 }
 
 async function handleRecordStatus(): Promise<DaemonResponse> {

@@ -160,7 +160,18 @@ export async function generateViewer(
   .empty { color: var(--color-text-muted); text-align: center; padding: 40px; letter-spacing: 0.05em; }
   .toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: var(--color-bg-elevated); color: var(--color-primary); padding: 6px 16px; border-radius: var(--radius-md); font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 10; border: 1px solid var(--color-border); box-shadow: var(--shadow-md); }
   .toast.show { opacity: 1; }
+  .toggle-row { display: flex; align-items: center; gap: 8px; font-size: 0.625rem; color: var(--color-text-muted); }
+  .toggle { position: relative; width: 28px; height: 16px; background: var(--color-border-subtle); border-radius: 8px; cursor: pointer; transition: background var(--transition-fast); border: 1px solid var(--color-border); }
+  .toggle.on { background: var(--color-primary); }
+  .toggle-knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: var(--color-text); border-radius: 50%; transition: left var(--transition-fast); }
+  .toggle.on .toggle-knob { left: 14px; }
+  .git-info { font-size: 0.625rem; color: var(--color-text-muted); opacity: 0.7; }
   @keyframes ripple { 0% { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%,-50%) scale(3); opacity: 0; } }
+  @media (max-width: 768px) {
+    .main { flex-direction: column; }
+    .video-pane { flex: none; height: 50vh; border-right: none; border-bottom: 1px solid var(--color-border); }
+    .sidebar { flex: 1; }
+  }
 </style>
 </head>
 <body>
@@ -170,6 +181,7 @@ export async function generateViewer(
     <h1>Sweetlink Session</h1>
   </div>
   <div style="display:flex;gap:12px;align-items:center">
+    ${manifest.gitBranch ? `<span class="git-info">${escapeHtml(manifest.gitBranch)}${manifest.gitCommit ? ' @ ' + escapeHtml(manifest.gitCommit) : ''}</span><span style="color:var(--color-border)">|</span>` : ''}
     <span style="font-size:0.625rem;color:var(--color-text-muted)">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
     <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : totalErrors + ' errors'}</span>
   </div>
@@ -200,6 +212,11 @@ export async function generateViewer(
         <button class="btn" id="btn-next">Next &rarr;</button>
         <button class="btn" id="btn-auto">Auto Step</button>
         <span class="time-display" id="time-display">0.0s / ${manifest.duration.toFixed(1)}s</span>
+        <span style="flex:1"></span>
+        <div class="toggle-row">
+          <span>Overlays</span>
+          <div class="toggle on" id="toggle-overlays"><div class="toggle-knob"></div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -234,6 +251,7 @@ var networkEntries = ${JSON.stringify(sanitizedNetwork)};
 var currentAction = -1;
 var autoStepping = false;
 var autoTimer = null;
+var overlaysEnabled = true;
 
 // Elements
 var player = document.getElementById('player');
@@ -268,7 +286,7 @@ function showToast(msg) {
 
 // Draw click ripple overlay
 function drawClickRipple(bb) {
-  if (!ctx || !overlay || !bb) return;
+  if (!ctx || !overlay || !bb || !overlaysEnabled) return;
   var container = document.getElementById('video-container');
   var media = player || screenshotImg;
   if (!media) return;
@@ -334,8 +352,8 @@ function goToAction(idx) {
     if (i === idx) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
 
-  // Show toast
-  showToast(action.action + ' ' + action.args.join(' '));
+  // Show toast (only when overlays enabled)
+  if (overlaysEnabled) showToast(action.action + ' ' + action.args.join(' '));
 
   // Draw click ripple if bounding box available
   if (action.boundingBox) {
@@ -470,6 +488,16 @@ if (networkEntries.length === 0) {
     var time = new Date(e.timestamp).toISOString().slice(11, 19);
     div.textContent = '[' + time + '] ' + e.status + ' ' + e.method + ' ' + e.url + ' ' + e.duration + 'ms';
     networkEl.appendChild(div);
+  });
+}
+
+// Overlay toggle
+var toggleOverlays = document.getElementById('toggle-overlays');
+if (toggleOverlays) {
+  toggleOverlays.addEventListener('click', function() {
+    overlaysEnabled = !overlaysEnabled;
+    toggleOverlays.classList.toggle('on', overlaysEnabled);
+    if (!overlaysEnabled && ctx && overlay) ctx.clearRect(0, 0, overlay.width, overlay.height);
   });
 }
 

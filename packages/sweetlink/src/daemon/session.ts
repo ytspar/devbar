@@ -33,6 +33,10 @@ export interface SessionManifest {
   sessionId: string;
   /** Target app URL that was recorded */
   url?: string;
+  /** Git branch at time of recording */
+  gitBranch?: string;
+  /** Git commit SHA at time of recording */
+  gitCommit?: string;
   startedAt: string;
   endedAt: string;
   /** Duration in seconds */

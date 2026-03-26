@@ -102,6 +102,13 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         return;
       }
 
+      // Handle hifi screenshot response (proxied through daemon)
+      if (message.type === 'hifi-screenshot' && !message.success) {
+        state.capturing = false;
+        state.render();
+        return;
+      }
+
       // Handle recording responses (not in SweetlinkCommand union)
       if (message.type === 'record-start-response' && message.success) {
         state.recordingActive = true;

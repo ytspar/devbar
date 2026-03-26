@@ -811,6 +811,59 @@ async function handleRecordCommand(
 }
 
 // ============================================================================
+// HiFi Screenshot Proxy (Browser → Daemon)
+// ============================================================================
+
+async function handleHifiScreenshot(
+  _command: SweetlinkCommand,
+  ctx: MessageHandlerContext
+): Promise<boolean> {
+  if (!ctx.isBrowserClient) return false;
+
+  const stateDir = path.join(getProjectRoot(), '.sweetlink');
+  let daemonState: { port: number; token: string } | null = null;
+
+  // Find daemon state file (port-scoped or generic)
+  try {
+    const files = fs.readdirSync(stateDir).filter((f: string) => f.startsWith('daemon') && f.endsWith('.json'));
+    for (const f of files) {
+      const candidate = JSON.parse(fs.readFileSync(path.join(stateDir, f), 'utf-8'));
+      if (candidate.port && candidate.token) { daemonState = candidate; break; }
+    }
+  } catch { /* no daemon */ }
+
+  if (!daemonState) {
+    sendError(ctx.ws, 'hifi-screenshot', 'Daemon not running. Start it with: sweetlink daemon start');
+    return true;
+  }
+
+  try {
+    const resp = await fetch(`http://127.0.0.1:${daemonState.port}/api/screenshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${daemonState.token}` },
+      body: '{}',
+    });
+    const body = await resp.json() as { ok: boolean; data?: { screenshot: string; width: number; height: number } };
+
+    if (body.ok && body.data) {
+      // Save the screenshot
+      const dir = path.join(getProjectRoot(), '.tmp', 'sweetlink-screenshots');
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const filename = `hifi-${Date.now()}.png`;
+      const filePath = path.join(dir, filename);
+      fs.writeFileSync(filePath, Buffer.from(body.data.screenshot, 'base64'));
+
+      sendSuccess(ctx.ws, 'screenshot-saved', { path: filePath });
+    } else {
+      sendError(ctx.ws, 'hifi-screenshot', 'Daemon screenshot failed');
+    }
+  } catch (error) {
+    sendError(ctx.ws, 'hifi-screenshot', getErrorMessage(error));
+  }
+  return true;
+}
+
+// ============================================================================
 // Demo Proxy (Browser → Daemon for screenshots, local for init)
 // ============================================================================
 
@@ -922,6 +975,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   'record-stop': handleRecordCommand as MessageHandler,
   'demo-init': handleDemoCommand as MessageHandler,
   'demo-screenshot': handleDemoCommand as MessageHandler,
+  'hifi-screenshot': handleHifiScreenshot as MessageHandler,
 };
 
 /**

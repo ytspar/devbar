@@ -133,6 +133,7 @@ export function createScreenshotButton(state: DevBarState, accentColor: string):
       const saveLabel = effectiveSave === 'local' ? 'Save to file' : 'Download';
       h.addShortcut('Click', saveLabel);
       h.addShortcut('Shift+Click', 'Copy to clipboard');
+      h.addShortcut('Alt+Click', 'HiFi screenshot (pixel-perfect via daemon)');
       h.addSectionHeader('Keyboard');
       h.addShortcut('Cmd or Ctrl+Shift+S', saveLabel);
       h.addShortcut('Cmd or Ctrl+Shift+C', 'Copy');
@@ -160,6 +161,14 @@ export function createScreenshotButton(state: DevBarState, accentColor: string):
 
   btn.disabled = isDisabled;
   btn.onclick = (e) => {
+    if (e.altKey) {
+      // Alt+Click → HiFi screenshot via daemon
+      if (!state.ws || !state.sweetlinkConnected) return;
+      state.ws.send(JSON.stringify({ type: 'hifi-screenshot' }));
+      state.capturing = true;
+      state.render();
+      return;
+    }
     // If we have a saved screenshot path, clicking copies the path
     if (state.lastScreenshot && !e.shiftKey) {
       copyPathToClipboard(state, state.lastScreenshot);

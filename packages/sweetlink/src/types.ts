@@ -283,6 +283,10 @@ export interface DemoScreenshotCommand {
   type: 'demo-screenshot';
 }
 
+export interface HifiScreenshotCommand {
+  type: 'hifi-screenshot';
+}
+
 /**
  * Commands that can be sent over the Sweetlink WebSocket connection.
  *
@@ -336,7 +340,8 @@ export type SweetlinkCommand =
   | RecordStartCommand
   | RecordStopCommand
   | DemoInitCommand
-  | DemoScreenshotCommand;
+  | DemoScreenshotCommand
+  | HifiScreenshotCommand;
 
 /**
  * Response structure for Sweetlink commands

@@ -25,6 +25,20 @@ export interface SweetlinkPluginOptions {
    * For example, if Vite runs on 5173, Sweetlink uses 11396.
    */
   port?: number;
+
+  /**
+   * Auto-start the Playwright daemon alongside the dev server.
+   * Enables `--hifi` screenshots, `snapshot`, `console`, recording, etc.
+   * Default: false
+   */
+  daemon?: boolean;
+
+  /**
+   * Start the daemon in headed mode (visible browser window).
+   * Only applies when `daemon: true`.
+   * Default: false
+   */
+  headed?: boolean;
 }
 
 /**
@@ -58,6 +72,20 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
         });
 
         console.log(`[Sweetlink] Ready for devbar connections (app port: ${vitePort})`);
+
+        // Auto-start daemon if configured
+        if (options.daemon) {
+          const url = `http://localhost:${vitePort}`;
+          import('./daemon/client.js').then(({ ensureDaemon }) => {
+            ensureDaemon(process.cwd(), url, { headed: options.headed }).then((state) => {
+              console.log(`[Sweetlink] Daemon ready on port ${state.port} (target: ${url})`);
+            }).catch((err) => {
+              console.warn('[Sweetlink] Daemon auto-start failed:', err instanceof Error ? err.message : err);
+            });
+          }).catch(() => {
+            console.warn('[Sweetlink] Daemon module not available');
+          });
+        }
       });
     },
 

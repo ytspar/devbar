@@ -320,16 +320,73 @@ pnpm sweetlink network --filter "/api/"
 
 Sweetlink v2 adds a persistent Playwright daemon for high-fidelity operations. The daemon auto-starts on first use and auto-stops after 30min idle.
 
+#### Auto-Start with Vite
+
+Add `daemon: true` to your Vite plugin config — the daemon starts/stops with your dev server:
+
+```typescript
+// vite.config.ts
+import { sweetlink } from '@ytspar/sweetlink/vite';
+
+export default defineConfig({
+  plugins: [sweetlink({ daemon: true })]
+  // Or with visible browser: sweetlink({ daemon: true, headed: true })
+});
+```
+
+#### Auto-Start with Dev Script
+
+Add a `dev` script that starts both your app and the daemon:
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "dev:daemon": "concurrently 'vite' 'sweetlink daemon start --url http://localhost:5173'"
+  }
+}
+```
+
+#### Multiple Apps (Monorepo)
+
+Each daemon is scoped by app port. Running two apps on different ports creates separate daemons:
+
+```bash
+# Terminal 1: App A on port 3000
+sweetlink daemon start --url http://localhost:3000
+# State: .sweetlink/daemon-3000.json
+
+# Terminal 2: App B on port 5173
+sweetlink daemon start --url http://localhost:5173
+# State: .sweetlink/daemon-5173.json
+
+# Commands target specific apps via --url
+sweetlink screenshot --hifi --url http://localhost:3000
+sweetlink screenshot --hifi --url http://localhost:5173
+```
+
+#### Manual Lifecycle
+
+```bash
+# Start manually (auto-starts on first --hifi command if not running)
+pnpm sweetlink daemon start --url http://localhost:5173
+pnpm sweetlink daemon start --url http://localhost:5173 --headed  # visible browser
+
+# Check status
+pnpm sweetlink daemon status
+
+# Stop (or wait for 30min idle auto-stop)
+pnpm sweetlink daemon stop
+```
+
+#### CLI Quick Reference
+
 ```bash
 # Pixel-perfect screenshot via persistent daemon (~150ms after startup)
 pnpm sweetlink screenshot --hifi
 
 # Responsive screenshots at 3 breakpoints (375/768/1280)
 pnpm sweetlink screenshot --responsive
-
-# Manage daemon lifecycle
-pnpm sweetlink daemon status
-pnpm sweetlink daemon stop
 ```
 
 ### Accessibility Snapshots & Refs

@@ -10,7 +10,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import type { DaemonResponse, DaemonState } from './types.js';
 import { DAEMON_POLL_INTERVAL_MS, DAEMON_SPAWN_TIMEOUT_MS } from './types.js';
-import { acquireLock, isDaemonAlive, readDaemonState, releaseLock } from './stateFile.js';
+import { acquireLock, extractPort, isDaemonAlive, readDaemonState, releaseLock } from './stateFile.js';
 
 /**
  * Ensure a daemon is running for the given project root and URL.
@@ -22,8 +22,10 @@ export async function ensureDaemon(
   url: string,
   options?: { headed?: boolean }
 ): Promise<DaemonState> {
-  // Check if daemon is already running
-  const existing = readDaemonState(projectRoot);
+  const appPort = extractPort(url);
+
+  // Check if daemon is already running (scoped by app port)
+  const existing = readDaemonState(projectRoot, appPort);
   if (existing) {
     const alive = await isDaemonAlive(existing);
     if (alive) {
@@ -44,10 +46,11 @@ async function spawnDaemon(
   options?: { headed?: boolean }
 ): Promise<DaemonState> {
   // Acquire lock to prevent concurrent starts
-  if (!acquireLock(projectRoot)) {
+  const appPort = extractPort(url);
+  if (!acquireLock(projectRoot, appPort)) {
     // Another process is starting the daemon — wait for state file
     console.log('[Sweetlink] Another process is starting the daemon. Waiting...');
-    return waitForDaemon(projectRoot);
+    return waitForDaemon(projectRoot, appPort);
   }
 
   try {
@@ -70,9 +73,9 @@ async function spawnDaemon(
     if (child.connected) child.disconnect();
 
     // Wait for the daemon to write its state file
-    return await waitForDaemon(projectRoot);
+    return await waitForDaemon(projectRoot, appPort);
   } catch (error) {
-    releaseLock(projectRoot);
+    releaseLock(projectRoot, appPort);
     throw error;
   }
 }
@@ -80,11 +83,11 @@ async function spawnDaemon(
 /**
  * Poll for daemon state file until it appears or timeout.
  */
-async function waitForDaemon(projectRoot: string): Promise<DaemonState> {
+async function waitForDaemon(projectRoot: string, appPort?: number): Promise<DaemonState> {
   const deadline = Date.now() + DAEMON_SPAWN_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    const state = readDaemonState(projectRoot);
+    const state = readDaemonState(projectRoot, appPort);
     if (state) {
       const alive = await isDaemonAlive(state);
       if (alive) {
@@ -129,8 +132,8 @@ export async function daemonRequest(
 /**
  * Stop the daemon by sending a shutdown command.
  */
-export async function stopDaemon(projectRoot: string): Promise<boolean> {
-  const state = readDaemonState(projectRoot);
+export async function stopDaemon(projectRoot: string, appPort?: number): Promise<boolean> {
+  const state = readDaemonState(projectRoot, appPort);
   if (!state) {
     return false;
   }
@@ -148,9 +151,10 @@ export async function stopDaemon(projectRoot: string): Promise<boolean> {
  * Get daemon status information.
  */
 export async function getDaemonStatus(
-  projectRoot: string
+  projectRoot: string,
+  appPort?: number
 ): Promise<{ running: boolean; pid?: number; port?: number; url?: string; uptime?: number }> {
-  const state = readDaemonState(projectRoot);
+  const state = readDaemonState(projectRoot, appPort);
   if (!state) {
     return { running: false };
   }

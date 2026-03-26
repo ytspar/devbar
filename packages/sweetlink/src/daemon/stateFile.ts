@@ -18,31 +18,47 @@ export function getStateDir(projectRoot: string): string {
 }
 
 /**
- * Get the daemon.json file path
+ * Get the daemon.json file path.
+ * If appPort is provided, the state file is scoped per-port to support
+ * multiple daemon instances in the same project (e.g., monorepo with
+ * multiple apps running on different ports).
  */
-export function getStateFilePath(projectRoot: string): string {
-  return path.join(getStateDir(projectRoot), DAEMON_STATE_FILE);
+export function getStateFilePath(projectRoot: string, appPort?: number): string {
+  const filename = appPort ? `daemon-${appPort}.json` : DAEMON_STATE_FILE;
+  return path.join(getStateDir(projectRoot), filename);
 }
 
 /**
  * Get the daemon.lock file path
  */
-export function getLockFilePath(projectRoot: string): string {
-  return path.join(getStateDir(projectRoot), DAEMON_LOCK_FILE);
+export function getLockFilePath(projectRoot: string, appPort?: number): string {
+  const filename = appPort ? `daemon-${appPort}.lock` : DAEMON_LOCK_FILE;
+  return path.join(getStateDir(projectRoot), filename);
 }
 
 /**
- * Write daemon state to .sweetlink/daemon.json atomically.
+ * Extract port number from a URL string.
+ */
+export function extractPort(url: string): number | undefined {
+  try {
+    return new URL(url).port ? parseInt(new URL(url).port, 10) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Write daemon state to .sweetlink/daemon.json (or daemon-{port}.json) atomically.
  * Creates the directory if it doesn't exist.
  * Sets file permissions to 600 (owner read/write only) for security.
  */
-export function writeDaemonState(projectRoot: string, state: DaemonState): void {
+export function writeDaemonState(projectRoot: string, state: DaemonState, appPort?: number): void {
   const dir = getStateDir(projectRoot);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const stateFile = getStateFilePath(projectRoot);
+  const stateFile = getStateFilePath(projectRoot, appPort);
   const tmpFile = stateFile + '.tmp';
 
   // Atomic write: write to tmp, then rename
@@ -51,11 +67,11 @@ export function writeDaemonState(projectRoot: string, state: DaemonState): void 
 }
 
 /**
- * Read daemon state from .sweetlink/daemon.json.
+ * Read daemon state from .sweetlink/daemon.json (or daemon-{port}.json).
  * Returns null if the file doesn't exist or is invalid.
  */
-export function readDaemonState(projectRoot: string): DaemonState | null {
-  const stateFile = getStateFilePath(projectRoot);
+export function readDaemonState(projectRoot: string, appPort?: number): DaemonState | null {
+  const stateFile = getStateFilePath(projectRoot, appPort);
   try {
     const content = fs.readFileSync(stateFile, 'utf-8');
     const state = JSON.parse(content) as DaemonState;
@@ -78,9 +94,9 @@ export function readDaemonState(projectRoot: string): DaemonState | null {
 /**
  * Remove daemon state file and lock file
  */
-export function removeDaemonState(projectRoot: string): void {
-  const stateFile = getStateFilePath(projectRoot);
-  const lockFile = getLockFilePath(projectRoot);
+export function removeDaemonState(projectRoot: string, appPort?: number): void {
+  const stateFile = getStateFilePath(projectRoot, appPort);
+  const lockFile = getLockFilePath(projectRoot, appPort);
   try {
     fs.unlinkSync(stateFile);
   } catch {
@@ -121,13 +137,13 @@ export async function isDaemonAlive(state: DaemonState): Promise<boolean> {
  * Acquire a lockfile to prevent concurrent daemon starts.
  * Returns true if the lock was acquired, false if another process holds it.
  */
-export function acquireLock(projectRoot: string): boolean {
+export function acquireLock(projectRoot: string, appPort?: number): boolean {
   const dir = getStateDir(projectRoot);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const lockFile = getLockFilePath(projectRoot);
+  const lockFile = getLockFilePath(projectRoot, appPort);
   try {
     // 'wx' flag: write exclusive — fails if file exists
     fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx', mode: 0o600 });
@@ -159,8 +175,8 @@ export function acquireLock(projectRoot: string): boolean {
 /**
  * Release the lockfile
  */
-export function releaseLock(projectRoot: string): void {
-  const lockFile = getLockFilePath(projectRoot);
+export function releaseLock(projectRoot: string, appPort?: number): void {
+  const lockFile = getLockFilePath(projectRoot, appPort);
   try {
     fs.unlinkSync(lockFile);
   } catch {

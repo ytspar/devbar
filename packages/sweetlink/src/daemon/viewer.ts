@@ -524,10 +524,26 @@ document.addEventListener('keydown', function(e) {
 
 // Start at first action
 // Share buttons
+// Clipboard helper — falls back to execCommand for file:// contexts
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback for file:// or non-secure contexts
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  var ok = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  return ok ? Promise.resolve() : Promise.reject(new Error('execCommand failed'));
+}
+
 var btnCopyReport = document.getElementById('btn-copy-report');
 if (btnCopyReport) {
   btnCopyReport.addEventListener('click', function() {
-    navigator.clipboard.writeText(summaryReport).then(function() {
+    copyToClipboard(summaryReport).then(function() {
       btnCopyReport.textContent = 'Copied!';
       btnCopyReport.classList.add('copied');
       setTimeout(function() {

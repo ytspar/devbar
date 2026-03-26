@@ -2874,9 +2874,22 @@ async function handleStatusCommand(): Promise<StatusData> {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(viewerContent);
           });
-          server.listen(port, () => {
-            const url = `http://localhost:${port}`;
-            console.log(`[Sweetlink] Serving viewer at ${url}`);
+          server.listen(port, '0.0.0.0', () => {
+            const os = require('os');
+            const nets = os.networkInterfaces();
+            let lanIp = 'localhost';
+            for (const name of Object.keys(nets)) {
+              for (const net of nets[name]) {
+                if (net.family === 'IPv4' && !net.internal) {
+                  lanIp = net.address;
+                  break;
+                }
+              }
+              if (lanIp !== 'localhost') break;
+            }
+            console.log(`[Sweetlink] Serving viewer at:`);
+            console.log(`  Local:   http://localhost:${port}`);
+            console.log(`  Network: http://${lanIp}:${port}`);
             console.log('  Press Ctrl+C to stop.');
           });
           // Keep running until Ctrl+C

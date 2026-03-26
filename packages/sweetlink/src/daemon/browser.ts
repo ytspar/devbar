@@ -100,6 +100,16 @@ export function getPage(): Page {
 }
 
 /**
+ * Get the browser instance (needed for creating recording contexts).
+ */
+export function getBrowserInstance(): Browser {
+  if (!browser) {
+    throw new Error('Browser not initialized. Call initBrowser() first.');
+  }
+  return browser;
+}
+
+/**
  * Navigate to a URL if it differs from the current one.
  */
 export async function navigateTo(url: string): Promise<void> {

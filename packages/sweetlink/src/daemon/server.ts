@@ -7,7 +7,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
-import { closeBrowser, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
+import { closeBrowser, getBrowserInstance, getPage, initBrowser, takeResponsiveScreenshots, takeScreenshot } from './browser.js';
 import { annotateScreenshot, diffSnapshots } from './diff.js';
 import { takeDeviceScreenshots } from './devices.js';
 import {
@@ -19,7 +19,7 @@ import {
   getWarningCount,
   networkBuffer,
 } from './listeners.js';
-import { getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
+import { getRecordingPage, getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
 import { generateViewer } from './viewer.js';
 import { visualDiff } from './visualDiff.js';
 import {
@@ -127,7 +127,8 @@ async function handleSnapshot(
   url: string
 ): Promise<DaemonResponse> {
   await initBrowser(url);
-  const page = getPage();
+  const recPage = getRecordingPage();
+  const page = recPage ?? getPage();
   const interactive = params.interactive as boolean | undefined;
   const diff = params.diff as boolean | undefined;
   const annotate = params.annotate as boolean | undefined;
@@ -196,7 +197,10 @@ async function handleClickRef(
   url: string
 ): Promise<DaemonResponse> {
   await initBrowser(url);
-  const page = getPage();
+
+  // Use recording page if recording, otherwise main page
+  const recPage = getRecordingPage();
+  const page = recPage ?? getPage();
   const ref = params.ref as string;
 
   if (!ref) return { ok: false, error: 'Missing ref parameter' };
@@ -226,7 +230,8 @@ async function handleFillRef(
   url: string
 ): Promise<DaemonResponse> {
   await initBrowser(url);
-  const page = getPage();
+  const recPage = getRecordingPage();
+  const page = recPage ?? getPage();
   const ref = params.ref as string;
   const value = params.value as string;
 
@@ -382,8 +387,8 @@ async function handleScreenshotDevices(
 
 async function handleRecordStart(url: string): Promise<DaemonResponse> {
   await initBrowser(url);
-  const page = getPage();
-  const result = await startRecording(page, '.sweetlink');
+  const browser = getBrowserInstance();
+  const result = await startRecording(browser, url, '.sweetlink');
   return { ok: true, data: { sessionId: result.sessionId } };
 }
 

@@ -147,6 +147,7 @@ export class GlobalDevBar {
   recordingStartedAt: number | null = null;
   recordingTimer: ReturnType<typeof setInterval> | null = null;
   lastViewerPath: string | null = null;
+  pendingViewerWindow: Window | null = null;
 
   // Ruler
   rulerMode = false;

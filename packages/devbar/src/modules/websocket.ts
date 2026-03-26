@@ -110,13 +110,20 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         state.recordingStartedAt = null;
         const data = message as Record<string, unknown>;
         const viewerUrl = data.viewerUrl as string | undefined;
-        const viewerPath = data.viewerPath as string | undefined;
+
+        // Navigate the pre-opened window (opened synchronously on click to avoid popup blocker)
+        if (viewerUrl && state.pendingViewerWindow) {
+          state.pendingViewerWindow.location.href = viewerUrl;
+          state.pendingViewerWindow = null;
+        } else if (state.pendingViewerWindow) {
+          // No URL available — close the blank tab
+          state.pendingViewerWindow.close();
+          state.pendingViewerWindow = null;
+        }
+
+        // Store the HTTP URL for Shift+Click re-open (works while daemon is running)
         if (viewerUrl) {
           state.lastViewerPath = viewerUrl;
-          // Auto-open the viewer in a new tab
-          window.open(viewerUrl, '_blank');
-        } else if (viewerPath) {
-          state.lastViewerPath = viewerPath;
         }
         state.render();
         return;

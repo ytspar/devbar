@@ -123,6 +123,7 @@ export interface DevBarState {
   recordingStartedAt: number | null;
   recordingTimer: ReturnType<typeof setInterval> | null;
   lastViewerPath: string | null;
+  pendingViewerWindow: Window | null;
 
   // Ruler
   rulerMode: boolean;

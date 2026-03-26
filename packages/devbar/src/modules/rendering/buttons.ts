@@ -487,7 +487,10 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
     if (!state.ws || !state.sweetlinkConnected) return;
 
     if (isActive) {
-      // Stop recording
+      // Stop recording — open window NOW (in click gesture) to avoid popup blocker
+      const viewerWindow = window.open('about:blank', '_blank');
+      state.pendingViewerWindow = viewerWindow;
+
       state.ws.send(JSON.stringify({ type: 'record-stop' }));
       if (state.recordingTimer) clearInterval(state.recordingTimer);
       state.recordingActive = false;

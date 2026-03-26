@@ -706,19 +706,53 @@ This 15x token savings enables 10+ autonomous iterations within Claude's budget.
 
 ## Comparison with Alternatives
 
-| Feature | Sweetlink | Playwright MCP | Manual Screenshots |
-|---------|-----------|----------------|-------------------|
-| Setup Time | < 1 min | 5-10 min | N/A |
-| Token Cost | ~1,000 | ~5,000 | N/A |
-| Auto Reconnect | ✅ | ❌ | N/A |
-| Console Logs | ✅ | ✅ | ❌ |
-| Network Requests | ✅ (CDP) | ✅ | ❌ |
-| DOM Queries | ✅ | ✅ | ❌ |
-| JS Execution | ✅ | ✅ | ❌ |
-| Click Elements | ✅ | ✅ | ❌ |
-| Element Screenshots | ✅ | ✅ | ❌ |
-| Full Page Screenshots | ✅ | ✅ | ✅ |
-| Autonomous Loops | ✅ (10+) | Limited (2-3) | ❌ |
+### Screenshot & Interaction
+
+| Feature | Sweetlink | Playwright CLI | Chrome DevTools MCP | agent-browser |
+|---------|-----------|----------------|--------------------|--------------|
+| Setup | Vite/Next plugin | npm install | Chrome flag | npm install |
+| Token cost/screenshot | ~1,000 | ~5,000 | ~5,000 | ~3,000 |
+| Fast screenshots (html2canvas) | ✅ | ❌ | ❌ | ❌ |
+| Pixel-perfect screenshots | ✅ (`--hifi`) | ✅ | ✅ | ✅ |
+| Responsive (multi-viewport) | ✅ (`--responsive`) | Manual | ❌ | ❌ |
+| Device emulation (iPhone, Pixel) | ✅ (named presets) | ✅ | ❌ | ✅ |
+| @ref element interaction | ✅ (accessibility tree) | ❌ (CSS selectors) | ❌ | ✅ (Stagehand AI) |
+| DOM queries | ✅ | ✅ | ✅ | ❌ |
+| JS execution | ✅ | ✅ | ✅ | ❌ |
+| Persistent browser sessions | ✅ (daemon) | ❌ (per-run) | ✅ | ✅ |
+
+### Evidence & Reporting
+
+| Feature | Sweetlink | ProofShot | Proof | Playwright |
+|---------|-----------|-----------|-------|------------|
+| Video recording (WebM) | ✅ | ✅ | ✅ | ✅ (trace) |
+| Interactive HTML viewer | ✅ (video + overlays) | ✅ | ✅ | ✅ (trace viewer) |
+| Click ripple overlays | ✅ (canvas) | ✅ | ✅ (FFmpeg) | ❌ |
+| Console ring buffer | ✅ (always-on, 50K) | ✅ | ❌ | ❌ |
+| Network ring buffer | ✅ (always-on, 50K) | ❌ | ❌ | ✅ (HAR) |
+| Multi-language error detection | ✅ (10+ languages) | ✅ | ❌ | ❌ |
+| Snapshot diffing (a11y tree) | ✅ | ❌ | ❌ | ❌ |
+| Annotated screenshots | ✅ (@ref labels) | ✅ | ❌ | ❌ |
+| SUMMARY.md report | ✅ | ✅ | ✅ (3 formats) | ❌ |
+| Demo documents (Showboat-style) | ✅ | ❌ | ❌ | ❌ |
+| PR evidence upload | ✅ (`proof --pr`) | ✅ | ❌ | ❌ |
+| Webhook sharing | ✅ (any URL) | ❌ | ❌ | ❌ |
+| Self-contained viewer (offline) | ✅ (base64 video) | ✅ | ✅ | ✅ |
+
+### Developer Experience
+
+| Feature | Sweetlink | ProofShot | Chrome DevTools MCP |
+|---------|-----------|-----------|---------------------|
+| Devbar toolbar UI | ✅ | ❌ | ❌ |
+| Record button in browser | ✅ | ❌ | ❌ |
+| Viewer auto-opens on stop | ✅ | ❌ | ❌ |
+| Copy Report to clipboard | ✅ (CLI + viewer) | ❌ | ❌ |
+| Serve viewer on network | ✅ (`report --serve`) | ❌ | ❌ |
+| Multi-instance (monorepo) | ✅ (per-port daemon) | ❌ | ❌ |
+| Vite/Next.js auto-start | ✅ (plugin option) | ❌ | ❌ |
+| Accessibility audit (axe-core) | ✅ | ❌ | ❌ |
+| Web Vitals | ✅ | ❌ | ❌ |
+| Ruler/measurement tool | ✅ | ❌ | ❌ |
 
 ## When to Use Alternatives
 
@@ -727,22 +761,21 @@ This 15x token savings enables 10+ autonomous iterations within Claude's budget.
 **Use Sweetlink when:**
 - You're debugging/iterating on a running dev server
 - You need lightweight, token-efficient screenshots (~1000 tokens vs ~5000)
-- You want real-time console log capture
-- Your app is already running and you just need to inspect it
+- You want always-on console/network capture without "start watching"
+- You need session recording with interactive video viewer
+- You want demo documents that serve as both tutorials and regression tests
 - You're doing autonomous UI development loops (10+ iterations)
+- You want a toolbar UI in the browser for visual debugging
 
 **Use [Agent Browser](https://github.com/vercel-labs/agent-browser) when:**
-- You need full browser automation (navigation, form filling, multi-page flows)
-- You're testing production sites or external URLs
-- Sweetlink isn't integrated into the target application
+- You're testing production sites or external URLs where Sweetlink isn't installed
 - You need Stagehand's AI-powered element selection
 - You're building autonomous agents that interact with arbitrary websites
 
-**Use Playwright MCP when:**
-- You need precise, programmatic browser control
-- You're running E2E tests with assertions
-- You need browser contexts, multiple tabs, or complex scenarios
-- You require network interception or request mocking
+**Use Playwright directly when:**
+- You're writing structured E2E test suites with assertions
+- You need network interception, request mocking, or multiple browser contexts
+- You want trace viewer for debugging test failures
 
 ### Agent Browser Quick Start
 

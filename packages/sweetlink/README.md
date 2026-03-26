@@ -181,7 +181,7 @@ pnpm sweetlink query --selector "h1"
 ### Screenshots
 
 ```bash
-# Full page screenshot
+# Full page screenshot (html2canvas, fast)
 pnpm sweetlink screenshot
 
 # Element screenshot
@@ -190,8 +190,23 @@ pnpm sweetlink screenshot --selector ".company-card"
 # Full page with custom output
 pnpm sweetlink screenshot --full-page --output page.png
 
-# Force CDP method (requires Chrome debugging)
-pnpm sweetlink screenshot --force-cdp
+# Navigate to URL before capturing
+pnpm sweetlink screenshot --url http://localhost:3000/about
+
+# Custom viewport dimensions
+pnpm sweetlink screenshot --force-cdp --width 375 --height 667
+pnpm sweetlink screenshot --force-cdp --viewport mobile
+
+# Pixel-perfect via daemon (see Persistent Daemon section)
+pnpm sweetlink screenshot --hifi
+pnpm sweetlink screenshot --responsive
+
+# Skip server readiness check
+pnpm sweetlink screenshot --no-wait
+
+# Force specific method
+pnpm sweetlink screenshot --force-cdp   # Playwright/CDP
+pnpm sweetlink screenshot --force-ws    # WebSocket/html2canvas
 ```
 
 ### DOM Queries
@@ -306,14 +321,52 @@ pnpm sweetlink click --selector ".tab" --index 2
 
 **Debugging:** Use `DEBUG=1 pnpm sweetlink click ...` to see generated JavaScript.
 
-### Network Requests (CDP Required)
+### Network Requests
 
 ```bash
-# Get all network requests
+# Get all network requests (via WebSocket bridge)
 pnpm sweetlink network
 
 # Filter by URL
 pnpm sweetlink network --filter "/api/"
+
+# Failed requests only (via daemon ring buffer)
+pnpm sweetlink network --failed
+pnpm sweetlink network --failed --last 10
+```
+
+### Schema, Outline, Accessibility
+
+```bash
+# Page schema (JSON-LD, meta tags, Open Graph)
+pnpm sweetlink schema
+
+# Document outline (heading structure)
+pnpm sweetlink outline
+
+# Accessibility audit (axe-core)
+pnpm sweetlink a11y
+
+# Web Vitals (FCP, LCP, CLS, INP)
+pnpm sweetlink vitals
+```
+
+### Server Management
+
+```bash
+# Wait for dev server to be ready (useful in scripts)
+pnpm sweetlink wait --url http://localhost:3000
+pnpm sweetlink wait --url http://localhost:3000 --wait-timeout 60000
+
+# Check server health
+pnpm sweetlink status
+
+# Clean up Sweetlink processes
+pnpm sweetlink cleanup
+pnpm sweetlink cleanup --force
+
+# Target specific app in monorepo (by branch or app name)
+pnpm sweetlink screenshot --app my-app
 ```
 
 ### Persistent Daemon (v2)

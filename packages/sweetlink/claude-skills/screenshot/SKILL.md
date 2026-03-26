@@ -27,7 +27,7 @@ CLI (pnpm sweetlink)
         console, network --failed, record, proof
 ```
 
-The daemon auto-starts on first `--hifi`/`snapshot` command and auto-stops after 30min idle. State file at `.sweetlink/daemon.json`.
+The daemon auto-starts on first `--hifi`/`snapshot` command and auto-stops after 30min idle. State file at `.sweetlink/daemon-{port}.json` (scoped per app port for multi-instance support).
 
 ### Prerequisites
 
@@ -344,7 +344,27 @@ pnpm sweetlink record status
 ```bash
 pnpm sweetlink daemon status
 pnpm sweetlink daemon start --url http://localhost:3000
+pnpm sweetlink daemon start --url http://localhost:3000 --headed  # visible browser
 pnpm sweetlink daemon stop
+```
+
+### proof — Upload session evidence to GitHub PR
+
+```bash
+pnpm sweetlink proof --pr 123
+pnpm sweetlink proof --pr 123 --repo owner/repo
+```
+
+### Other useful commands
+
+```bash
+pnpm sweetlink wait --url http://localhost:3000   # Wait for server ready
+pnpm sweetlink status                              # Check server health
+pnpm sweetlink vitals                               # Get Web Vitals
+pnpm sweetlink a11y                                 # Accessibility audit
+pnpm sweetlink schema                               # Page schema (meta, OG, JSON-LD)
+pnpm sweetlink outline                              # Document heading structure
+pnpm sweetlink cleanup --force                      # Clean up Sweetlink processes
 ```
 
 ## Agent-Browser Commands

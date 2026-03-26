@@ -99,15 +99,22 @@ packages/
 │   │   │   └── commands/      # exec.ts, dom.ts, screenshot.ts, etc.
 │   │   ├── server/            # WebSocket server + request handlers
 │   │   ├── daemon/            # Persistent Playwright daemon (v2)
-│   │   │   ├── server.ts      # HTTP server with bearer auth
-│   │   │   ├── browser.ts     # Persistent browser/page management
+│   │   │   ├── types.ts       # DaemonState, DaemonAction, constants
+│   │   │   ├── stateFile.ts   # State file I/O (scoped per app port)
+│   │   │   ├── server.ts      # HTTP server with bearer auth (18 actions)
+│   │   │   ├── browser.ts     # Persistent browser/page, headed mode
 │   │   │   ├── client.ts      # CLI client for daemon communication
+│   │   │   ├── index.ts       # Daemon entry point (forked process)
 │   │   │   ├── refs.ts        # @ref system from accessibility tree
 │   │   │   ├── diff.ts        # Snapshot diffing + annotated screenshots
-│   │   │   ├── ringBuffer.ts  # Always-on console/network/dialog capture
+│   │   │   ├── ringBuffer.ts  # Generic ring buffer (50K entries)
 │   │   │   ├── listeners.ts   # Page event listeners → ring buffers
-│   │   │   ├── recording.ts   # Session recording with action timeline
-│   │   │   ├── viewer.ts      # Self-contained HTML viewer generator
+│   │   │   ├── cursor.ts      # Cursor highlight injection (addInitScript)
+│   │   │   ├── devices.ts     # Named device presets for batch screenshots
+│   │   │   ├── visualDiff.ts  # Byte-level screenshot comparison
+│   │   │   ├── recording.ts   # Video recording via Chromium screencast
+│   │   │   ├── session.ts     # Session manifest types
+│   │   │   ├── viewer.ts      # Self-contained HTML viewer with video
 │   │   │   └── evidence.ts    # PR evidence upload + terminal capture
 │   │   └── types.ts           # Shared types
 │   └── package.json
@@ -127,7 +134,7 @@ All hardcoded colors should use the `PALETTE` constant from `packages/devbar/src
 ## Testing
 
 - Framework: Vitest with happy-dom environment
-- 77 test files, ~2089 tests
+- 83 test files, ~2198 tests
 - Tests are colocated with source files (e.g., `expanded.test.ts` next to `expanded.ts`)
 - Mock pattern: `vi.mock('./module.js', () => ({ ... }))` — note `.js` extensions for ESM
 

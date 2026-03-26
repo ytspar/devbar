@@ -108,8 +108,14 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         if (state.recordingTimer) clearInterval(state.recordingTimer);
         state.recordingTimer = null;
         state.recordingStartedAt = null;
-        const viewerPath = (message as Record<string, unknown>).viewerPath as string | undefined;
-        if (viewerPath) {
+        const data = message as Record<string, unknown>;
+        const viewerUrl = data.viewerUrl as string | undefined;
+        const viewerPath = data.viewerPath as string | undefined;
+        if (viewerUrl) {
+          state.lastViewerPath = viewerUrl;
+          // Auto-open the viewer in a new tab
+          window.open(viewerUrl, '_blank');
+        } else if (viewerPath) {
           state.lastViewerPath = viewerPath;
         }
         state.render();

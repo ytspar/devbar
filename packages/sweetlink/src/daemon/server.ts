@@ -47,6 +47,7 @@ import { DAEMON_IDLE_TIMEOUT_MS, DEFAULT_RESPONSIVE_VIEWPORTS } from './types.js
 let httpServer: ReturnType<typeof createServer> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let shutdownCallback: (() => void) | null = null;
+let daemonPort: number | null = null;
 
 // ============================================================================
 // Idle Timer
@@ -430,7 +431,10 @@ async function handleRecordStop(): Promise<DaemonResponse> {
     console.error('[Daemon] Report generation error:', e);
   }
 
-  return { ok: true, data: { manifest, viewerPath, summaryPath } };
+  // Include a browser-accessible URL for the viewer
+  const viewerUrl = manifest.sessionId && daemonPort ? `http://127.0.0.1:${daemonPort}/viewer/${manifest.sessionId}` : undefined;
+
+  return { ok: true, data: { manifest, viewerPath, viewerUrl, summaryPath } };
 }
 
 async function handleRecordStatus(): Promise<DaemonResponse> {
@@ -582,6 +586,7 @@ export interface StartServerOptions {
 export function startServer(options: StartServerOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     shutdownCallback = options.onShutdown;
+    daemonPort = options.port;
 
     httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       // CORS preflight
@@ -595,7 +600,46 @@ export function startServer(options: StartServerOptions): Promise<void> {
         return;
       }
 
-      // Only accept POST
+      // Serve viewer HTML via GET (no auth required — localhost only)
+      if (req.method === 'GET') {
+        const urlPath = req.url ?? '/';
+        const viewerMatch = urlPath.match(/^\/viewer\/([a-z0-9-]+)$/);
+        if (viewerMatch) {
+          const sid = viewerMatch[1];
+          try {
+            const { promises: fsp } = await import('fs');
+            const viewerHtml = await fsp.readFile(`.sweetlink/${sid}/viewer.html`, 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(viewerHtml);
+          } catch {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Viewer not found');
+          }
+          return;
+        }
+        // GET /viewers — list available sessions
+        if (urlPath === '/viewers') {
+          try {
+            const { promises: fsp } = await import('fs');
+            const entries = await fsp.readdir('.sweetlink', { withFileTypes: true });
+            const sessions = entries
+              .filter(e => e.isDirectory() && e.name.startsWith('session-'))
+              .map(e => e.name)
+              .sort()
+              .reverse();
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ sessions, daemonPort: options.port }));
+          } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ sessions: [] }));
+          }
+          return;
+        }
+        sendJson(res, 404, { ok: false, error: 'Not found' });
+        return;
+      }
+
+      // Only accept POST for API
       if (req.method !== 'POST') {
         sendJson(res, 405, { ok: false, error: 'Method not allowed' });
         return;

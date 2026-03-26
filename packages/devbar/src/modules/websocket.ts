@@ -26,6 +26,14 @@ import type { DevBarState } from './types.js';
 /**
  * Connect to the WebSocket server, handling port scanning for multi-instance support.
  */
+/** Close and null out any pending viewer window (blank tab opened on record-stop click). */
+function cleanupPendingWindow(state: DevBarState): void {
+  if (state.pendingViewerWindow) {
+    try { state.pendingViewerWindow.close(); } catch { /* may already be closed */ }
+    state.pendingViewerWindow = null;
+  }
+}
+
 export function connectWebSocket(state: DevBarState, port?: number): void {
   if (state.destroyed) return;
 
@@ -103,27 +111,31 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
         state.render();
         return;
       }
-      if (message.type === 'record-stop-response' && message.success) {
+      if (message.type === 'record-stop-response' || message.type === 'record-stop') {
         state.recordingActive = false;
         if (state.recordingTimer) clearInterval(state.recordingTimer);
         state.recordingTimer = null;
         state.recordingStartedAt = null;
-        const data = message as Record<string, unknown>;
-        const viewerUrl = data.viewerUrl as string | undefined;
 
-        // Navigate the pre-opened window (opened synchronously on click to avoid popup blocker)
-        if (viewerUrl && state.pendingViewerWindow) {
-          state.pendingViewerWindow.location.href = viewerUrl;
-          state.pendingViewerWindow = null;
-        } else if (state.pendingViewerWindow) {
-          // No URL available — close the blank tab
-          state.pendingViewerWindow.close();
-          state.pendingViewerWindow = null;
-        }
+        if (message.success) {
+          const data = message as Record<string, unknown>;
+          const viewerUrl = data.viewerUrl as string | undefined;
 
-        // Store the HTTP URL for Shift+Click re-open (works while daemon is running)
-        if (viewerUrl) {
-          state.lastViewerPath = viewerUrl;
+          // Navigate the pre-opened window to the viewer
+          if (viewerUrl && state.pendingViewerWindow) {
+            state.pendingViewerWindow.location.href = viewerUrl;
+            state.pendingViewerWindow = null;
+          } else {
+            // No URL — close the blank tab
+            cleanupPendingWindow(state);
+          }
+
+          if (viewerUrl) {
+            state.lastViewerPath = viewerUrl;
+          }
+        } else {
+          // Stop failed — clean up the blank tab
+          cleanupPendingWindow(state);
         }
         state.render();
         return;

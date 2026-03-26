@@ -1559,4 +1559,146 @@ describe('connectWebSocket - command handlers', () => {
     expect(sent.success).toBe(true);
     expect(sent.data.vitals.fcp).toBeNull();
   });
+
+  // =========================================================================
+  // Recording WS flow
+  // =========================================================================
+
+  it('handles record-start-response success', async () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-start-response',
+        success: true,
+        sessionId: 'session-123',
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.recordingActive).toBe(true);
+    expect(state.recordingSessionId).toBe('session-123');
+    expect(state.recordingStartedAt).toBeGreaterThan(0);
+    expect(state.recordingTimer).not.toBeNull();
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('handles record-stop-response success with viewerUrl', async () => {
+    const mockWindow = { location: { href: '' }, close: vi.fn() };
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      recordingTimer: setInterval(() => {}, 1000),
+      pendingViewerWindow: mockWindow as any,
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-stop-response',
+        success: true,
+        viewerUrl: 'http://127.0.0.1:12345/viewer/session-123',
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.recordingActive).toBe(false);
+    expect(state.recordingTimer).toBeNull();
+    expect(state.pendingViewerWindow).toBeNull();
+    expect(mockWindow.location.href).toBe('http://127.0.0.1:12345/viewer/session-123');
+    expect(mockWindow.close).not.toHaveBeenCalled();
+    expect(state.lastViewerPath).toBe('http://127.0.0.1:12345/viewer/session-123');
+  });
+
+  it('handles record-stop-response success without viewerUrl — closes blank tab', async () => {
+    const mockWindow = { location: { href: '' }, close: vi.fn() };
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      pendingViewerWindow: mockWindow as any,
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-stop-response',
+        success: true,
+        // no viewerUrl
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.pendingViewerWindow).toBeNull();
+    expect(mockWindow.close).toHaveBeenCalled();
+    expect(mockWindow.location.href).toBe(''); // not navigated
+  });
+
+  it('handles record-stop-response failure — cleans up blank tab', async () => {
+    const mockWindow = { location: { href: '' }, close: vi.fn() };
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      pendingViewerWindow: mockWindow as any,
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-stop-response',
+        success: false,
+        error: 'No recording in progress',
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.recordingActive).toBe(false);
+    expect(state.pendingViewerWindow).toBeNull();
+    expect(mockWindow.close).toHaveBeenCalled();
+  });
+
+  it('handles record-stop error type — cleans up blank tab', async () => {
+    const mockWindow = { location: { href: '' }, close: vi.fn() };
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      pendingViewerWindow: mockWindow as any,
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-stop',
+        success: false,
+        error: 'Daemon not running',
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.recordingActive).toBe(false);
+    expect(state.pendingViewerWindow).toBeNull();
+    expect(mockWindow.close).toHaveBeenCalled();
+  });
+
+  it('handles record-stop with no pending window gracefully', async () => {
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      pendingViewerWindow: null,
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-stop-response',
+        success: true,
+        viewerUrl: 'http://127.0.0.1:12345/viewer/session-123',
+      }),
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(state.recordingActive).toBe(false);
+    expect(state.lastViewerPath).toBe('http://127.0.0.1:12345/viewer/session-123');
+    // No crash — no pending window to navigate
+  });
 });

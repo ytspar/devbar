@@ -1,0 +1,23 @@
+{
+  "skill_name": "resize-for-claude",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "This Figma export is 5120x11732 pixels, resize it so Claude can analyze it properly",
+      "expected_output": "Triggers resize-for-claude skill to scale the image down so the longest side is 1568px",
+      "expectations": ["Should trigger resize-for-claude skill", "Should run the resize-for-claude script", "Should detect tall aspect ratio and split into overlapping tiles if >= 3:1"]
+    },
+    {
+      "id": 2,
+      "prompt": "Optimize this full-page screenshot for Claude vision before I ask it to review the design",
+      "expected_output": "Triggers resize-for-claude skill to resize and potentially tile a tall screenshot",
+      "expectations": ["Should trigger resize-for-claude skill", "Should output to a -claude/ directory next to the original", "Should produce images with longest side <= 1568px"]
+    },
+    {
+      "id": 3,
+      "prompt": "Take a screenshot of the homepage at mobile, tablet, and desktop viewports",
+      "expected_output": "Should NOT trigger resize-for-claude - this is about capturing responsive screenshots, not resizing existing images",
+      "expectations": ["Should NOT trigger resize-for-claude - use responsive-screenshots for capturing at multiple viewports"]
+    }
+  ]
+}

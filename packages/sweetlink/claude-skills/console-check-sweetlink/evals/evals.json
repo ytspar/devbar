@@ -1,0 +1,35 @@
+{
+  "skill_name": "console-check-sweetlink",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Check the browser console for errors",
+      "expected_output": "The skill uses Sweetlink to connect to the browser and retrieve console logs",
+      "expectations": [
+        "Uses Sweetlink WebSocket or logs command to read browser console",
+        "Filters for errors and warnings",
+        "Reports any console errors found or confirms zero errors"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Any console errors after my changes?",
+      "expected_output": "The skill checks the browser console for new errors via Sweetlink",
+      "expectations": [
+        "Triggers the console check flow via Sweetlink",
+        "Reports errors, warnings, or confirms clean console",
+        "Does not run TypeScript or lint checks"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Check for TypeScript errors",
+      "expected_output": "This should NOT trigger console-check-sweetlink. TypeScript errors are handled by quick-typecheck.",
+      "expectations": [
+        "Does NOT trigger console-check-sweetlink skill",
+        "Routes to quick-typecheck instead",
+        "No Sweetlink or browser commands are executed"
+      ]
+    }
+  ]
+}

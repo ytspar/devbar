@@ -1,0 +1,23 @@
+{
+  "skill_name": "responsive-screenshots",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Capture responsive screenshots at mobile, tablet, and desktop to verify the new hero section",
+      "expected_output": "Triggers responsive-screenshots skill to capture at 375px, 768px, and 1440px viewports via Sweetlink",
+      "expectations": ["Should trigger responsive-screenshots skill", "Should capture at all three standard breakpoints (375, 768, 1440)", "Should save to .tmp/screenshots/ and review for responsive issues"]
+    },
+    {
+      "id": 2,
+      "prompt": "Test the breakpoints on the pricing page -- I want to see how it looks on mobile vs desktop",
+      "expected_output": "Triggers responsive-screenshots skill to capture the pricing page across viewports",
+      "expectations": ["Should trigger responsive-screenshots skill", "Should use pnpm sweetlink screenshot with --viewport flags", "Should analyze screenshots against the quality checklist"]
+    },
+    {
+      "id": 3,
+      "prompt": "Take a quick screenshot of the current page to verify my CSS change",
+      "expected_output": "Should NOT trigger responsive-screenshots - this is a single screenshot, not multi-viewport testing",
+      "expectations": ["Should NOT trigger responsive-screenshots - use screenshot skill for single screenshots"]
+    }
+  ]
+}

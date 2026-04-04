@@ -1,0 +1,35 @@
+{
+  "skill_name": "screenshot",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Take a screenshot of the app",
+      "expected_output": "The skill uses Sweetlink to capture a screenshot of the running application",
+      "expectations": [
+        "Uses Sweetlink screenshot command to capture the current page",
+        "Returns or saves the screenshot image",
+        "Does not use Playwright or other browser automation"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Screenshot the homepage",
+      "expected_output": "The skill captures a screenshot of the specified page (homepage)",
+      "expectations": [
+        "Navigates to or targets the homepage URL/path",
+        "Uses Sweetlink screenshot command",
+        "Returns the captured screenshot for review"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Take screenshots at mobile, tablet, and desktop breakpoints",
+      "expected_output": "This should NOT trigger the single screenshot skill. Multi-viewport screenshots are handled by responsive-screenshots.",
+      "expectations": [
+        "Does NOT trigger screenshot skill for multi-viewport capture",
+        "Routes to responsive-screenshots instead",
+        "Single screenshot skill handles only one viewport at a time"
+      ]
+    }
+  ]
+}

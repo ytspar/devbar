@@ -103,6 +103,8 @@
     "dist",
     "scripts",
     "claude-skills",
+    "claude-agents",
+    "claude-context",
     "README.md",
     "LICENSE"
   ],

@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/sweetlink",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "description": "Autonomous development toolkit for AI agents - screenshots, DOM queries, console logs, and JavaScript execution via WebSocket and Chrome DevTools Protocol",
   "keywords": [
     "autonomous-development",
@@ -23,75 +23,93 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
+      "import": "./dist/types.js",
+      "default": "./dist/types.js"
     },
     "./server": {
       "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
+      "import": "./dist/server.js",
+      "default": "./dist/server.js"
     },
     "./browser": {
       "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js"
+      "import": "./dist/browser.js",
+      "default": "./dist/browser.js"
     },
     "./browser/commands/schema": {
       "types": "./dist/browser/commands/schema.d.ts",
-      "import": "./dist/browser/commands/schema.js"
+      "import": "./dist/browser/commands/schema.js",
+      "default": "./dist/browser/commands/schema.js"
     },
     "./browser/commands/outline": {
       "types": "./dist/browser/commands/outline.d.ts",
-      "import": "./dist/browser/commands/outline.js"
+      "import": "./dist/browser/commands/outline.js",
+      "default": "./dist/browser/commands/outline.js"
     },
     "./browser/consoleCapture": {
       "types": "./dist/browser/consoleCapture.d.ts",
-      "import": "./dist/browser/consoleCapture.js"
+      "import": "./dist/browser/consoleCapture.js",
+      "default": "./dist/browser/consoleCapture.js"
     },
     "./browser/earlyConsoleCapture": {
       "types": "./dist/browser/earlyConsoleCapture.d.ts",
-      "import": "./dist/browser/earlyConsoleCapture.js"
+      "import": "./dist/browser/earlyConsoleCapture.js",
+      "default": "./dist/browser/earlyConsoleCapture.js"
     },
     "./browser/screenshotUtils": {
       "types": "./dist/browser/screenshotUtils.d.ts",
-      "import": "./dist/browser/screenshotUtils.js"
+      "import": "./dist/browser/screenshotUtils.js",
+      "default": "./dist/browser/screenshotUtils.js"
     },
     "./urlUtils": {
       "types": "./dist/urlUtils.d.ts",
-      "import": "./dist/urlUtils.js"
+      "import": "./dist/urlUtils.js",
+      "default": "./dist/urlUtils.js"
     },
     "./ruler": {
       "types": "./dist/ruler.d.ts",
-      "import": "./dist/ruler.js"
+      "import": "./dist/ruler.js",
+      "default": "./dist/ruler.js"
     },
     "./playwright": {
       "types": "./dist/playwright.d.ts",
-      "import": "./dist/playwright.js"
+      "import": "./dist/playwright.js",
+      "default": "./dist/playwright.js"
     },
     "./cdp": {
       "types": "./dist/cdp.d.ts",
-      "import": "./dist/cdp.js"
+      "import": "./dist/cdp.js",
+      "default": "./dist/cdp.js"
     },
     "./vite": {
       "types": "./dist/vite.d.ts",
-      "import": "./dist/vite.js"
+      "import": "./dist/vite.js",
+      "default": "./dist/vite.js"
     },
     "./auto": {
       "types": "./dist/auto.d.ts",
-      "import": "./dist/auto.js"
+      "import": "./dist/auto.js",
+      "default": "./dist/auto.js"
     },
     "./next": {
       "types": "./dist/next.d.ts",
-      "import": "./dist/next.js"
+      "import": "./dist/next.js",
+      "default": "./dist/next.js"
     },
     "./daemon": {
       "types": "./dist/daemon/types.d.ts",
-      "import": "./dist/daemon/types.js"
+      "import": "./dist/daemon/types.js",
+      "default": "./dist/daemon/types.js"
     },
     "./daemon/client": {
       "types": "./dist/daemon/client.d.ts",
-      "import": "./dist/daemon/client.js"
+      "import": "./dist/daemon/client.js",
+      "default": "./dist/daemon/client.js"
     }
   },
   "bin": {

@@ -18,6 +18,7 @@
     "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
   },
   "sweetlink": {
+    "1.16.1": "Add `default` condition to subpath exports so non-ESM consumers (Node --test, tsx in CJS) can resolve imports like @ytspar/sweetlink/browser/consoleCapture without hitting ERR_PACKAGE_PATH_NOT_EXPORTED",
     "1.16.0": "Bundle Claude Code skills (screenshot, console-check, responsive-screenshots, resize-for-claude), agent (sweetlink-visual-iterative), and context files (architecture, CDP guide, UI verification mandate) — shipped with npm package for automatic discovery",
     "1.15.0": "Demo document builder (Showboat-inspired), universal sharing (report --clipboard/--serve/--webhook), viewer share buttons (Copy Report, Download), multi-language server error detection, SUMMARY.md auto-generation, git metadata in recordings, overlay toggle, responsive viewer, HiFi screenshots from devbar (Alt+Click), comparison tables in docs",
     "1.14.0": "Sweetlink v2: persistent Playwright daemon (--hifi, --responsive), @ref system from accessibility tree (snapshot -i, click @e3, fill @e4), snapshot diffing (-D) and annotated screenshots (-a), always-on console/network ring buffers, session recording with interactive viewer, cursor highlights, visual diff, device emulation, PR evidence upload",

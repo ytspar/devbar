@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.10.1": "Republish of 1.10.0 via pnpm so the @ytspar/sweetlink dependency resolves to a real version instead of `workspace:^`. 1.10.0 is deprecated — use 1.10.1.",
     "1.10.0": "Consent-debug plugin (@ytspar/devbar/plugins/consent-debug): toolbar control gated on window.zaraz that opens a modal for mocking geo regions, triggering banner/notice events, Accept/Reject/Clear/Reset actions, and a live status readout — generic cookie and event names",
     "1.9.2": "Demo button + HiFi screenshot (Alt+Click) in toolbar, recording auto-opens viewer, demo document state fields",
     "1.9.1": "Bump sweetlink dependency to v1.14.0 (persistent daemon, ref system, ring buffers, session recording)",

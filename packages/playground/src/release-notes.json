@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.10.0": "Consent-debug plugin (@ytspar/devbar/plugins/consent-debug): toolbar control gated on window.zaraz that opens a modal for mocking geo regions, triggering banner/notice events, Accept/Reject/Clear/Reset actions, and a live status readout — generic cookie and event names",
     "1.9.2": "Demo button + HiFi screenshot (Alt+Click) in toolbar, recording auto-opens viewer, demo document state fields",
     "1.9.1": "Bump sweetlink dependency to v1.14.0 (persistent daemon, ref system, ring buffers, session recording)",
     "1.9.0": "Official plugins (git-branch, app-version), server info on state (gitBranch, appName), PALETTE.white, root tsconfig with project references, 232 new tests",

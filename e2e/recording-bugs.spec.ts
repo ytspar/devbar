@@ -73,7 +73,8 @@ test.describe('Recording — happy path baselines (must always pass)', () => {
     const fx = await makeFixture(pageWithButtons());
     try {
       const start = (await daemonReq(fx.daemon, 'record-start')) as { sessionId: string };
-      expect(start.sessionId).toMatch(/^session-\d+$/);
+      // Session IDs are timestamped: session-YYYY-MM-DDTHH-MM-SS
+      expect(start.sessionId).toMatch(/^session-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$/);
 
       // Use a fill action so the session has at least one logged command
       const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {

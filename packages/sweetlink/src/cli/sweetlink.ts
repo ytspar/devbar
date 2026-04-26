@@ -144,10 +144,23 @@ function reportScreenshotSuccess(
   method: string,
   selector?: string
 ): void {
-  console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
-  console.log(`[Sweetlink] Dimensions: ${width}x${height}`);
-  if (selector) console.log(`[Sweetlink] Selector: ${selector}`);
-  console.log(`[Sweetlink] Method: ${method}`);
+  // One compact line by default; the multi-line version is preserved
+  // behind SWEETLINK_VERBOSE=1 for log-scrapers and the curious.
+  let sizeKb = '';
+  try {
+    sizeKb = ` · ${Math.round(fs.statSync(outputPath).size / 1024)}KB`;
+  } catch { /* file may have been moved or removed */ }
+  const selPart = selector ? ` · ${selector}` : '';
+  if (process.env.SWEETLINK_VERBOSE === '1') {
+    console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
+    console.log(`[Sweetlink] Dimensions: ${width}x${height}`);
+    if (selector) console.log(`[Sweetlink] Selector: ${selector}`);
+    console.log(`[Sweetlink] Method: ${method}`);
+  } else {
+    console.log(
+      `[Sweetlink] ✓ Screenshot saved: ${getRelativePath(outputPath)} · ${width}x${height}${sizeKb}${selPart} · ${method}`
+    );
+  }
 }
 
 import type { SweetlinkCommand } from '../types.js';
@@ -535,6 +548,8 @@ async function screenshot(options: {
   hover?: boolean;
   /** Pixels of extra context around a --selector capture. */
   padding?: number;
+  /** Force the page's color scheme. */
+  theme?: 'light' | 'dark' | 'no-preference';
   url?: string;
   wait?: boolean;
   waitTimeout?: number;
@@ -606,6 +621,7 @@ async function screenshot(options: {
       fullPage: options.fullPage,
       viewport: options.viewport,
       padding: (options as { padding?: number }).padding,
+      theme: (options as { theme?: string }).theme,
     });
     const data = resp.data as {
       screenshot: string; width: number; height: number;
@@ -2275,11 +2291,26 @@ const COMMAND_HELP: Record<string, string> = {
       stop                        Stop recording and generate session manifest
       status                      Show recording status (default)
 
+    Options for start:
+      --label <text>              Human-friendly label embedded in the manifest + SUMMARY title
+      --viewport <preset|WxH>     Recording viewport (default: 1512x982)
+
     Examples:
-      pnpm sweetlink record start
+      pnpm sweetlink record start --label "login flow"
       pnpm sweetlink snapshot -i
       pnpm sweetlink click @e3
       pnpm sweetlink record stop`,
+
+  sessions: `  sessions [list|open]
+    List or open all recorded sessions in this project.
+
+    Subcommands:
+      list                        Print every session with label, duration, action count, error count (default)
+      open                        Open .sweetlink/index.html in the default browser
+
+    Examples:
+      pnpm sweetlink sessions list
+      pnpm sweetlink sessions open`,
 
   report: `  report [options]
     Print or share the latest session report.
@@ -2363,13 +2394,31 @@ Sweetlink CLI - Autonomous Development Bridge
 
 Usage:
   pnpm sweetlink <command> [options]
+  pnpm sweetlink <command> --help        Detailed help for a single command
+  pnpm sweetlink --help --all            Show full help for every command
 
-Commands:
-`);
-  for (const help of Object.values(COMMAND_HELP)) {
-    console.log(help);
-    console.log('');
+Commands:`);
+
+  // Extract the first descriptive sentence from each command's help block
+  // so the top-level help is scannable in <40 lines.
+  for (const [name, help] of Object.entries(COMMAND_HELP)) {
+    // Each block looks like:
+    //   "  command [args]\n    First-line description.\n..."
+    // We pick the first non-empty line after the signature.
+    const lines = help.split('\n').map((l) => l.trim()).filter(Boolean);
+    const desc = lines[1] ?? '';
+    const summary = desc.length > 70 ? desc.slice(0, 67) + '…' : desc;
+    console.log(`  ${name.padEnd(14)} ${summary}`);
   }
+
+  if (process.argv.includes('--all')) {
+    console.log('\n— Full per-command details —\n');
+    for (const help of Object.values(COMMAND_HELP)) {
+      console.log(help);
+      console.log('');
+    }
+  }
+  console.log('');
   console.log(GLOBAL_HELP);
 }
 
@@ -2438,6 +2487,7 @@ if (hasFlag('--output-schema')) {
     'fill',
     'console',
     'record',
+    'sessions',
     'proof',
     'report',
     'demo',
@@ -2580,6 +2630,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           height: getArg('--height') ? parseInt(getArg('--height')!, 10) : undefined,
           hover: hasFlag('--hover'),
           padding: getArg('--padding') ? parseInt(getArg('--padding')!, 10) : undefined,
+          theme: getArg('--theme') as 'light' | 'dark' | 'no-preference' | undefined,
           url: getArg('--url'),
           wait: !hasFlag('--no-wait'), // Wait by default, --no-wait to skip
           waitTimeout: getArg('--wait-timeout')
@@ -2873,9 +2924,20 @@ async function handleStatusCommand(): Promise<StatusData> {
         const state = await ensureDaemon(projRoot, targetUrl);
 
         if (subcommand === 'start') {
-          const resp = await daemonRequest(state, 'record-start');
-          const data = resp.data as { sessionId: string };
-          console.log(`[Sweetlink] Recording started: ${data.sessionId}`);
+          const params: Record<string, unknown> = {};
+          const label = getArg('--label');
+          const viewport = getArg('--viewport');
+          const storageState = getArg('--storage-state');
+          if (label) params.label = label;
+          if (viewport) params.viewport = viewport;
+          if (storageState) params.storageState = storageState;
+          if (hasFlag('--trace')) params.trace = true;
+          const resp = await daemonRequest(state, 'record-start', params);
+          const data = resp.data as { sessionId: string; label?: string };
+          console.log(
+            `[Sweetlink] Recording started: ${data.sessionId}` +
+            (data.label ? ` (${data.label})` : '')
+          );
           result = data;
         } else if (subcommand === 'stop') {
           const resp = await daemonRequest(state, 'record-stop');
@@ -2884,12 +2946,19 @@ async function handleStatusCommand(): Promise<StatusData> {
           console.log(`[Sweetlink] Recording stopped: ${m.sessionId}`);
           console.log(`  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ' | Video: ' + m.video : ''}`);
 
-          // Auto-open the viewer
+          // Auto-open the viewer (cross-platform; --no-open to suppress)
           if (data.viewerPath && !hasFlag('--no-open')) {
             console.log(`  Viewer: ${data.viewerPath}`);
             const { execFile } = await import('child_process');
-            const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-            execFile(openCmd, [data.viewerPath], (err) => {
+            // `start` on Windows is a cmd builtin, not an exe — must invoke via cmd.
+            const cmd =
+              process.platform === 'darwin' ? 'open'
+              : process.platform === 'win32' ? 'cmd'
+              : 'xdg-open';
+            const args =
+              process.platform === 'win32' ? ['/c', 'start', '', data.viewerPath]
+              : [data.viewerPath];
+            execFile(cmd, args, (err) => {
               if (err) console.error('  Could not open viewer:', err.message);
             });
             console.log(`  Opened in browser.`);
@@ -2897,6 +2966,92 @@ async function handleStatusCommand(): Promise<StatusData> {
             console.log(`  Viewer: ${data.viewerPath}`);
           }
           result = data;
+        } else if (subcommand === 'exec') {
+          // record exec "click @e2; fill @e3 hello world; click @e5"
+          // Runs a semicolon-separated DSL inside a fresh recording, then
+          // auto-stops. Each step is one of:
+          //   click <selector|@ref>
+          //   fill <@ref> <value>          (rest of line after ref = value)
+          //   press <key>
+          //   sleep <ms>
+          // Strip known --flag value pairs from positional args before
+          // joining what remains as the script body.
+          const flagsWithValues = new Set(['--url', '--label', '--viewport', '--storage-state']);
+          const positional: string[] = [];
+          for (let i = 2; i < args.length; i++) {
+            const a = args[i]!;
+            if (a.startsWith('--')) {
+              if (flagsWithValues.has(a)) i++; // skip its value
+              continue;
+            }
+            positional.push(a);
+          }
+          const script = positional.join(' ').trim();
+          if (!script) {
+            console.error('[Sweetlink] Error: record exec requires a script. Example: `record exec "click @e2; fill @e3 hello"`');
+            process.exit(1);
+          }
+          const label = getArg('--label');
+          const startResp = await daemonRequest(state, 'record-start', label ? { label } : {});
+          const startData = startResp.data as { sessionId: string };
+          console.log(`[Sweetlink] Recording: ${startData.sessionId}${label ? ` (${label})` : ''}`);
+
+          const steps = script.split(';').map((s) => s.trim()).filter(Boolean);
+          // Snapshot once up-front so refs resolve.
+          await daemonRequest(state, 'snapshot', { interactive: true });
+
+          for (const step of steps) {
+            const [verb, ...rest] = step.split(/\s+/);
+            try {
+              if (verb === 'click') {
+                const target = rest[0];
+                if (!target) throw new Error('click needs a target');
+                if (/^@e\d+$/.test(target)) {
+                  await daemonRequest(state, 'click-ref', { ref: target });
+                } else {
+                  await daemonRequest(state, 'click-css', { selector: target });
+                }
+                console.log(`  · click ${target}`);
+              } else if (verb === 'fill') {
+                const ref = rest[0];
+                const value = rest.slice(1).join(' ');
+                if (!ref || !/^@e\d+$/.test(ref)) throw new Error('fill needs a @ref and a value');
+                await daemonRequest(state, 'fill-ref', { ref, value });
+                console.log(`  · fill ${ref} = "${value}"`);
+              } else if (verb === 'press') {
+                const key = rest[0];
+                if (!key) throw new Error('press needs a key');
+                await daemonRequest(state, 'press-key', { key });
+                console.log(`  · press ${key}`);
+              } else if (verb === 'sleep') {
+                const ms = parseInt(rest[0] ?? '0', 10);
+                await new Promise((r) => setTimeout(r, ms));
+                console.log(`  · sleep ${ms}ms`);
+              } else {
+                throw new Error(`Unknown verb '${verb}'. Allowed: click, fill, press, sleep.`);
+              }
+            } catch (err) {
+              console.error(`  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`);
+              // Continue to record-stop so the partial recording is preserved.
+            }
+          }
+
+          const stopResp = await daemonRequest(state, 'record-stop');
+          const stopData = stopResp.data as { manifest: { sessionId: string; commands: unknown[]; duration: number; video?: string }; viewerPath?: string };
+          console.log(
+            `[Sweetlink] Done: ${stopData.manifest.commands.length} actions in ` +
+            `${stopData.manifest.duration.toFixed(1)}s${stopData.viewerPath ? ` · ${stopData.viewerPath}` : ''}`
+          );
+          result = stopData;
+        } else if (subcommand === 'pause') {
+          const resp = await daemonRequest(state, 'record-pause');
+          console.log('[Sweetlink] Recording paused. Use `record resume` to continue.');
+          result = resp.data;
+        } else if (subcommand === 'resume') {
+          const resp = await daemonRequest(state, 'record-resume');
+          const d = resp.data as { pausedDurationMs: number };
+          console.log(`[Sweetlink] Recording resumed. Paused for ${(d.pausedDurationMs / 1000).toFixed(1)}s.`);
+          result = resp.data;
         } else {
           const resp = await daemonRequest(state, 'record-status');
           const data = resp.data as { recording: boolean; sessionId: string | null; duration: number | null; actionCount: number };
@@ -3022,6 +3177,103 @@ async function handleStatusCommand(): Promise<StatusData> {
           const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
           process.stdout.write(summaryContent);
           result = { mode: 'stdout', session: reportSessions[0] };
+        }
+        break;
+      }
+
+      case 'sessions': {
+        const sub = args[1];
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        const state = await ensureDaemon(projRoot, targetUrl);
+        const resp = await daemonRequest(state, 'sessions-list');
+        const data = resp.data as {
+          sessions: Array<{
+            sessionId: string; label?: string; url?: string; startedAt?: string;
+            duration?: number; actionCount: number; errors?: { console: number; network: number; server: number };
+            hasVideo: boolean; hasViewer: boolean; manifestPath: string;
+          }>;
+          indexPath?: string;
+        };
+        if (sub === 'list' || !sub) {
+          if (data.sessions.length === 0) {
+            console.log('[Sweetlink] No sessions found.');
+          } else {
+            console.log(`[Sweetlink] ${data.sessions.length} session(s):\n`);
+            for (const s of data.sessions) {
+              const errTotal = s.errors ? s.errors.console + s.errors.network + s.errors.server : 0;
+              const errBadge = errTotal > 0 ? ` · ${errTotal} err` : '';
+              const labelTxt = s.label ? ` [${s.label}]` : '';
+              const dur = s.duration ? `${s.duration.toFixed(1)}s` : '—';
+              console.log(`  ${s.sessionId}${labelTxt} · ${dur} · ${s.actionCount} actions${errBadge}`);
+            }
+            if (data.indexPath) console.log(`\n  Index: ${data.indexPath}`);
+          }
+          result = { sessions: data.sessions };
+        } else if (sub === 'diff') {
+          // sessions diff <a> <b> — compare two recordings
+          const [aId, bId] = [args[2], args[3]];
+          if (!aId || !bId) {
+            console.error('[Sweetlink] Usage: sessions diff <session-A> <session-B>');
+            process.exit(1);
+          }
+          const findSession = (id: string) => data.sessions.find((s) => s.sessionId === id || s.sessionId.endsWith(id));
+          const a = findSession(aId);
+          const b = findSession(bId);
+          if (!a || !b) {
+            console.error(`[Sweetlink] Could not find session: ${!a ? aId : bId}`);
+            process.exit(1);
+          }
+          const aManifest = JSON.parse(fs.readFileSync(a.manifestPath, 'utf-8'));
+          const bManifest = JSON.parse(fs.readFileSync(b.manifestPath, 'utf-8'));
+          const aActions = aManifest.commands.map((c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`);
+          const bActions = bManifest.commands.map((c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`);
+          console.log(`\n${a.sessionId}${a.label ? ` "${a.label}"` : ''}  vs  ${b.sessionId}${b.label ? ` "${b.label}"` : ''}\n`);
+          console.log(`Duration: ${a.duration?.toFixed(1)}s  vs  ${b.duration?.toFixed(1)}s`);
+          console.log(`Actions:  ${a.actionCount}  vs  ${b.actionCount}`);
+          const aErr = a.errors ? a.errors.console + a.errors.network + a.errors.server : 0;
+          const bErr = b.errors ? b.errors.console + b.errors.network + b.errors.server : 0;
+          console.log(`Errors:   ${aErr}  vs  ${bErr}`);
+          // Action diff (myers-style "added/removed" by line)
+          const inA = new Set(aActions);
+          const inB = new Set(bActions);
+          const added = bActions.filter((x: string) => !inA.has(x));
+          const removed = aActions.filter((x: string) => !inB.has(x));
+          if (removed.length) {
+            console.log(`\nOnly in ${a.sessionId}:`);
+            removed.forEach((s: string) => console.log(`  - ${s}`));
+          }
+          if (added.length) {
+            console.log(`\nOnly in ${b.sessionId}:`);
+            added.forEach((s: string) => console.log(`  + ${s}`));
+          }
+          if (!added.length && !removed.length) {
+            console.log('\nAction sequences are identical.');
+          }
+          result = {
+            a: { id: a.sessionId, label: a.label, duration: a.duration, actions: a.actionCount, errors: aErr },
+            b: { id: b.sessionId, label: b.label, duration: b.duration, actions: b.actionCount, errors: bErr },
+            added,
+            removed,
+          };
+        } else if (sub === 'open') {
+          // Open the index.html in the browser
+          if (data.indexPath) {
+            const { execFile } = await import('child_process');
+            const cmd =
+              process.platform === 'darwin' ? 'open'
+              : process.platform === 'win32' ? 'cmd'
+              : 'xdg-open';
+            const cmdArgs = process.platform === 'win32'
+              ? ['/c', 'start', '', data.indexPath]
+              : [data.indexPath];
+            execFile(cmd, cmdArgs, () => {});
+            console.log(`[Sweetlink] Opened ${data.indexPath}`);
+          }
+          result = { indexPath: data.indexPath };
+        } else {
+          console.error(`[Sweetlink] Unknown sessions subcommand: ${sub}. Try: list, open`);
+          process.exit(1);
         }
         break;
       }

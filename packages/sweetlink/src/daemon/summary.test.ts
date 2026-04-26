@@ -173,9 +173,9 @@ describe('generateSummary', () => {
         ],
       });
       const result = generateSummary(makeOptions({ manifest }));
-      expect(result).toContain('| Time | Action | Target | Screenshot |');
-      expect(result).toContain('| 1.5s | click | #button |');
-      expect(result).toContain('| 3.2s | fill | @e2 ← "hello" | [`action-1.png`](action-1.png) |');
+      expect(result).toContain('| Time | Action | Target | Took | Screenshot |');
+      expect(result).toContain('| 1.5s | click | #button | 50ms | — |');
+      expect(result).toContain('| 3.2s | fill | @e2 ← "hello" | 100ms | [`action-1.png`](action-1.png) |');
     });
   });
 

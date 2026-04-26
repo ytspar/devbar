@@ -36,33 +36,64 @@ const CURSOR_HIGHLIGHT_SCRIPT = `
     dot.style.top = e.clientY + 'px';
   });
 
-  // Click ripple animation
+  // Click ripple + persistent center mark — both are tuned to be highly
+  // visible in recordings. The ripple expands to 8x over 1.2s; the center
+  // dot stays fully opaque for the first frame and fades over 600ms so
+  // viewers can clearly see WHERE the click landed even if they're not
+  // watching the exact frame of mousedown.
   const style = document.createElement('style');
   style.textContent = \`
     @keyframes sweetlink-ripple {
-      0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-      100% { transform: translate(-50%, -50%) scale(5); opacity: 0; }
+      0%   { transform: translate(-50%, -50%) scale(1);   opacity: 0.95; }
+      30%  { transform: translate(-50%, -50%) scale(3);   opacity: 0.7; }
+      100% { transform: translate(-50%, -50%) scale(8);   opacity: 0; }
+    }
+    @keyframes sweetlink-pulse {
+      0%   { opacity: 1; }
+      100% { opacity: 0; }
     }
   \`;
   document.head.appendChild(style);
 
   document.addEventListener('mousedown', (e) => {
+    // Expanding ring
     const ripple = document.createElement('div');
     ripple.style.cssText = [
       'position: fixed',
       'pointer-events: none',
       'z-index: 999998',
-      'width: 20px',
-      'height: 20px',
+      'width: 24px',
+      'height: 24px',
       'border-radius: 50%',
-      'border: 3px solid rgba(255, 0, 0, 0.6)',
+      'border: 4px solid rgba(255, 64, 32, 0.95)',
+      'box-shadow: 0 0 12px rgba(255, 64, 32, 0.7)',
       'left: ' + e.clientX + 'px',
       'top: ' + e.clientY + 'px',
       'transform: translate(-50%, -50%) scale(1)',
-      'animation: sweetlink-ripple 500ms ease-out forwards',
+      'animation: sweetlink-ripple 1200ms ease-out forwards',
     ].join(';');
     document.body.appendChild(ripple);
-    setTimeout(() => ripple.remove(), 500);
+    setTimeout(() => ripple.remove(), 1200);
+
+    // Persistent center dot that fades over 600ms.
+    const center = document.createElement('div');
+    center.style.cssText = [
+      'position: fixed',
+      'pointer-events: none',
+      'z-index: 999999',
+      'width: 14px',
+      'height: 14px',
+      'border-radius: 50%',
+      'background: rgba(255, 64, 32, 1)',
+      'border: 2px solid #fff',
+      'box-shadow: 0 0 0 2px rgba(255, 64, 32, 0.5)',
+      'left: ' + e.clientX + 'px',
+      'top: ' + e.clientY + 'px',
+      'transform: translate(-50%, -50%)',
+      'animation: sweetlink-pulse 600ms ease-out forwards',
+    ].join(';');
+    document.body.appendChild(center);
+    setTimeout(() => center.remove(), 600);
   });
 })();
 `;

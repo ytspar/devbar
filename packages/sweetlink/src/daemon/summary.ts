@@ -107,12 +107,16 @@ function formatActionDetails(entry: ActionEntry): string {
 function renderMetadata(options: SummaryOptions): string {
   const { manifest, gitBranch, gitCommit } = options;
   const lines = [
-    '# Session Report',
+    `# Session Report${manifest.label ? `: ${manifest.label}` : ''}`,
     '',
     `**Date:** ${formatDate(manifest.startedAt)}  `,
     `**Session:** ${manifest.sessionId}  `,
     `**Duration:** ${formatTimestamp(manifest.duration)}  `,
   ];
+
+  if (manifest.label) {
+    lines.push(`**Label:** ${manifest.label}  `);
+  }
 
   if (manifest.url) {
     lines.push(`**URL:** ${manifest.url}  `);
@@ -161,15 +165,16 @@ function renderTimeline(manifest: SessionManifest): string {
   const lines = [
     '## Action Timeline',
     '',
-    '| Time | Action | Target | Screenshot |',
-    '|------|--------|--------|------------|',
+    '| Time | Action | Target | Took | Screenshot |',
+    '|------|--------|--------|------|------------|',
   ];
 
   for (const cmd of manifest.commands) {
     const time = formatTimestamp(cmd.timestamp);
     const details = formatActionDetails(cmd);
+    const took = cmd.duration > 0 ? `${cmd.duration}ms` : '—';
     const shot = cmd.screenshot ? `[\`${cmd.screenshot}\`](${cmd.screenshot})` : '—';
-    lines.push(`| ${time} | ${cmd.action} | ${details} | ${shot} |`);
+    lines.push(`| ${time} | ${cmd.action} | ${details} | ${took} | ${shot} |`);
   }
 
   return lines.join('\n');

@@ -139,6 +139,8 @@ export async function takeScreenshot(opts: {
   page?: Page;
   /** Pixels of extra context to include around the selector's bounding box. */
   padding?: number;
+  /** Force the page's color scheme: 'light' | 'dark' | 'no-preference' */
+  theme?: 'light' | 'dark' | 'no-preference';
 }): Promise<{
   buffer: Buffer;
   width: number;
@@ -155,6 +157,12 @@ export async function takeScreenshot(opts: {
   if (opts.viewport) {
     const vp = parseViewport(opts.viewport, DEFAULT_VIEWPORT);
     await p.setViewportSize({ width: vp.width, height: vp.height });
+  }
+
+  // Apply color-scheme emulation. Most modern sites read
+  // `prefers-color-scheme` to render their dark theme; this triggers it.
+  if (opts.theme) {
+    await p.emulateMedia({ colorScheme: opts.theme }).catch(() => {});
   }
 
   let buffer: Buffer;

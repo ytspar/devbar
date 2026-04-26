@@ -38,6 +38,9 @@ const RECORDING_VIEWPORT = DEFAULT_VIEWPORT;
 // ============================================================================
 
 let recording = false;
+let paused = false;
+let pausedAt: number | null = null;
+let totalPausedMs = 0;
 let sessionId: string | null = null;
 let startedAt: number | null = null;
 let actions: ActionEntry[] = [];
@@ -49,6 +52,7 @@ let recordingVideoPath: string | null = null;
 let recordingUrl: string | null = null;
 let recordingGitBranch: string | null = null;
 let recordingGitCommit: string | null = null;
+let recordingLabel: string | null = null;
 // Buffer cursors snapshotted at startRecording so the manifest only counts
 // events that landed during this session (the ring buffers are global).
 let consoleStartCursor = 0;
@@ -80,26 +84,50 @@ export async function startRecording(
   browser: Browser,
   url: string,
   outputDir: string,
-  options?: { viewport?: { width: number; height: number } }
+  options?: {
+    viewport?: { width: number; height: number };
+    label?: string;
+    /** Path to a Playwright storageState JSON (cookies + localStorage) — for testing logged-in flows. */
+    storageState?: string;
+    /** Enable Playwright trace recording (writes trace.zip on stop). */
+    trace?: boolean;
+  }
 ): Promise<{ sessionId: string }> {
   if (recording) {
     throw new Error('Recording already in progress. Stop it first.');
   }
 
-  sessionId = `session-${Date.now()}`;
+  // Human-sortable timestamp: session-2026-04-26T19-47-14
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp =
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  sessionId = `session-${stamp}`;
   sessionDir = path.join(outputDir, sessionId);
   await fs.mkdir(sessionDir, { recursive: true });
 
   const viewport = options?.viewport ?? RECORDING_VIEWPORT;
 
-  // Create a new context with video recording
+  // Create a new context with video recording (and optionally
+  // pre-authenticated storage state for testing logged-in flows).
   recordingContext = await browser.newContext({
     viewport,
     recordVideo: {
       dir: sessionDir,
       size: viewport,
     },
+    ...(options?.storageState ? { storageState: options.storageState } : {}),
   });
+
+  // Optional Playwright trace for full DevTools-grade debugging.
+  if (options?.trace) {
+    try {
+      await recordingContext.tracing.start({ screenshots: true, snapshots: true, sources: true });
+    } catch (e) {
+      console.error('[Daemon] Could not start trace:', e instanceof Error ? e.message : e);
+    }
+  }
 
   recordingPage = await recordingContext.newPage();
 
@@ -118,6 +146,7 @@ export async function startRecording(
   consoleStartCursor = consoleBuffer.size;
   networkStartCursor = networkBuffer.size;
   recordingUrl = url;
+  recordingLabel = options?.label ?? null;
 
   // Navigate to the same URL (events from this load count toward the session)
   await recordingPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -146,11 +175,17 @@ export async function logAction(
   action: string,
   args: string[],
   page: Page,
-  boundingBox?: { x: number; y: number; width: number; height: number }
+  boundingBox?: { x: number; y: number; width: number; height: number },
+  durationMs?: number
 ): Promise<void> {
   if (!recording || !startedAt || !sessionDir) return;
+  // Drop actions while paused — the user explicitly asked us to ignore
+  // this window. The action will appear once they resume.
+  if (paused) return;
 
-  const timestamp = (Date.now() - startedAt) / 1000;
+  // Subtract the time we spent paused from the timeline so timestamps
+  // stay relative to active recording.
+  const timestamp = (Date.now() - startedAt - totalPausedMs) / 1000;
   const screenshotName = `action-${actions.length}.png`;
   const screenshotPath = path.join(sessionDir, screenshotName);
 
@@ -214,7 +249,7 @@ export async function logAction(
     timestamp,
     action,
     args,
-    duration: 0,
+    duration: durationMs ?? 0,
     boundingBox,
     screenshot: screenshotName,
   });
@@ -230,8 +265,15 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   }
 
   const startedAtMs = startedAt;
+  // If we stop while paused, finalise the pause window first.
+  if (paused && pausedAt) {
+    totalPausedMs += Date.now() - pausedAt;
+    paused = false;
+    pausedAt = null;
+  }
   const endedAt = Date.now();
-  const duration = (endedAt - startedAtMs) / 1000;
+  // Active-recording duration excludes time spent paused.
+  const duration = (endedAt - startedAtMs - totalPausedMs) / 1000;
 
   // Get video path BEFORE closing (it's set when the page was created)
   let videoFilename: string | undefined;
@@ -249,6 +291,11 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   }
 
   if (recordingContext) {
+    // If tracing was active, stop and write trace.zip into the session dir
+    // before closing the context.
+    try {
+      await recordingContext.tracing.stop({ path: path.join(sessionDir, 'trace.zip') });
+    } catch { /* tracing may not have been started */ }
     try {
       await recordingContext.close();
     } catch { /* may already be closed */ }
@@ -280,6 +327,7 @@ export async function stopRecording(): Promise<SessionManifest | null> {
 
   const manifest: SessionManifest = {
     sessionId,
+    label: recordingLabel ?? undefined,
     url: recordingUrl ?? undefined,
     gitBranch: recordingGitBranch ?? undefined,
     gitCommit: recordingGitCommit ?? undefined,
@@ -311,13 +359,45 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   recordingUrl = null;
   recordingGitBranch = null;
   recordingGitCommit = null;
+  recordingLabel = null;
+  paused = false;
+  pausedAt = null;
+  totalPausedMs = 0;
 
   return result;
 }
 
-/** Check if recording is in progress. */
+/** Check if recording is in progress (returns true even when paused). */
 export function isRecording(): boolean {
   return recording;
+}
+
+/** Check if recording is paused. */
+export function isRecordingPaused(): boolean {
+  return paused;
+}
+
+/**
+ * Pause the active recording. Subsequent action logs are skipped, and the
+ * paused window is subtracted from the manifest duration. The video
+ * stream from Playwright keeps recording (Playwright's video API has no
+ * pause primitive), but the action timeline is gapped honestly.
+ */
+export function pauseRecording(): { pausedAt: number } | null {
+  if (!recording || paused) return null;
+  paused = true;
+  pausedAt = Date.now();
+  return { pausedAt };
+}
+
+/** Resume a paused recording. */
+export function resumeRecording(): { pausedDurationMs: number } | null {
+  if (!recording || !paused || !pausedAt) return null;
+  const delta = Date.now() - pausedAt;
+  totalPausedMs += delta;
+  paused = false;
+  pausedAt = null;
+  return { pausedDurationMs: delta };
 }
 
 /** Get recording status info. */

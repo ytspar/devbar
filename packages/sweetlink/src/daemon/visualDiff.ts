@@ -17,6 +17,8 @@ export interface VisualDiffResult {
   mismatchCount: number;
   totalPixels: number;
   diffImagePath?: string;
+  /** Path to the interactive HTML viewer with side-by-side + overlay views. */
+  diffViewerPath?: string;
   pass: boolean;
 }
 
@@ -63,13 +65,73 @@ export async function visualDiff(
     pass,
   };
 
-  // If output path is specified and there are differences, save the current as "diff"
+  // When an output path is requested OR there's a real mismatch, write a
+  // side-by-side HTML viewer that embeds both screenshots and supports
+  // toggling between baseline/current/overlay (CSS difference blend mode).
+  // This is far more actionable than the percentage alone.
   if (options?.outputPath && !pass) {
     const dir = path.dirname(options.outputPath);
     await fs.mkdir(dir, { recursive: true });
-    // Save the current screenshot as the diff reference
+    // Save the current PNG as the primary diff artifact (back-compat).
     await fs.writeFile(options.outputPath, current);
     result.diffImagePath = options.outputPath;
+
+    // Write a sibling .html viewer with toggle/overlay UI.
+    const viewerPath = options.outputPath.replace(/\.png$/i, '') + '.diff.html';
+    const baselineB64 = baseline.toString('base64');
+    const currentB64 = current.toString('base64');
+    const html = `<!DOCTYPE html>
+<html><head><title>Visual Diff</title>
+<style>
+  body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
+  header{padding:12px 20px;background:#1e293b;display:flex;align-items:center;gap:16px}
+  header h1{font-size:16px;font-weight:600;margin:0}
+  header .stat{margin-left:auto;font-variant-numeric:tabular-nums}
+  header .pill{padding:2px 8px;border-radius:10px;font-weight:600}
+  .pill.fail{background:#7f1d1d;color:#fca5a5}
+  button{background:#334155;color:#e2e8f0;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;font:inherit}
+  button.active{background:#0ea5e9;color:#000}
+  main{display:flex;gap:8px;padding:8px;flex-wrap:wrap;justify-content:center}
+  figure{margin:0;flex:1;min-width:300px;max-width:700px}
+  figcaption{font-size:13px;color:#94a3b8;padding:4px 0 8px}
+  img{display:block;max-width:100%;border:1px solid #334155}
+  .stack{position:relative;display:inline-block;max-width:100%}
+  .stack img{position:absolute;top:0;left:0}
+  .stack img:first-child{position:relative}
+  .stack img.overlay{mix-blend-mode:difference;filter:invert(1)}
+</style></head>
+<body>
+<header>
+  <h1>Visual Diff</h1>
+  <button class="active" data-view="side">Side by side</button>
+  <button data-view="overlay">Overlay diff</button>
+  <button data-view="baseline">Baseline only</button>
+  <button data-view="current">Current only</button>
+  <div class="stat">
+    <span class="pill fail">${result.mismatchPercentage.toFixed(2)}% mismatch</span>
+  </div>
+</header>
+<main id="m">
+  <figure id="f-baseline"><figcaption>Baseline</figcaption><img src="data:image/png;base64,${baselineB64}" /></figure>
+  <figure id="f-current"><figcaption>Current</figcaption><img src="data:image/png;base64,${currentB64}" /></figure>
+  <figure id="f-overlay" hidden><figcaption>Overlay (CSS difference blend)</figcaption>
+    <div class="stack"><img src="data:image/png;base64,${baselineB64}" /><img class="overlay" src="data:image/png;base64,${currentB64}" /></div>
+  </figure>
+</main>
+<script>
+const buttons = document.querySelectorAll('header button');
+const figs = { baseline: document.getElementById('f-baseline'), current: document.getElementById('f-current'), overlay: document.getElementById('f-overlay') };
+buttons.forEach(b => b.addEventListener('click', () => {
+  buttons.forEach(x => x.classList.toggle('active', x === b));
+  const v = b.dataset.view;
+  figs.baseline.hidden = v === 'overlay' || v === 'current';
+  figs.current.hidden = v === 'overlay' || v === 'baseline';
+  figs.overlay.hidden = v !== 'overlay';
+}));
+</script>
+</body></html>`;
+    await fs.writeFile(viewerPath, html);
+    result.diffViewerPath = viewerPath;
   }
 
   return result;

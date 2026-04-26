@@ -508,7 +508,7 @@ test.describe('Phase 6 & 7: Recording + Viewer', () => {
     // Start recording
     const startResult = await daemonReq(daemon, 'record-start');
     const sessionId = startResult.sessionId as string;
-    expect(sessionId).toMatch(/^session-\d+$/);
+    expect(sessionId).toMatch(/^session-(\d+|\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})$/);
     console.log(`  Recording started: ${sessionId}`);
 
     // Get recording status

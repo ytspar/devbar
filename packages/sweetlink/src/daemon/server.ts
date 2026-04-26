@@ -19,7 +19,7 @@ import {
   getWarningCount,
   networkBuffer,
 } from './listeners.js';
-import { getRecordingPage, getRecordingStatus, isRecording, logAction, startRecording, stopRecording } from './recording.js';
+import { getRecordingPage, getRecordingStatus, isRecording, logAction, pauseRecording, resumeRecording, startRecording, stopRecording } from './recording.js';
 import { detectServerErrors } from './errorPatterns.js';
 import { generateSummary } from './summary.js';
 import { generateViewer } from './viewer.js';
@@ -54,8 +54,20 @@ let daemonPort: number | null = null;
 // Idle Timer
 // ============================================================================
 
+let idleWarnTimer: ReturnType<typeof setTimeout> | null = null;
+
 function resetIdleTimer(): void {
   if (idleTimer) clearTimeout(idleTimer);
+  if (idleWarnTimer) clearTimeout(idleWarnTimer);
+  // Warn at 80% so users running long sessions get a heads-up before
+  // the daemon dies under them.
+  const warnAt = Math.floor(DAEMON_IDLE_TIMEOUT_MS * 0.8);
+  idleWarnTimer = setTimeout(() => {
+    const remainingSec = Math.round((DAEMON_IDLE_TIMEOUT_MS - warnAt) / 1000);
+    console.error(
+      `[Daemon] ⚠ Idle for ${Math.round(warnAt / 1000)}s — will shut down in ${remainingSec}s if no further requests arrive.`
+    );
+  }, warnAt);
   idleTimer = setTimeout(() => {
     console.error('[Daemon] Idle timeout reached. Shutting down...');
     shutdown();
@@ -89,11 +101,13 @@ async function handleScreenshot(
   const targetPage = recPage ?? undefined;
 
   const padding = (params as ScreenshotParams & { padding?: number }).padding;
+  const theme = (params as ScreenshotParams & { theme?: 'light' | 'dark' | 'no-preference' }).theme;
   const { buffer, width, height, matchCount, pageHeight, viewportHeight } = await takeScreenshot({
     selector: params.selector,
     fullPage: params.fullPage,
     viewport: params.viewport,
     padding: typeof padding === 'number' ? padding : undefined,
+    theme,
     page: targetPage,
   });
 
@@ -225,6 +239,30 @@ async function handleSnapshot(
   };
 }
 
+/**
+ * Capture a screenshot of `page` and stash it under `.sweetlink/failures/`
+ * so users can see what state the page was in when an action failed.
+ * Returns the relative path or `undefined` if capture itself failed.
+ */
+async function captureFailure(
+  page: import('playwright').Page,
+  reason: string
+): Promise<string | undefined> {
+  try {
+    const { promises: fsp } = await import('fs');
+    const dir = '.sweetlink/failures';
+    await fsp.mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const slug = reason.replace(/[^a-z0-9]/gi, '-').slice(0, 40).toLowerCase();
+    const filePath = `${dir}/${stamp}-${slug}.png`;
+    const buf = await page.screenshot({ fullPage: false });
+    await fsp.writeFile(filePath, buf);
+    return filePath;
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleClickRef(
   params: Record<string, unknown>,
   url: string
@@ -240,9 +278,11 @@ async function handleClickRef(
 
   const stale = await checkRefStale(page, ref);
   if (stale) {
+    const failureScreenshot = await captureFailure(page, `stale-ref-${ref}`);
     return {
       ok: false,
       error: `Ref ${ref} is stale — element no longer exists. Run \`snapshot\` to get fresh refs.`,
+      data: failureScreenshot ? { failureScreenshot } : undefined,
     };
   }
 
@@ -252,18 +292,25 @@ async function handleClickRef(
   // click would wait for the default 30s before throwing.
   const enabled = await locator.isEnabled().catch(() => true);
   if (!enabled) {
-    return { ok: false, error: `Ref ${ref} is disabled — cannot click.` };
+    const failureScreenshot = await captureFailure(page, `disabled-${ref}`);
+    return {
+      ok: false,
+      error: `Ref ${ref} is disabled — cannot click.`,
+      data: failureScreenshot ? { failureScreenshot } : undefined,
+    };
   }
 
   const box = await locator.boundingBox();
+  const t0 = Date.now();
   await locator.click();
+  const durationMs = Date.now() - t0;
 
   // Log action if recording
   if (isRecording()) {
-    await logAction('click', [ref], page, box ?? undefined);
+    await logAction('click', [ref], page, box ?? undefined, durationMs);
   }
 
-  return { ok: true, data: { clicked: ref } };
+  return { ok: true, data: { clicked: ref, duration: durationMs } };
 }
 
 async function handleFillRef(
@@ -293,20 +340,24 @@ async function handleFillRef(
   // Playwright's fill() would otherwise wait 30s for the editable check.
   const editable = await locator.isEditable().catch(() => false);
   if (!editable) {
+    const failureScreenshot = await captureFailure(page, `non-editable-${ref}`);
     return {
       ok: false,
       error: `Ref ${ref} is not editable (use click-ref/press-key for non-text inputs).`,
+      data: failureScreenshot ? { failureScreenshot } : undefined,
     };
   }
 
   const box = await locator.boundingBox();
+  const t0 = Date.now();
   await locator.fill(value);
+  const durationMs = Date.now() - t0;
 
   if (isRecording()) {
-    await logAction('fill', [ref, value], page, box ?? undefined);
+    await logAction('fill', [ref, value], page, box ?? undefined, durationMs);
   }
 
-  return { ok: true, data: { filled: ref, value } };
+  return { ok: true, data: { filled: ref, value, duration: durationMs } };
 }
 
 async function handleClickCss(
@@ -342,11 +393,50 @@ async function handleClickCss(
     await target.waitFor({ state: 'visible', timeout: 5_000 });
   } catch {
     const found = await locator.count();
-    return { ok: false, error: `No element found matching: ${selector ?? text} (${found} matches)` };
+    const failureScreenshot = await captureFailure(page, `no-element-${selector ?? text ?? 'unknown'}`);
+    return {
+      ok: false,
+      error: `No element found matching: ${selector ?? text} (${found} matches)`,
+      data: failureScreenshot ? { failureScreenshot } : undefined,
+    };
   }
 
   const box = await target.boundingBox();
+
+  // Occlusion check: if the element's center is covered by a different
+  // element (e.g. a sticky modal/overlay), Playwright's click would wait
+  // for actionability and time out with a generic message. Probe up
+  // front so we can return a useful error.
+  if (box) {
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    type OcclusionInfo = { ours: boolean; coveredBy?: string };
+    const info: OcclusionInfo = await page.evaluate(({ cx, cy, sel }) => {
+      const intended = sel ? document.querySelector(sel) : null;
+      const top = document.elementFromPoint(cx, cy);
+      if (!top || !intended) return { ours: true };
+      if (top === intended || intended.contains(top)) return { ours: true };
+      const desc =
+        top.tagName.toLowerCase() +
+        (top.id ? '#' + top.id : '') +
+        (top.className && typeof top.className === 'string'
+          ? '.' + top.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')
+          : '');
+      return { ours: false, coveredBy: desc };
+    }, { cx, cy, sel: selector ?? null });
+    if (!info.ours) {
+      const failureScreenshot = await captureFailure(page, `occluded-${selector ?? text}`);
+      return {
+        ok: false,
+        error: `Click target ${selector ?? text} is covered by <${info.coveredBy}>. Dismiss the overlay first.`,
+        data: failureScreenshot ? { failureScreenshot } : undefined,
+      };
+    }
+  }
+
+  const t0 = Date.now();
   await target.click();
+  const durationMs = Date.now() - t0;
 
   const tag = await target.evaluate((el) => el.tagName.toLowerCase()).catch(() => 'unknown');
   const found = await locator.count();
@@ -356,10 +446,10 @@ async function handleClickCss(
     if (selector) args.push(`--selector=${selector}`);
     if (text) args.push(`--text=${text}`);
     if (index > 0) args.push(`--index=${index}`);
-    await logAction('click', args, page, box ?? undefined);
+    await logAction('click', args, page, box ?? undefined, durationMs);
   }
 
-  return { ok: true, data: { clicked: tag, found, index } };
+  return { ok: true, data: { clicked: tag, found, index, duration: durationMs } };
 }
 
 async function handleHoverRef(
@@ -439,6 +529,12 @@ async function handleNetworkRead(
   params: Record<string, unknown>,
   url: string
 ): Promise<DaemonResponse> {
+  // Toggle body capture BEFORE any navigation so body buffers populate
+  // for the current page-load.
+  if (params.withBody) {
+    const { setCaptureBodies } = await import('./listeners.js');
+    setCaptureBodies(true);
+  }
   await initBrowser(url);
   const failedOnly = params.failed as boolean | undefined;
   const last = params.last as number | undefined;
@@ -522,8 +618,13 @@ async function handleRecordStart(
     const { parseViewport, DEFAULT_VIEWPORT } = await import('../viewportUtils.js');
     viewport = parseViewport(viewportParam, DEFAULT_VIEWPORT);
   }
-  const result = await startRecording(browser, url, '.sweetlink', { viewport });
-  return { ok: true, data: { sessionId: result.sessionId } };
+  const label = (params.label as string | undefined) || undefined;
+  const storageState = (params.storageState as string | undefined) || undefined;
+  const trace = (params.trace as boolean | undefined) || undefined;
+  const result = await startRecording(browser, url, '.sweetlink', {
+    viewport, label, storageState, trace,
+  });
+  return { ok: true, data: { sessionId: result.sessionId, label, trace: !!trace } };
 }
 
 async function handleRecordStop(): Promise<DaemonResponse> {
@@ -587,6 +688,105 @@ async function handleRecordStatus(): Promise<DaemonResponse> {
   return { ok: true, data: status };
 }
 
+async function handleRecordPause(): Promise<DaemonResponse> {
+  const r = pauseRecording();
+  if (!r) return { ok: false, error: 'No active recording to pause (or already paused).' };
+  return { ok: true, data: r };
+}
+
+async function handleRecordResume(): Promise<DaemonResponse> {
+  const r = resumeRecording();
+  if (!r) return { ok: false, error: 'Recording is not paused.' };
+  return { ok: true, data: r };
+}
+
+async function handleSessionsList(): Promise<DaemonResponse> {
+  try {
+    const { promises: fsp } = await import('fs');
+    const path = await import('path');
+    const dir = '.sweetlink';
+    let entries: import('fs').Dirent[] = [];
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return { ok: true, data: { sessions: [] } };
+    }
+    const sessions: Array<{
+      sessionId: string;
+      label?: string;
+      url?: string;
+      startedAt?: string;
+      duration?: number;
+      actionCount: number;
+      errors?: { console: number; network: number; server: number };
+      hasVideo: boolean;
+      hasViewer: boolean;
+      manifestPath: string;
+    }> = [];
+    for (const e of entries) {
+      if (!e.isDirectory() || !e.name.startsWith('session-')) continue;
+      const manifestPath = path.join(dir, e.name, 'sweetlink-session.json');
+      try {
+        const raw = await fsp.readFile(manifestPath, 'utf-8');
+        const m = JSON.parse(raw) as import('./session.js').SessionManifest;
+        const hasVideo = await fsp.access(path.join(dir, e.name, 'session.webm')).then(() => true).catch(() => false);
+        const hasViewer = await fsp.access(path.join(dir, e.name, 'viewer.html')).then(() => true).catch(() => false);
+        sessions.push({
+          sessionId: m.sessionId,
+          label: m.label,
+          url: m.url,
+          startedAt: m.startedAt,
+          duration: m.duration,
+          actionCount: m.commands.length,
+          errors: m.errors,
+          hasVideo,
+          hasViewer,
+          manifestPath,
+        });
+      } catch {
+        // Skip directories without a valid manifest.
+      }
+    }
+    // Most recent first.
+    sessions.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
+
+    // Also write an index.html that links to every viewer for quick browsing.
+    try {
+      const items = sessions.map((s) => {
+        const viewerLink = s.hasViewer ? `${s.sessionId}/viewer.html` : '#';
+        const errorsTotal = s.errors ? s.errors.console + s.errors.network + s.errors.server : 0;
+        const errBadge = errorsTotal > 0
+          ? `<span style="color:#c00;font-weight:600">${errorsTotal} err</span>`
+          : '<span style="color:#0a0">clean</span>';
+        const labelHtml = s.label ? `<span style="color:#06c">${escape(s.label)}</span> · ` : '';
+        const dur = s.duration ? `${s.duration.toFixed(1)}s` : '—';
+        return `<li><a href="${viewerLink}">${labelHtml}<code>${escape(s.sessionId)}</code></a> · ${escape(s.url ?? '')} · ${dur} · ${s.actionCount} actions · ${errBadge}</li>`;
+      }).join('\n');
+      const indexHtml = `<!DOCTYPE html>
+<html><head><title>Sweetlink Sessions</title>
+<style>
+body{font-family:system-ui;margin:40px;max-width:900px}
+li{margin:8px 0;padding:8px;border-radius:6px}
+li:hover{background:#f5f5fa}
+code{background:#eef;padding:1px 6px;border-radius:3px}
+a{text-decoration:none;color:#222}
+</style></head>
+<body><h1>Sweetlink Sessions <small style="color:#888">(${sessions.length})</small></h1>
+<ul>${items}</ul>
+</body></html>`;
+      await fsp.writeFile(path.join(dir, 'index.html'), indexHtml);
+    } catch { /* index is best-effort */ }
+
+    return { ok: true, data: { sessions, indexPath: path.join(dir, 'index.html') } };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function escape(s: string): string {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 async function handleGenerateViewer(
   params: Record<string, unknown>
 ): Promise<DaemonResponse> {
@@ -622,9 +822,10 @@ async function handleVisualDiff(
     return { ok: false, error: 'Missing baseline or current parameter (base64 encoded PNG)' };
   }
 
+  const outputPath = params.outputPath as string | undefined;
   const baselineBuffer = Buffer.from(baseline, 'base64');
   const currentBuffer = Buffer.from(current, 'base64');
-  const result = await visualDiff(baselineBuffer, currentBuffer, { threshold });
+  const result = await visualDiff(baselineBuffer, currentBuffer, { threshold, outputPath });
 
   return {
     ok: true,
@@ -633,6 +834,8 @@ async function handleVisualDiff(
       mismatchCount: result.mismatchCount,
       totalPixels: result.totalPixels,
       pass: result.pass,
+      diffImagePath: result.diffImagePath,
+      diffViewerPath: result.diffViewerPath,
     },
   };
 }
@@ -679,6 +882,12 @@ async function handleRequest(
       return handleVisualDiff(params);
     case 'record-start':
       return handleRecordStart(params, url);
+    case 'record-pause':
+      return handleRecordPause();
+    case 'record-resume':
+      return handleRecordResume();
+    case 'sessions-list':
+      return handleSessionsList();
     case 'record-stop':
       return handleRecordStop();
     case 'record-status':

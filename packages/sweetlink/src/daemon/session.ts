@@ -31,6 +31,8 @@ export interface ActionEntry {
 
 export interface SessionManifest {
   sessionId: string;
+  /** Optional human-friendly label set via `record start --label "..."`. */
+  label?: string;
   /** Target app URL that was recorded */
   url?: string;
   /** Git branch at time of recording */

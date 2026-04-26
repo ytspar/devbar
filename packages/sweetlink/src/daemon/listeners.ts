@@ -28,6 +28,19 @@ export interface NetworkEntry {
   duration: number;
   contentType?: string;
   size?: number;
+  /** Request body (truncated to 4KB) — only present when withBody capture is enabled. */
+  requestBody?: string;
+  /** Response body (truncated to 4KB) — only present when withBody capture is enabled. */
+  responseBody?: string;
+}
+
+const BODY_CAPTURE_LIMIT = 4 * 1024;
+let captureBodies = false;
+export function setCaptureBodies(enabled: boolean): void {
+  captureBodies = enabled;
+}
+export function isCapturingBodies(): boolean {
+  return captureBodies;
 }
 
 export interface DialogEntry {
@@ -46,7 +59,7 @@ export const networkBuffer = new RingBuffer<NetworkEntry>(50_000);
 export const dialogBuffer = new RingBuffer<DialogEntry>(50_000);
 
 // Track pending requests for duration calculation
-const pendingRequests = new Map<string, { startTime: number; method: string; url: string }>();
+const pendingRequests = new Map<string, { startTime: number; method: string; url: string; requestBody?: string }>();
 
 // ============================================================================
 // Setup
@@ -78,17 +91,36 @@ export function installListeners(page: Page): void {
 
   // Network events
   page.on('request', (request) => {
+    let requestBody: string | undefined;
+    if (captureBodies) {
+      try {
+        const data = request.postData();
+        if (data) requestBody = data.slice(0, BODY_CAPTURE_LIMIT);
+      } catch { /* postData may be unavailable */ }
+    }
     pendingRequests.set(request.url(), {
       startTime: Date.now(),
       method: request.method(),
       url: request.url(),
+      requestBody,
     });
   });
 
-  page.on('response', (response) => {
+  page.on('response', async (response) => {
     const pending = pendingRequests.get(response.url());
     const startTime = pending?.startTime ?? Date.now();
     pendingRequests.delete(response.url());
+
+    let responseBody: string | undefined;
+    if (captureBodies) {
+      try {
+        const buf = await response.body();
+        if (buf) {
+          // Slice on the buffer (UTF-8 boundary safe enough for first 4KB)
+          responseBody = buf.subarray(0, BODY_CAPTURE_LIMIT).toString('utf-8');
+        }
+      } catch { /* body may not be available (e.g. redirect) */ }
+    }
 
     networkBuffer.push({
       timestamp: Date.now(),
@@ -97,6 +129,8 @@ export function installListeners(page: Page): void {
       status: response.status(),
       duration: Date.now() - startTime,
       contentType: response.headers()['content-type'],
+      requestBody: pending?.requestBody,
+      responseBody,
     });
   });
 

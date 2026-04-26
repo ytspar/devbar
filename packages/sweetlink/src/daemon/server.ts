@@ -81,11 +81,29 @@ async function handleScreenshot(
   url: string
 ): Promise<DaemonResponse> {
   await initBrowser(url);
-  const { buffer, width, height } = await takeScreenshot({
+
+  // During a recording, screenshots must target the recording page so the
+  // captured image matches what the video shows, and the action is logged
+  // into the session manifest.
+  const recPage = getRecordingPage();
+  const targetPage = recPage ?? undefined;
+
+  const padding = (params as ScreenshotParams & { padding?: number }).padding;
+  const { buffer, width, height, matchCount, pageHeight, viewportHeight } = await takeScreenshot({
     selector: params.selector,
     fullPage: params.fullPage,
     viewport: params.viewport,
+    padding: typeof padding === 'number' ? padding : undefined,
+    page: targetPage,
   });
+
+  if (recPage && isRecording()) {
+    const args: string[] = [];
+    if (params.selector) args.push(`--selector=${params.selector}`);
+    if (params.fullPage) args.push('--full-page');
+    if (params.viewport) args.push(`--viewport=${params.viewport}`);
+    await logAction('screenshot', args, recPage);
+  }
 
   return {
     ok: true,
@@ -93,6 +111,9 @@ async function handleScreenshot(
       screenshot: buffer.toString('base64'),
       width,
       height,
+      matchCount,
+      pageHeight,
+      viewportHeight,
     },
   };
 }
@@ -103,9 +124,13 @@ async function handleResponsiveScreenshot(
 ): Promise<DaemonResponse> {
   await initBrowser(url);
   const viewports = params.viewports ?? DEFAULT_RESPONSIVE_VIEWPORTS;
+  // Default to fullPage so users see the page in its entirety at each
+  // breakpoint — that's the typical reason to invoke `--responsive`.
+  // Caller can pass `fullPage: false` explicitly to opt out.
+  const fullPage = params.fullPage !== false;
   const results = await takeResponsiveScreenshots({
     viewports,
-    fullPage: params.fullPage,
+    fullPage,
   });
 
   return {
@@ -169,11 +194,16 @@ async function handleSnapshot(
       return { ok: false, error: 'No refs to annotate. Run `snapshot -i` first.' };
     }
     const buffer = await annotateScreenshot(page, currentRefs);
+    // Pull dims from the PNG IHDR so callers don't see undefined.
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
     setBaseline();
     return {
       ok: true,
       data: {
         screenshot: buffer.toString('base64'),
+        width,
+        height,
         tree: formatRefMap(resolved),
         refs: resolved.entries,
         count: resolved.entries.length,
@@ -217,6 +247,14 @@ async function handleClickRef(
   }
 
   const locator = resolveRef(page, ref);
+
+  // Fail fast if the element is disabled — without this check, Playwright's
+  // click would wait for the default 30s before throwing.
+  const enabled = await locator.isEnabled().catch(() => true);
+  if (!enabled) {
+    return { ok: false, error: `Ref ${ref} is disabled — cannot click.` };
+  }
+
   const box = await locator.boundingBox();
   await locator.click();
 
@@ -250,6 +288,17 @@ async function handleFillRef(
   }
 
   const locator = resolveRef(page, ref);
+
+  // Fail fast for non-fillable elements (e.g. <option>, <select>, <button>) —
+  // Playwright's fill() would otherwise wait 30s for the editable check.
+  const editable = await locator.isEditable().catch(() => false);
+  if (!editable) {
+    return {
+      ok: false,
+      error: `Ref ${ref} is not editable (use click-ref/press-key for non-text inputs).`,
+    };
+  }
+
   const box = await locator.boundingBox();
   await locator.fill(value);
 
@@ -258,6 +307,59 @@ async function handleFillRef(
   }
 
   return { ok: true, data: { filled: ref, value } };
+}
+
+async function handleClickCss(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
+  await initBrowser(url);
+
+  // Route to the recording page when a session is active so the click
+  // appears in the video and gets logged into the manifest.
+  const recPage = getRecordingPage();
+  const page = recPage ?? getPage();
+
+  const selector = params.selector as string | undefined;
+  const text = params.text as string | undefined;
+  const index = (params.index as number | undefined) ?? 0;
+
+  if (!selector && !text) {
+    return { ok: false, error: 'Missing selector or text parameter' };
+  }
+
+  let locator;
+  if (selector && text) {
+    locator = page.locator(selector, { hasText: text });
+  } else if (selector) {
+    locator = page.locator(selector);
+  } else {
+    locator = page.getByText(text!, { exact: false });
+  }
+  const target = locator.nth(index);
+
+  try {
+    await target.waitFor({ state: 'visible', timeout: 5_000 });
+  } catch {
+    const found = await locator.count();
+    return { ok: false, error: `No element found matching: ${selector ?? text} (${found} matches)` };
+  }
+
+  const box = await target.boundingBox();
+  await target.click();
+
+  const tag = await target.evaluate((el) => el.tagName.toLowerCase()).catch(() => 'unknown');
+  const found = await locator.count();
+
+  if (isRecording()) {
+    const args: string[] = [];
+    if (selector) args.push(`--selector=${selector}`);
+    if (text) args.push(`--text=${text}`);
+    if (index > 0) args.push(`--index=${index}`);
+    await logAction('click', args, page, box ?? undefined);
+  }
+
+  return { ok: true, data: { clicked: tag, found, index } };
 }
 
 async function handleHoverRef(
@@ -302,8 +404,14 @@ async function handlePressKey(
 // ============================================================================
 
 async function handleConsoleRead(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  url: string
 ): Promise<DaemonResponse> {
+  // Ensure the configured page is loaded so the listeners have something to
+  // observe. Without this, a fresh daemon returns an empty buffer with no
+  // explanation.
+  await initBrowser(url);
+
   const errorsOnly = params.errors as boolean | undefined;
   const last = params.last as number | undefined;
 
@@ -328,8 +436,10 @@ async function handleConsoleRead(
 }
 
 async function handleNetworkRead(
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  url: string
 ): Promise<DaemonResponse> {
+  await initBrowser(url);
   const failedOnly = params.failed as boolean | undefined;
   const last = params.last as number | undefined;
 
@@ -352,7 +462,8 @@ async function handleNetworkRead(
   };
 }
 
-async function handleDialogRead(): Promise<DaemonResponse> {
+async function handleDialogRead(url: string): Promise<DaemonResponse> {
+  await initBrowser(url);
   const entries = dialogBuffer.toArray();
   return {
     ok: true,
@@ -371,9 +482,19 @@ async function handleScreenshotDevices(
     return { ok: false, error: 'Missing devices parameter' };
   }
 
-  const results = await takeDeviceScreenshots(page, devices, {
+  const { results, unknown } = await takeDeviceScreenshots(page, devices, {
     fullPage: params.fullPage as boolean | undefined,
   });
+
+  // Surface unknown device names to the caller instead of silently dropping
+  // them. If everything was unknown, treat as a hard error.
+  if (results.length === 0 && unknown.length > 0) {
+    const { listDeviceNames } = await import('./devices.js');
+    return {
+      ok: false,
+      error: `Unknown device(s): ${unknown.join(', ')}. Known: ${listDeviceNames().join(', ')}`,
+    };
+  }
 
   return {
     ok: true,
@@ -384,14 +505,24 @@ async function handleScreenshotDevices(
         height: r.device.viewport.height,
         screenshot: r.buffer.toString('base64'),
       })),
+      unknown,
     },
   };
 }
 
-async function handleRecordStart(url: string): Promise<DaemonResponse> {
+async function handleRecordStart(
+  params: Record<string, unknown>,
+  url: string
+): Promise<DaemonResponse> {
   await initBrowser(url);
   const browser = getBrowserInstance();
-  const result = await startRecording(browser, url, '.sweetlink');
+  const viewportParam = params.viewport as string | undefined;
+  let viewport: { width: number; height: number } | undefined;
+  if (viewportParam) {
+    const { parseViewport, DEFAULT_VIEWPORT } = await import('../viewportUtils.js');
+    viewport = parseViewport(viewportParam, DEFAULT_VIEWPORT);
+  }
+  const result = await startRecording(browser, url, '.sweetlink', { viewport });
   return { ok: true, data: { sessionId: result.sessionId } };
 }
 
@@ -528,6 +659,8 @@ async function handleRequest(
       return handleSnapshot(params, url);
     case 'click-ref':
       return handleClickRef(params, url);
+    case 'click-css':
+      return handleClickCss(params, url);
     case 'fill-ref':
       return handleFillRef(params, url);
     case 'hover-ref':
@@ -535,17 +668,17 @@ async function handleRequest(
     case 'press-key':
       return handlePressKey(params, url);
     case 'console-read':
-      return handleConsoleRead(params);
+      return handleConsoleRead(params, url);
     case 'network-read':
-      return handleNetworkRead(params);
+      return handleNetworkRead(params, url);
     case 'dialog-read':
-      return handleDialogRead();
+      return handleDialogRead(url);
     case 'screenshot-devices':
       return handleScreenshotDevices(params, url);
     case 'visual-diff':
       return handleVisualDiff(params);
     case 'record-start':
-      return handleRecordStart(url);
+      return handleRecordStart(params, url);
     case 'record-stop':
       return handleRecordStop();
     case 'record-status':

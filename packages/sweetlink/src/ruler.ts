@@ -153,36 +153,46 @@ export const measureElementsScript = `
 
       // Draw dimension labels
       if (showDimensions) {
-        // Background for label
+        // Position the label OUTSIDE the bbox so it doesn't overlap
+        // page content. Default: above the bbox (top); fall back below
+        // when the element is at the very top of the page.
+        const dimLabel = \`\${Math.round(rect.width)}×\${Math.round(rect.height)}\`;
+        const labelHeight = 22;
+        const labelW = Math.max(70, dimLabel.length * 9);
+        const goAbove = rect.top >= labelHeight + 4;
+        const ly = goAbove ? rect.top - labelHeight - 2 : rect.top + rect.height + 2;
+        const lx = rect.left;
+
         const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        labelBg.setAttribute('x', rect.left);
-        labelBg.setAttribute('y', rect.top - 20);
-        labelBg.setAttribute('width', '100');
-        labelBg.setAttribute('height', '18');
-        labelBg.setAttribute('fill', 'rgba(0,0,0,0.8)');
-        labelBg.setAttribute('rx', '2');
+        labelBg.setAttribute('x', lx);
+        labelBg.setAttribute('y', ly);
+        labelBg.setAttribute('width', String(labelW));
+        labelBg.setAttribute('height', String(labelHeight));
+        labelBg.setAttribute('fill', color);
+        labelBg.setAttribute('rx', '3');
         svg.appendChild(labelBg);
 
-        // Dimension text
         const dimText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        dimText.setAttribute('x', rect.left + 4);
-        dimText.setAttribute('y', rect.top - 6);
-        dimText.setAttribute('fill', color);
-        dimText.setAttribute('font-family', 'monospace');
-        dimText.setAttribute('font-size', '12');
-        dimText.setAttribute('font-weight', 'bold');
-        dimText.textContent = \`\${Math.round(rect.width)}×\${Math.round(rect.height)}\`;
+        dimText.setAttribute('x', lx + labelW / 2);
+        dimText.setAttribute('y', ly + 15);
+        dimText.setAttribute('fill', '#ffffff');
+        dimText.setAttribute('font-family', 'system-ui, sans-serif');
+        dimText.setAttribute('font-size', '13');
+        dimText.setAttribute('font-weight', '700');
+        dimText.setAttribute('text-anchor', 'middle');
+        dimText.textContent = dimLabel;
         svg.appendChild(dimText);
       }
 
-      // Draw position labels
+      // Draw position labels (separate, opposite side of dim label)
       if (showPosition) {
         const posText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        posText.setAttribute('x', rect.left + 4);
+        // Position label below-right outside the bbox.
+        posText.setAttribute('x', rect.left + rect.width + 4);
         posText.setAttribute('y', rect.top + 14);
         posText.setAttribute('fill', color);
-        posText.setAttribute('font-family', 'monospace');
-        posText.setAttribute('font-size', '10');
+        posText.setAttribute('font-family', 'system-ui, sans-serif');
+        posText.setAttribute('font-size', '12');
         posText.textContent = \`(\${Math.round(rect.left)}, \${Math.round(rect.top)})\`;
         svg.appendChild(posText);
       }
@@ -215,24 +225,27 @@ export const measureElementsScript = `
     const midX = (first.centerX + second.centerX) / 2;
     const midY = (first.centerY + second.centerY) / 2;
 
+    const offsetLabel = \`Δy=\${verticalOffset}px  Δx=\${horizontalOffset}px\`;
+    const offsetW = Math.max(140, offsetLabel.length * 9);
+    const offsetH = 28;
     const offsetBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    offsetBg.setAttribute('x', midX - 50);
-    offsetBg.setAttribute('y', midY - 12);
-    offsetBg.setAttribute('width', '100');
-    offsetBg.setAttribute('height', '24');
-    offsetBg.setAttribute('fill', 'rgba(0,0,0,0.9)');
+    offsetBg.setAttribute('x', midX - offsetW / 2);
+    offsetBg.setAttribute('y', midY - offsetH / 2);
+    offsetBg.setAttribute('width', String(offsetW));
+    offsetBg.setAttribute('height', String(offsetH));
+    offsetBg.setAttribute('fill', 'rgba(20,20,20,0.95)');
     offsetBg.setAttribute('rx', '4');
     svg.appendChild(offsetBg);
 
     const offsetText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     offsetText.setAttribute('x', midX);
-    offsetText.setAttribute('y', midY + 5);
+    offsetText.setAttribute('y', midY + 6);
     offsetText.setAttribute('fill', '#ffffff');
-    offsetText.setAttribute('font-family', 'monospace');
-    offsetText.setAttribute('font-size', '12');
-    offsetText.setAttribute('font-weight', 'bold');
+    offsetText.setAttribute('font-family', 'system-ui, sans-serif');
+    offsetText.setAttribute('font-size', '14');
+    offsetText.setAttribute('font-weight', '700');
     offsetText.setAttribute('text-anchor', 'middle');
-    offsetText.textContent = \`Δy:\${verticalOffset}px Δx:\${horizontalOffset}px\`;
+    offsetText.textContent = offsetLabel;
     svg.appendChild(offsetText);
 
     alignment = {
@@ -304,9 +317,22 @@ export async function measureViaPlaywright(options: {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      await page.screenshot({ path: options.output, fullPage: false });
+      // If any measured element extends below the viewport, capture the
+      // full page so all overlays are visible — otherwise users see
+      // half their highlights cut off. (page.viewportSize is missing
+      // from some test doubles, hence the typeof guard.)
+      const vp = typeof page.viewportSize === 'function' ? page.viewportSize() : null;
+      const extendsBelow = vp ? result.results.some((r) =>
+        r.elements.some((e) => e.rect.top + e.rect.height > vp.height)
+      ) : false;
+      await page.screenshot({ path: options.output, fullPage: extendsBelow });
       screenshotPath = options.output;
-      if (options.verbose) console.log(`[Sweetlink Ruler] Screenshot saved to: ${options.output}`);
+      if (options.verbose) {
+        console.log(
+          `[Sweetlink Ruler] Screenshot saved to: ${options.output}` +
+          (extendsBelow ? ' (full page — measured elements extend below viewport)' : '')
+        );
+      }
     }
 
     return { ...result, screenshotPath };

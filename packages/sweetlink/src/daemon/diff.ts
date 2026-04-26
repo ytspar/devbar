@@ -113,6 +113,12 @@ function computeLCS(a: string[], b: string[]): string[] {
 /**
  * Take an annotated screenshot with ref labels overlaid on elements.
  * Injects temporary overlay divs, captures screenshot, then removes them.
+ *
+ * - Captures the full page so annotations below the fold are visible.
+ * - Skips elements with zero bounding-box (avoids stray labels at 0,0).
+ * - Positions labels above the element (or below if at the page top),
+ *   uses absolute (document-relative) coordinates so they line up in
+ *   the full-page image.
  */
 export async function annotateScreenshot(
   page: Page,
@@ -122,7 +128,13 @@ export async function annotateScreenshot(
   await page.evaluate((refs: Array<{ ref: string; role: string; name: string }>) => {
     const container = document.createElement('div');
     container.id = '__sweetlink_annotations__';
-    container.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999999;';
+    // Absolute positioning so labels stay attached to elements as the
+    // page scrolls — matters for full-page screenshots.
+    container.style.cssText =
+      'position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 2147483647;';
+
+    const sx = window.scrollX;
+    const sy = window.scrollY;
 
     for (const refEntry of refs) {
       // Find element by role + name using ARIA
@@ -133,7 +145,6 @@ export async function annotateScreenshot(
         const name = el.getAttribute('aria-label') ??
           (el as HTMLElement).textContent?.trim().substring(0, 50) ?? '';
 
-        // Match by role keyword and name substring
         const roleMatch = role === refEntry.role ||
           (refEntry.role === 'button' && el.tagName === 'BUTTON') ||
           (refEntry.role === 'link' && el.tagName === 'A') ||
@@ -150,38 +161,50 @@ export async function annotateScreenshot(
 
       if (!element) continue;
       const rect = element.getBoundingClientRect();
+      // Skip elements without a real visual presence — these were
+      // producing stray labels at (0,0) on the screenshot.
+      if (rect.width < 1 || rect.height < 1) continue;
 
-      // Create label (emerald accent from design system)
+      // Document-space coords (so labels line up with the captured
+      // full-page image, not the viewport).
+      const docLeft = rect.left + sx;
+      const docTop = rect.top + sy;
+      const labelHeight = 18;
+      const padX = 6;
+
+      // Place the label above the element when possible, else below.
+      const goAbove = docTop >= labelHeight + 2;
+      const labelTop = goAbove ? docTop - labelHeight - 2 : docTop + rect.height + 2;
+
       const label = document.createElement('div');
       label.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${Math.max(0, rect.top - 18)}px;
-        background: rgba(16, 185, 129, 0.9);
+        position: absolute;
+        left: ${docLeft}px;
+        top: ${labelTop}px;
+        background: rgba(16, 185, 129, 0.95);
         color: #0a0f1a;
-        font-size: 11px;
+        font-size: 12px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-weight: bold;
-        padding: 1px 4px;
-        border-radius: 2px;
-        z-index: 999999;
-        pointer-events: none;
-        line-height: 16px;
+        font-weight: 700;
+        padding: 2px ${padX}px;
+        border-radius: 3px;
+        height: ${labelHeight}px;
+        line-height: ${labelHeight - 4}px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+        white-space: nowrap;
       `;
       label.textContent = refEntry.ref;
 
-      // Create outline
       const outline = document.createElement('div');
       outline.style.cssText = `
-        position: fixed;
-        left: ${rect.left}px;
-        top: ${rect.top}px;
+        position: absolute;
+        left: ${docLeft}px;
+        top: ${docTop}px;
         width: ${rect.width}px;
         height: ${rect.height}px;
-        border: 2px solid rgba(16, 185, 129, 0.7);
-        border-radius: 2px;
-        z-index: 999998;
-        pointer-events: none;
+        border: 2px solid rgba(16, 185, 129, 0.8);
+        border-radius: 3px;
+        box-sizing: border-box;
       `;
 
       container.appendChild(label);
@@ -191,13 +214,12 @@ export async function annotateScreenshot(
     document.body.appendChild(container);
   }, refMap.entries.map(e => ({ ref: e.ref, role: e.role, name: e.name })));
 
-  // Small wait for rendering
   await page.waitForTimeout(50);
 
-  // Take screenshot
-  const buffer = await page.screenshot();
+  // Capture full page so refs below the fold are visible. Without this
+  // the annotated screenshot misses anything past the viewport.
+  const buffer = await page.screenshot({ fullPage: true });
 
-  // Remove overlay
   await page.evaluate(() => {
     const container = document.getElementById('__sweetlink_annotations__');
     container?.remove();

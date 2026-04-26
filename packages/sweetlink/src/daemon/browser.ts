@@ -129,13 +129,27 @@ export async function navigateTo(url: string): Promise<void> {
 
 /**
  * Take a screenshot of the current page or a specific element.
+ * If `page` is provided, screenshots that page instead of the daemon's
+ * main page (e.g. the recording page during a session).
  */
 export async function takeScreenshot(opts: {
   selector?: string;
   fullPage?: boolean;
   viewport?: string;
-}): Promise<{ buffer: Buffer; width: number; height: number }> {
-  const p = getPage();
+  page?: Page;
+  /** Pixels of extra context to include around the selector's bounding box. */
+  padding?: number;
+}): Promise<{
+  buffer: Buffer;
+  width: number;
+  height: number;
+  /** Number of elements matching `selector` (informational; only the first is captured). */
+  matchCount?: number;
+  /** Document scrollHeight if it exceeds the viewport (lets callers hint at --full-page). */
+  pageHeight?: number;
+  viewportHeight?: number;
+}> {
+  const p = opts.page ?? getPage();
 
   // Apply viewport if specified
   if (opts.viewport) {
@@ -144,23 +158,60 @@ export async function takeScreenshot(opts: {
   }
 
   let buffer: Buffer;
+  let matchCount: number | undefined;
   if (opts.selector) {
-    const locator = p.locator(opts.selector).first();
+    const all = p.locator(opts.selector);
+    matchCount = await all.count();
+    const locator = all.first();
     await locator.waitFor({ state: 'visible', timeout: 5000 });
-    buffer = await locator.screenshot();
+    if (opts.padding && opts.padding > 0) {
+      // Expand the capture region by `padding` px on every side. We do this
+      // by computing the locator's box, then full-page-screenshotting and
+      // cropping via `clip` — that's the simplest cross-platform approach.
+      const box = await locator.boundingBox();
+      if (box) {
+        const pad = opts.padding;
+        const pageDoc = await p.evaluate(() => ({
+          w: document.documentElement.scrollWidth,
+          h: document.documentElement.scrollHeight,
+        }));
+        const clip = {
+          x: Math.max(0, box.x - pad),
+          y: Math.max(0, box.y - pad),
+          width: Math.min(pageDoc.w, box.width + 2 * pad),
+          height: Math.min(pageDoc.h, box.height + 2 * pad),
+        };
+        buffer = await p.screenshot({ fullPage: true, clip });
+      } else {
+        buffer = await locator.screenshot();
+      }
+    } else {
+      buffer = await locator.screenshot();
+    }
   } else {
     buffer = await p.screenshot({ fullPage: opts.fullPage });
   }
 
-  const size = opts.selector
-    ? await p.locator(opts.selector).first().boundingBox()
-    : p.viewportSize();
+  // Always report the actual captured image dimensions. Reading from the
+  // PNG IHDR chunk is cheap and works for selector, viewport, and
+  // full-page captures alike — viewportSize() lies for full-page since
+  // the rendered image is taller than the viewport.
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
 
-  return {
-    buffer,
-    width: size?.width ?? 0,
-    height: size?.height ?? 0,
-  };
+  // Report overflow info so callers can hint at --full-page when content
+  // extends below the viewport.
+  let pageHeight: number | undefined;
+  let viewportHeight: number | undefined;
+  if (!opts.selector && !opts.fullPage) {
+    const vp = p.viewportSize();
+    if (vp) {
+      viewportHeight = vp.height;
+      pageHeight = await p.evaluate(() => document.documentElement.scrollHeight);
+    }
+  }
+
+  return { buffer, width, height, matchCount, pageHeight, viewportHeight };
 }
 
 /**
@@ -183,7 +234,12 @@ export async function takeResponsiveScreenshots(opts: {
     await p.waitForTimeout(100);
     const buffer = await p.screenshot({ fullPage: opts.fullPage });
     const label = width <= 480 ? `mobile-${width}` : width <= 1024 ? `tablet-${width}` : `desktop-${width}`;
-    results.push({ width, height, buffer, label });
+    // Report the ACTUAL captured image dimensions, not the formula-derived
+    // viewport. Matters for full-page captures where the image is taller
+    // than the viewport.
+    const actualWidth = buffer.readUInt32BE(16);
+    const actualHeight = buffer.readUInt32BE(20);
+    results.push({ width: actualWidth, height: actualHeight, buffer, label });
   }
 
   // Restore original viewport

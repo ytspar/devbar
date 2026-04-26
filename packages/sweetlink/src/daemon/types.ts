@@ -31,6 +31,7 @@ export type DaemonAction =
   | 'screenshot-responsive'
   | 'snapshot'
   | 'click-ref'
+  | 'click-css'
   | 'fill-ref'
   | 'hover-ref'
   | 'press-key'

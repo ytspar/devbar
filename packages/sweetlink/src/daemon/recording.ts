@@ -17,7 +17,8 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { SessionManifest, ActionEntry } from './session.js';
 import { installCursorHighlight } from './cursor.js';
-import { installListeners } from './listeners.js';
+import { consoleBuffer, installListeners, networkBuffer } from './listeners.js';
+import { DEFAULT_VIEWPORT } from '../viewportUtils.js';
 
 type Browser = import('playwright').Browser;
 type BrowserContext = import('playwright').BrowserContext;
@@ -27,7 +28,10 @@ type Page = import('playwright').Page;
 // Constants
 // ============================================================================
 
-const RECORDING_VIEWPORT = { width: 1280, height: 720 };
+// Match the daemon's default viewport so what's recorded looks like what
+// the user sees in their normal browser tab. Callers can override via
+// startRecording's `viewport` option (e.g. `record start --viewport mobile`).
+const RECORDING_VIEWPORT = DEFAULT_VIEWPORT;
 
 // ============================================================================
 // State
@@ -45,6 +49,10 @@ let recordingVideoPath: string | null = null;
 let recordingUrl: string | null = null;
 let recordingGitBranch: string | null = null;
 let recordingGitCommit: string | null = null;
+// Buffer cursors snapshotted at startRecording so the manifest only counts
+// events that landed during this session (the ring buffers are global).
+let consoleStartCursor = 0;
+let networkStartCursor = 0;
 
 function detectGit(): { branch: string | null; commit: string | null } {
   try {
@@ -71,7 +79,8 @@ function detectGit(): { branch: string | null; commit: string | null } {
 export async function startRecording(
   browser: Browser,
   url: string,
-  outputDir: string
+  outputDir: string,
+  options?: { viewport?: { width: number; height: number } }
 ): Promise<{ sessionId: string }> {
   if (recording) {
     throw new Error('Recording already in progress. Stop it first.');
@@ -81,12 +90,14 @@ export async function startRecording(
   sessionDir = path.join(outputDir, sessionId);
   await fs.mkdir(sessionDir, { recursive: true });
 
+  const viewport = options?.viewport ?? RECORDING_VIEWPORT;
+
   // Create a new context with video recording
   recordingContext = await browser.newContext({
-    viewport: RECORDING_VIEWPORT,
+    viewport,
     recordVideo: {
       dir: sessionDir,
-      size: RECORDING_VIEWPORT,
+      size: viewport,
     },
   });
 
@@ -98,19 +109,24 @@ export async function startRecording(
   // Install event listeners for ring buffer capture during recording
   installListeners(recordingPage);
 
-  // Navigate to the same URL
-  await recordingPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-
+  // Mark session start BEFORE navigating so any console/network events
+  // emitted during the initial page load are attributed to this session.
   recording = true;
   startedAt = Date.now();
   actions = [];
   screenshotPaths = [];
+  consoleStartCursor = consoleBuffer.size;
+  networkStartCursor = networkBuffer.size;
   recordingUrl = url;
+
+  // Navigate to the same URL (events from this load count toward the session)
+  await recordingPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+
   const git = detectGit();
   recordingGitBranch = git.branch;
   recordingGitCommit = git.commit;
 
-  console.error(`[Daemon] Recording started: ${sessionId} (video: ${RECORDING_VIEWPORT.width}x${RECORDING_VIEWPORT.height})`);
+  console.error(`[Daemon] Recording started: ${sessionId} (video: ${viewport.width}x${viewport.height})`);
   return { sessionId };
 }
 
@@ -139,7 +155,55 @@ export async function logAction(
   const screenshotPath = path.join(sessionDir, screenshotName);
 
   try {
+    // If we have a bounding box, briefly inject a marker pulse at the
+    // action's center so the action screenshot makes the click site
+    // visible. The marker is removed before resolving.
+    let markerInjected = false;
+    if (boundingBox) {
+      const cx = Math.round(boundingBox.x + boundingBox.width / 2);
+      const cy = Math.round(boundingBox.y + boundingBox.height / 2);
+      try {
+        await page.evaluate(
+          ({ cx, cy }) => {
+            const m = document.createElement('div');
+            m.id = '__sl_action_marker__';
+            Object.assign(m.style, {
+              position: 'fixed',
+              left: `${cx}px`,
+              top: `${cy}px`,
+              width: '0', height: '0',
+              pointerEvents: 'none',
+              zIndex: '2147483647',
+              transform: 'translate(-50%, -50%)',
+              boxSizing: 'border-box',
+            });
+            const dot = document.createElement('div');
+            Object.assign(dot.style, {
+              position: 'absolute',
+              left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+              width: '20px', height: '20px',
+              borderRadius: '50%',
+              background: 'rgba(255, 64, 32, 0.85)',
+              border: '3px solid #fff',
+              boxShadow: '0 0 0 2px rgba(255, 64, 32, 0.5), 0 2px 8px rgba(0,0,0,0.3)',
+            });
+            m.appendChild(dot);
+            document.body.appendChild(m);
+          },
+          { cx, cy },
+        );
+        markerInjected = true;
+      } catch { /* page may not be ready */ }
+    }
     const buffer = await page.screenshot();
+    if (markerInjected) {
+      try {
+        await page.evaluate(() => {
+          const m = document.getElementById('__sl_action_marker__');
+          if (m) m.remove();
+        });
+      } catch { /* ignore */ }
+    }
     await fs.writeFile(screenshotPath, buffer);
     screenshotPaths.push(screenshotPath);
   } catch {
@@ -165,8 +229,9 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     return null;
   }
 
+  const startedAtMs = startedAt;
   const endedAt = Date.now();
-  const duration = (endedAt - startedAt) / 1000;
+  const duration = (endedAt - startedAtMs) / 1000;
 
   // Get video path BEFORE closing (it's set when the page was created)
   let videoFilename: string | undefined;
@@ -204,18 +269,27 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     }
   }
 
+  // Count only entries pushed AFTER startRecording (cursor-based). The
+  // ring buffers are daemon-global so timestamp filtering alone would
+  // miss events that fire after startRecording but share a millisecond
+  // with init-time events. Cursor-based slicing is atomic.
+  const consoleSlice = consoleBuffer.toArray().slice(consoleStartCursor);
+  const networkSlice = networkBuffer.toArray().slice(networkStartCursor);
+  const consoleErrors = consoleSlice.filter((e) => e.level === 'error').length;
+  const networkFailures = networkSlice.filter((e) => e.status === 0 || e.status >= 400).length;
+
   const manifest: SessionManifest = {
     sessionId,
     url: recordingUrl ?? undefined,
     gitBranch: recordingGitBranch ?? undefined,
     gitCommit: recordingGitCommit ?? undefined,
-    startedAt: new Date(startedAt).toISOString(),
+    startedAt: new Date(startedAtMs).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     duration,
     commands: actions,
     screenshots: screenshotPaths.map((p) => path.basename(p)),
     video: videoFilename,
-    errors: { console: 0, network: 0, server: 0 },
+    errors: { console: consoleErrors, network: networkFailures, server: 0 },
   };
 
   // Write manifest

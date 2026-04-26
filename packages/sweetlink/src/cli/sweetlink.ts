@@ -16,6 +16,7 @@ import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
 import { daemonRequest, ensureDaemon, getDaemonStatus, stopDaemon } from '../daemon/client.js';
+import { extractPort } from '../daemon/stateFile.js';
 import { uploadEvidence } from '../daemon/evidence.js';
 import type {
   A11yData,
@@ -532,6 +533,8 @@ async function screenshot(options: {
   width?: number;
   height?: number;
   hover?: boolean;
+  /** Pixels of extra context around a --selector capture. */
+  padding?: number;
   url?: string;
   wait?: boolean;
   waitTimeout?: number;
@@ -602,8 +605,12 @@ async function screenshot(options: {
       selector: options.selector,
       fullPage: options.fullPage,
       viewport: options.viewport,
+      padding: (options as { padding?: number }).padding,
     });
-    const data = resp.data as { screenshot: string; width: number; height: number };
+    const data = resp.data as {
+      screenshot: string; width: number; height: number;
+      matchCount?: number; pageHeight?: number; viewportHeight?: number;
+    };
     const outputPath = options.output || getDefaultScreenshotPath();
     ensureDir(outputPath);
     fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
@@ -615,6 +622,25 @@ async function screenshot(options: {
       'Daemon (hifi)',
       options.selector
     );
+
+    // UX: warn about silent .first() when multiple elements match.
+    if (options.selector && data.matchCount && data.matchCount > 1) {
+      console.warn(
+        `[Sweetlink] ⚠ Selector '${options.selector}' matched ${data.matchCount} elements; captured the first. ` +
+        `Use --index N (with click) or a more specific selector to pick another.`
+      );
+    }
+    // UX: hint at --full-page when content extends below the viewport.
+    if (
+      !options.selector && !options.fullPage &&
+      data.pageHeight && data.viewportHeight && data.pageHeight > data.viewportHeight + 4
+    ) {
+      const overflow = data.pageHeight - data.viewportHeight;
+      console.log(
+        `[Sweetlink] ℹ Page extends ${overflow}px below the viewport. ` +
+        `Use --full-page to capture all of it.`
+      );
+    }
 
     return {
       path: getRelativePath(outputPath),
@@ -2553,6 +2579,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           width: getArg('--width') ? parseInt(getArg('--width')!, 10) : undefined,
           height: getArg('--height') ? parseInt(getArg('--height')!, 10) : undefined,
           hover: hasFlag('--hover'),
+          padding: getArg('--padding') ? parseInt(getArg('--padding')!, 10) : undefined,
           url: getArg('--url'),
           wait: !hasFlag('--no-wait'), // Wait by default, --no-wait to skip
           waitTimeout: getArg('--wait-timeout')
@@ -2621,21 +2648,52 @@ async function handleStatusCommand(): Promise<StatusData> {
 
       case 'click': {
         const clickTarget = getArg('--selector') ?? args[1];
+        const clickText = getArg('--text');
+        const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+
         // Route @e refs to daemon
         if (clickTarget && /^@e\d+$/.test(clickTarget)) {
-          const projRoot = findProjectRoot();
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
           const state = await ensureDaemon(projRoot, targetUrl);
           await daemonRequest(state, 'click-ref', { ref: clickTarget });
           console.log(`[Sweetlink] Clicked ${clickTarget}`);
           result = { clicked: clickTarget, found: 1, index: 0 } satisfies ClickData;
-        } else {
-          result = await click({
-            selector: clickTarget,
-            text: getArg('--text'),
-            index: getArg('--index') ? parseInt(getArg('--index')!, 10) : undefined,
-          });
+          break;
         }
+
+        // If a recording is in progress, route CSS clicks through the daemon
+        // so they target the recording page (which has no devbar/WebSocket
+        // bridge) and get logged into the session manifest.
+        try {
+          const status = await getDaemonStatus(projRoot, extractPort(targetUrl));
+          if (status.running) {
+            const state = await ensureDaemon(projRoot, targetUrl);
+            const recStatus = await daemonRequest(state, 'record-status');
+            const recData = recStatus.data as { recording?: boolean } | undefined;
+            if (recData?.recording) {
+              const resp = await daemonRequest(state, 'click-css', {
+                selector: clickTarget,
+                text: clickText,
+                index: clickIndex,
+              });
+              const data = resp.data as { clicked?: string; found?: number; index?: number };
+              console.log(`[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`);
+              result = {
+                clicked: data.clicked ?? 'unknown',
+                found: data.found ?? 1,
+                index: data.index ?? clickIndex,
+              } satisfies ClickData;
+              break;
+            }
+          }
+        } catch { /* fall through to WS path */ }
+
+        result = await click({
+          selector: clickTarget,
+          text: clickText,
+          index: clickIndex,
+        });
         break;
       }
 
@@ -3067,12 +3125,17 @@ async function handleStatusCommand(): Promise<StatusData> {
       case 'daemon': {
         const subcommand = args[1];
         const projRoot = findProjectRoot();
+        // Daemon state files are scoped by app port (`daemon-<port>.json`),
+        // so honour --url for status/stop too — otherwise they look up the
+        // un-suffixed `daemon.json` and miss the daemon that `start`
+        // wrote with --url.
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        const appPort = extractPort(targetUrl);
         if (subcommand === 'stop') {
-          const stopped = await stopDaemon(projRoot);
+          const stopped = await stopDaemon(projRoot, appPort);
           console.log(stopped ? '[Sweetlink] Daemon stopped.' : '[Sweetlink] No daemon running.');
           result = { running: false } satisfies DaemonStatusData;
         } else if (subcommand === 'start') {
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
           const headedFlag = hasFlag('--headed');
           const state = await ensureDaemon(projRoot, targetUrl, { headed: headedFlag });
           console.log(`[Sweetlink] Daemon running on port ${state.port} (PID: ${state.pid})`);
@@ -3084,7 +3147,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           } satisfies DaemonStatusData;
         } else {
           // Default: status
-          const status = await getDaemonStatus(projRoot);
+          const status = await getDaemonStatus(projRoot, appPort);
           if (status.running) {
             console.log(
               `[Sweetlink] Daemon running: port=${status.port} pid=${status.pid} uptime=${status.uptime}s`
@@ -3181,7 +3244,16 @@ async function handleStatusCommand(): Promise<StatusData> {
       });
       origExit(1);
     }
-    console.error('[Sweetlink] Fatal error:', error);
+    // For Error objects, print just the message — the stack is rarely useful
+    // to end users and clutters the output. Set SWEETLINK_DEBUG=1 to see it.
+    if (error instanceof Error) {
+      console.error(`[Sweetlink] ${error.message}`);
+      if (process.env.SWEETLINK_DEBUG === '1' && error.stack) {
+        console.error(error.stack);
+      }
+    } else {
+      console.error('[Sweetlink] Fatal error:', error);
+    }
     process.exit(1);
   }
 })();

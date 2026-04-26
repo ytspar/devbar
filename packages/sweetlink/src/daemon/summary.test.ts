@@ -107,9 +107,9 @@ describe('generateSummary', () => {
       expect(result).toContain('**Git:** unknown @ abc1234');
     });
 
-    it('omits git line when neither branch nor commit provided', () => {
+    it('shows "(not in a repository)" when neither branch nor commit provided', () => {
       const result = generateSummary(makeOptions());
-      expect(result).not.toContain('**Git:**');
+      expect(result).toContain('**Git:** (not in a repository)');
     });
   });
 
@@ -166,14 +166,16 @@ describe('generateSummary', () => {
     it('lists actions in a table', () => {
       const manifest = makeManifest({
         commands: [
-          { timestamp: 1.5, action: 'click', args: ['#button'], duration: 50 },
-          { timestamp: 3.2, action: 'fill', args: ['#input', 'hello'], duration: 100 },
+          // CLI flag form (CSS selector) — should be unwrapped from --selector=...
+          { timestamp: 1.5, action: 'click', args: ['--selector=#button'], duration: 50 },
+          // Ref-based fill — should render as "@e2 ← \"hello\""
+          { timestamp: 3.2, action: 'fill', args: ['@e2', 'hello'], duration: 100, screenshot: 'action-1.png' },
         ],
       });
       const result = generateSummary(makeOptions({ manifest }));
-      expect(result).toContain('| Time | Action | Details |');
-      expect(result).toContain('| 1.5s | click | "#button" |');
-      expect(result).toContain('| 3.2s | fill | "#input" "hello" |');
+      expect(result).toContain('| Time | Action | Target | Screenshot |');
+      expect(result).toContain('| 1.5s | click | #button |');
+      expect(result).toContain('| 3.2s | fill | @e2 ← "hello" | [`action-1.png`](action-1.png) |');
     });
   });
 

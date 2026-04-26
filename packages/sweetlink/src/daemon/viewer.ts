@@ -24,6 +24,13 @@ export interface ViewerOptions {
   outputPath?: string;
   consoleEntries?: ConsoleEntry[];
   networkEntries?: NetworkEntry[];
+  /**
+   * If true, embed the video as a base64 data URL — produces a single
+   * portable HTML file (good for emailing/sharing). Defaults to false:
+   * the viewer references `session.webm` in the same directory, which
+   * keeps the HTML ~280× smaller for typical session lengths.
+   */
+  inlineVideo?: boolean;
 }
 
 function escapeHtml(str: string): string {
@@ -39,13 +46,18 @@ export async function generateViewer(
   manifest: SessionManifest,
   options: ViewerOptions
 ): Promise<string> {
-  // Load video as base64 if available
+  // The viewer can reference the WebM by relative path (default: keeps
+  // the HTML small; reader needs both files) OR inline as base64 (for
+  // a single-file shareable artifact).
+  const wantInline = options.inlineVideo === true;
   let videoBase64: string | null = null;
+  let videoExists = false;
   if (manifest.video) {
     const videoPath = path.join(options.sessionDir, manifest.video);
     try {
       const buffer = await fs.readFile(videoPath);
-      videoBase64 = buffer.toString('base64');
+      videoExists = true;
+      if (wantInline) videoBase64 = buffer.toString('base64');
     } catch { /* video file may not exist */ }
   }
 
@@ -86,7 +98,7 @@ export async function generateViewer(
     </div>`;
   }).join('\n');
 
-  const hasVideo = videoBase64 !== null;
+  const hasVideo = videoExists;
 
   // Generate summary markdown for clipboard copy
   const summaryMd = generateSummary({
@@ -203,7 +215,9 @@ export async function generateViewer(
   <div class="video-pane">
     <div class="video-container" id="video-container">
       ${hasVideo
-        ? `<video id="player" src="data:video/webm;base64,${videoBase64}" preload="auto"></video>`
+        ? videoBase64
+          ? `<video id="player" src="data:video/webm;base64,${videoBase64}" preload="auto"></video>`
+          : `<video id="player" src="${escapeHtml(manifest.video!)}" preload="auto"></video>`
         : screenshots.length > 0
           ? `<img id="screenshot-img" src="data:image/png;base64,${screenshots[0]!.data}" />`
           : '<div class="empty">No video or screenshots</div>'

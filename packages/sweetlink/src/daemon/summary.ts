@@ -38,13 +38,21 @@ function formatTimestamp(seconds: number): string {
 }
 
 function formatDate(iso: string): string {
+  // Emit ISO 8601 with timezone so the report is unambiguous when shared
+  // across machines/timezones. e.g. `2026-04-26T18:57:00-07:00`.
   const d = new Date(iso);
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
   const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const tzMin = -d.getTimezoneOffset();
+  const tzSign = tzMin >= 0 ? '+' : '-';
+  const tzAbs = Math.abs(tzMin);
+  const tz = `${tzSign}${pad(Math.floor(tzAbs / 60))}:${pad(tzAbs % 60)}`;
+  return `${year}-${month}-${day}T${hh}:${mm}:${ss}${tz}`;
 }
 
 function statusCell(count: number, label: string): string {
@@ -57,9 +65,39 @@ function escapeMarkdown(text: string): string {
   return text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
 }
 
+/**
+ * Render the action arguments as a human-friendly description.
+ * - Ref-based actions (click @e2): show "@e2"
+ * - CSS-selector actions (click --selector=#cta): show "#cta"
+ * - Text-search actions (click --text=Submit): show ‟Submit"
+ * - Fill actions: show "@e2 ← \"value\""
+ */
 function formatActionDetails(entry: ActionEntry): string {
-  const args = entry.args.map((a) => `"${a}"`).join(' ');
-  return escapeMarkdown(args);
+  const args = entry.args;
+  if (args.length === 0) return '';
+
+  // Ref form: ['@e2', value?]
+  const refArg = args.find((a) => /^@e\d+$/.test(a));
+  if (refArg) {
+    if (entry.action === 'fill' && args.length >= 2) {
+      const val = args[args.indexOf(refArg) + 1] ?? '';
+      return escapeMarkdown(`${refArg} ← "${val}"`);
+    }
+    return escapeMarkdown(refArg);
+  }
+
+  // CLI-flag form: ['--selector=#cta', '--full-page', ...]
+  const selectorFlag = args.find((a) => a.startsWith('--selector='));
+  if (selectorFlag) {
+    return escapeMarkdown(selectorFlag.slice('--selector='.length));
+  }
+  const textFlag = args.find((a) => a.startsWith('--text='));
+  if (textFlag) {
+    return escapeMarkdown(`"${textFlag.slice('--text='.length)}"`);
+  }
+
+  // Fallback: quote everything.
+  return escapeMarkdown(args.map((a) => `"${a}"`).join(' '));
 }
 
 // ============================================================================
@@ -84,6 +122,10 @@ function renderMetadata(options: SummaryOptions): string {
     const branch = gitBranch ?? 'unknown';
     const commit = gitCommit ? ` @ ${gitCommit.slice(0, 7)}` : '';
     lines.push(`**Git:** ${branch}${commit}  `);
+  } else {
+    // Surface the absence of git context — silently dropping it makes
+    // the session look reproducible when it isn't.
+    lines.push('**Git:** (not in a repository)  ');
   }
 
   return lines.join('\n');
@@ -119,14 +161,15 @@ function renderTimeline(manifest: SessionManifest): string {
   const lines = [
     '## Action Timeline',
     '',
-    '| Time | Action | Details |',
-    '|------|--------|---------|',
+    '| Time | Action | Target | Screenshot |',
+    '|------|--------|--------|------------|',
   ];
 
   for (const cmd of manifest.commands) {
     const time = formatTimestamp(cmd.timestamp);
     const details = formatActionDetails(cmd);
-    lines.push(`| ${time} | ${cmd.action} | ${details} |`);
+    const shot = cmd.screenshot ? `[\`${cmd.screenshot}\`](${cmd.screenshot})` : '—';
+    lines.push(`| ${time} | ${cmd.action} | ${details} | ${shot} |`);
   }
 
   return lines.join('\n');

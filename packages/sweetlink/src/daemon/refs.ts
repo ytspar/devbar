@@ -152,13 +152,18 @@ export async function buildRefMap(
  */
 export function resolveRef(page: Page, ref: string): Locator {
   if (!currentRefMap) {
-    throw new Error('No snapshot taken yet. Run `snapshot -i` first.');
+    throw new Error('No snapshot taken yet. Run `sweetlink snapshot` first to populate refs.');
   }
 
   const entry = currentRefMap.byRef.get(ref);
   if (!entry) {
+    const available = Array.from(currentRefMap.byRef.keys());
+    const preview = available.length <= 10
+      ? available.join(', ')
+      : available.slice(0, 8).join(', ') + ` ... (${available.length - 8} more)`;
     throw new Error(
-      `Unknown ref ${ref}. Available refs: ${Array.from(currentRefMap.byRef.keys()).join(', ')}`
+      `Ref ${ref} is not in the current snapshot (have ${available.length}: ${preview}). ` +
+      `If the page changed, re-run \`sweetlink snapshot\` to refresh refs.`
     );
   }
 

@@ -52,15 +52,17 @@ const pendingRequests = new Map<string, { startTime: number; method: string; url
 // Setup
 // ============================================================================
 
-let listenersInstalled = false;
+// Track installed pages so a daemon with both a main page and a recording
+// page captures events from both into the shared ring buffers.
+const installedPages = new WeakSet<Page>();
 
 /**
- * Install event listeners on the daemon page.
- * Safe to call multiple times — only installs once.
+ * Install event listeners on a page. Safe to call multiple times for the
+ * same page (no-op on re-install) and supports multiple distinct pages.
  */
 export function installListeners(page: Page): void {
-  if (listenersInstalled) return;
-  listenersInstalled = true;
+  if (installedPages.has(page)) return;
+  installedPages.add(page);
 
   // Console events
   page.on('console', (msg) => {

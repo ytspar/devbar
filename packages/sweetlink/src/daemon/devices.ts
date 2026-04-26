@@ -75,15 +75,37 @@ export const DEVICE_PRESETS: Record<string, DeviceConfig> = {
 };
 
 /**
+ * Short aliases that resolve to a canonical preset key. Lets users say
+ * `ipad` instead of remembering `ipad-mini` vs `ipad-pro-11`.
+ */
+const DEVICE_ALIASES: Record<string, string> = {
+  iphone: 'iphone-14',
+  ipad: 'ipad-mini',
+  pixel: 'pixel-7',
+  android: 'pixel-7',
+  mobile: 'iphone-14',
+  tablet: 'ipad-mini',
+};
+
+/** Names a user might type (presets + aliases) for help/error messages. */
+export function listDeviceNames(): string[] {
+  return [
+    ...Object.keys(DEVICE_PRESETS),
+    ...Object.keys(DEVICE_ALIASES).map((a) => `${a} (→${DEVICE_ALIASES[a]})`),
+  ].sort();
+}
+
+/**
  * Parse a device name (case-insensitive) to a DeviceConfig.
  * Falls back to custom viewport parsing for "WIDTHxHEIGHT" format.
  */
 export function parseDevice(name: string): DeviceConfig | null {
   const normalized = name.toLowerCase().replace(/\s+/g, '-');
+  const resolved = DEVICE_ALIASES[normalized] ?? normalized;
 
   // Check presets
-  if (DEVICE_PRESETS[normalized]) {
-    return DEVICE_PRESETS[normalized]!;
+  if (DEVICE_PRESETS[resolved]) {
+    return DEVICE_PRESETS[resolved]!;
   }
 
   // Try WIDTHxHEIGHT format
@@ -105,14 +127,18 @@ export async function takeDeviceScreenshots(
   page: Page,
   devices: string[],
   options?: { fullPage?: boolean }
-): Promise<Array<{ device: DeviceConfig; buffer: Buffer }>> {
+): Promise<{
+  results: Array<{ device: DeviceConfig; buffer: Buffer }>;
+  unknown: string[];
+}> {
   const results: Array<{ device: DeviceConfig; buffer: Buffer }> = [];
+  const unknown: string[] = [];
   const originalViewport = page.viewportSize() ?? { width: 1440, height: 900 };
 
   for (const deviceName of devices) {
     const device = parseDevice(deviceName);
     if (!device) {
-      console.error(`[Daemon] Unknown device: ${deviceName}`);
+      unknown.push(deviceName);
       continue;
     }
 
@@ -125,5 +151,5 @@ export async function takeDeviceScreenshots(
   // Restore original viewport
   await page.setViewportSize(originalViewport);
 
-  return results;
+  return { results, unknown };
 }

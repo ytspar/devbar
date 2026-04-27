@@ -4,4 +4,4 @@
  * Re-exports all lazy loading modules.
  */
 
-export { getHtml2Canvas, isHtml2CanvasLoaded, preloadHtml2Canvas } from './lazyHtml2Canvas.js';
+export { getHtml2Canvas } from './lazyHtml2Canvas.js';

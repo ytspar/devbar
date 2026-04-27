@@ -10,9 +10,9 @@
 
 import { expect, test } from '@playwright/test';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import * as http from 'http';
 import { cli, freePort } from './_harness.js';
 
 test.describe.configure({ mode: 'serial', timeout: 30_000 });
@@ -20,12 +20,18 @@ test.describe.configure({ mode: 'serial', timeout: 30_000 });
 test.describe('Wait — happy path baselines', () => {
   test('exits 0 quickly when server is already up', async () => {
     const port = await freePort();
-    const server = http.createServer((_req, res) => { res.writeHead(200); res.end('ok'); });
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200);
+      res.end('ok');
+    });
     await new Promise<void>((r) => server.listen(port, '127.0.0.1', r));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sl-wait-'));
     try {
       const t0 = Date.now();
-      const result = await cli(['wait', '--url', `http://127.0.0.1:${port}/`, '--timeout', '5000'], tmp);
+      const result = await cli(
+        ['wait', '--url', `http://127.0.0.1:${port}/`, '--timeout', '5000'],
+        tmp
+      );
       const elapsed = Date.now() - t0;
       expect(result.exitCode, result.stderr).toBe(0);
       expect(elapsed).toBeLessThan(2_000);
@@ -40,10 +46,7 @@ test.describe('Wait — happy path baselines', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sl-wait-'));
     try {
       const t0 = Date.now();
-      const result = await cli(
-        ['wait', '--url', 'http://127.0.0.1:1/', '--timeout', '1500'],
-        tmp,
-      );
+      const result = await cli(['wait', '--url', 'http://127.0.0.1:1/', '--timeout', '1500'], tmp);
       const elapsed = Date.now() - t0;
       expect(result.exitCode).toBe(1);
       // Should respect the timeout (allow a small overshoot for process spawn).
@@ -61,14 +64,17 @@ test.describe('Wait — happy path baselines', () => {
     try {
       // Start the server 700ms after kicking off `wait`.
       const startServer = setTimeout(() => {
-        server = http.createServer((_req, res) => { res.writeHead(200); res.end('ok'); });
+        server = http.createServer((_req, res) => {
+          res.writeHead(200);
+          res.end('ok');
+        });
         server.listen(port, '127.0.0.1');
       }, 700);
 
       const t0 = Date.now();
       const result = await cli(
         ['wait', '--url', `http://127.0.0.1:${port}/`, '--timeout', '5000'],
-        tmp,
+        tmp
       );
       const elapsed = Date.now() - t0;
       clearTimeout(startServer);

@@ -7,6 +7,7 @@
  * Allows taking screenshots, querying DOM, getting console logs, and executing JavaScript.
  */
 
+import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WebSocket } from 'ws';
@@ -119,6 +120,76 @@ function ensureDir(filePath: string): void {
   if (dir && dir !== '.' && !fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+}
+
+/**
+ * Find the most recent recording-session directory.
+ * Returns the absolute path or null if no sessions exist.
+ */
+function findLatestSessionDir(baseDir: string): string | null {
+  if (!fs.existsSync(baseDir)) return null;
+  const sessions = fs
+    .readdirSync(baseDir)
+    .filter((f) => f.startsWith('session-'))
+    .sort()
+    .reverse();
+  if (sessions.length === 0) return null;
+  return path.join(baseDir, sessions[0]!);
+}
+
+/**
+ * Open a file in the default GUI handler. Cross-platform helper used by
+ * `record stop` (auto-open viewer) and `sessions open` (browse index).
+ * Failure is best-effort — the path is already on disk, the user can open
+ * it manually if no GUI is available.
+ */
+function openInBrowser(filePath: string): void {
+  let cmd: string;
+  let args: string[];
+  switch (process.platform) {
+    case 'darwin':
+      cmd = 'open';
+      args = [filePath];
+      break;
+    case 'win32':
+      cmd = 'cmd';
+      args = ['/c', 'start', '', filePath];
+      break;
+    default:
+      cmd = 'xdg-open';
+      args = [filePath];
+      break;
+  }
+  try {
+    childProcess.spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  } catch {
+    /* best effort — user can open manually */
+  }
+}
+
+/**
+ * Reject --output paths that escape the project root.
+ *
+ * Any path is fine when it resolves inside the project (relative or absolute);
+ * paths that resolve outside (e.g. `--output ../../../etc/passwd`,
+ * `--output /Users/victim/.zshrc`, or batch JSON `output: "/etc/cron.d/x"`)
+ * are blocked unless `SWEETLINK_ALLOW_OUTSIDE_OUTPUT=1` is set. Without this
+ * gate the batch JSON-stdin mode lets a less-trusted upstream agent write
+ * arbitrary content to arbitrary paths the user can write.
+ */
+function assertOutputInRoot(outputPath: string): string {
+  const projectRoot = path.resolve(findProjectRoot());
+  const resolved = path.resolve(outputPath);
+  if (process.env.SWEETLINK_ALLOW_OUTSIDE_OUTPUT === '1') return resolved;
+  if (resolved !== projectRoot && !resolved.startsWith(`${projectRoot}${path.sep}`)) {
+    throw new Error(
+      `Refusing to write outside project root.\n` +
+        `  output:  ${resolved}\n` +
+        `  project: ${projectRoot}\n` +
+        `Pass a path inside the project, or set SWEETLINK_ALLOW_OUTSIDE_OUTPUT=1 to override.`
+    );
+  }
+  return resolved;
 }
 
 /**
@@ -1921,26 +1992,31 @@ async function getVitals(options: { format?: 'text' | 'json' }): Promise<VitalsD
       console.log(`  URL: ${vitalsData.url}`);
       console.log(`  ${summary}`);
 
-      // Detailed breakdown
+      // Detailed breakdown — pick a green/yellow/red color per Web Vitals threshold
+      const ANSI_GREEN = '\x1b[32m';
+      const ANSI_YELLOW = '\x1b[33m';
+      const ANSI_RED = '\x1b[31m';
+      const ANSI_RESET = '\x1b[0m';
+      const thresholdColor = (value: number, good: number, ok: number): string => {
+        if (value <= good) return ANSI_GREEN;
+        if (value <= ok) return ANSI_YELLOW;
+        return ANSI_RED;
+      };
       if (vitalsData.fcp !== null) {
         const fcp = vitalsData.fcp as number;
-        const color = fcp <= 1800 ? '\x1b[32m' : fcp <= 3000 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  FCP: ${color}${fcp}ms\x1b[0m`);
+        console.log(`  FCP: ${thresholdColor(fcp, 1800, 3000)}${fcp}ms${ANSI_RESET}`);
       }
       if (vitalsData.lcp !== null) {
         const lcp = vitalsData.lcp as number;
-        const color = lcp <= 2500 ? '\x1b[32m' : lcp <= 4000 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  LCP: ${color}${lcp}ms\x1b[0m`);
+        console.log(`  LCP: ${thresholdColor(lcp, 2500, 4000)}${lcp}ms${ANSI_RESET}`);
       }
       if (vitalsData.cls !== null) {
         const cls = vitalsData.cls as number;
-        const color = cls <= 0.1 ? '\x1b[32m' : cls <= 0.25 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  CLS: ${color}${cls}\x1b[0m`);
+        console.log(`  CLS: ${thresholdColor(cls, 0.1, 0.25)}${cls}${ANSI_RESET}`);
       }
       if (vitalsData.inp !== null) {
         const inp = vitalsData.inp as number;
-        const color = inp <= 200 ? '\x1b[32m' : inp <= 500 ? '\x1b[33m' : '\x1b[31m';
-        console.log(`  INP: ${color}${inp}ms\x1b[0m`);
+        console.log(`  INP: ${thresholdColor(inp, 200, 500)}${inp}ms${ANSI_RESET}`);
       }
       if (vitalsData.pageSize !== null) {
         const sizeKB = Math.round((vitalsData.pageSize as number) / 1024);
@@ -2628,6 +2704,37 @@ async function runBatchFromStdin(): Promise<void> {
   if (!allOk) process.exit(1);
 }
 
+/**
+ * Resolve the on-disk path for a capture artifact (term .cast, sim .mp4).
+ * Honours --app/--run for the app-scoped hierarchy (delegates to runSlot)
+ * and the historical flat layout when --app is absent. Used by both the
+ * batch JSON-stdin path and the direct CLI handlers so they cannot drift.
+ */
+async function resolveCapturePath(opts: {
+  kind: 'term' | 'sim';
+  label: string | undefined;
+  output?: string;
+  app?: string;
+  run?: string;
+  ext: string; // 'cast' | 'mp4'
+}): Promise<string> {
+  if (opts.output) return assertOutputInRoot(opts.output);
+  const labelSlug = (opts.label ?? 'batch')
+    .replace(/[^a-z0-9]/gi, '-')
+    .toLowerCase()
+    .slice(0, 40);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `${labelSlug}-${stamp}.${opts.ext}`;
+  const { runSlot } = await import('../runs.js');
+  const dir = runSlot({
+    baseDir: findProjectRoot(),
+    app: opts.app,
+    run: opts.run,
+    kind: opts.kind,
+  });
+  return assertOutputInRoot(path.join(dir, filename));
+}
+
 async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown> {
   const mode = cap.mode as string;
   if (!mode) throw new Error('Capture entry missing required "mode" field.');
@@ -2636,14 +2743,14 @@ async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown
     const command = cap.command as string;
     if (!command) throw new Error('term capture missing "command".');
     const label = (cap.label as string | undefined) ?? 'batch';
-    const labelSlug = label
-      .replace(/[^a-z0-9]/gi, '-')
-      .toLowerCase()
-      .slice(0, 40);
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const output =
-      (cap.output as string | undefined) ??
-      path.join(findProjectRoot(), '.sweetlink', 'term', `${labelSlug}-${stamp}.cast`);
+    const output = await resolveCapturePath({
+      kind: 'term',
+      label,
+      output: cap.output as string | undefined,
+      app: cap.app as string | undefined,
+      run: cap.run as string | undefined,
+      ext: 'cast',
+    });
     ensureDir(output);
     const { captureTerminal } = await import('../term/recorder.js');
     const { generatePlayer } = await import('../term/player.js');
@@ -2654,6 +2761,7 @@ async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown
       shell: cap.shell as string | undefined,
       cols: typeof cap.cols === 'number' ? cap.cols : undefined,
       rows: typeof cap.rows === 'number' ? cap.rows : undefined,
+      inheritEnv: cap.inheritEnv === true,
     });
     const playerPath = await generatePlayer({ castPath: output });
     return {
@@ -2669,14 +2777,14 @@ async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown
     const command = cap.command as string;
     if (!command) throw new Error(`${mode} capture missing "command".`);
     const label = (cap.label as string | undefined) ?? 'batch';
-    const labelSlug = label
-      .replace(/[^a-z0-9]/gi, '-')
-      .toLowerCase()
-      .slice(0, 40);
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const output =
-      (cap.output as string | undefined) ??
-      path.join(findProjectRoot(), '.sweetlink', 'sim', `${labelSlug}-${stamp}.mp4`);
+    const output = await resolveCapturePath({
+      kind: 'sim',
+      label,
+      output: cap.output as string | undefined,
+      app: cap.app as string | undefined,
+      run: cap.run as string | undefined,
+      ext: 'mp4',
+    });
     ensureDir(output);
     const device = cap.device as string | undefined;
     if (mode === 'sim-ios') {
@@ -2705,7 +2813,7 @@ async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown
     });
     const data = resp.data as { screenshot: string; width: number; height: number };
     if (cap.output) {
-      const outputPath = cap.output as string;
+      const outputPath = assertOutputInRoot(cap.output as string);
       ensureDir(outputPath);
       fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
       return { path: outputPath, width: data.width, height: data.height };
@@ -3235,19 +3343,13 @@ async function handleStatusCommand(): Promise<StatusData> {
           process.exit(1);
         }
         const sessionDirArg = getArg('--session') ?? '.sweetlink';
-        // Find latest session manifest
-        const sessionFiles = fs
-          .readdirSync(sessionDirArg)
-          .filter((f: string) => f.startsWith('session-'))
-          .sort()
-          .reverse();
-        if (sessionFiles.length === 0) {
+        const latestSession = findLatestSessionDir(sessionDirArg);
+        if (!latestSession) {
           console.error(
             '[Sweetlink] No session found. Run `record start` and `record stop` first.'
           );
           process.exit(1);
         }
-        const latestSession = path.join(sessionDirArg, sessionFiles[0]!);
         const manifestPath = path.join(latestSession, 'sweetlink-session.json');
         if (!fs.existsSync(manifestPath)) {
           console.error(`[Sweetlink] No manifest found at ${manifestPath}`);
@@ -3310,21 +3412,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           // Auto-open the viewer (cross-platform; --no-open to suppress)
           if (data.viewerPath && !hasFlag('--no-open')) {
             console.log(`  Viewer: ${data.viewerPath}`);
-            const { execFile } = await import('child_process');
-            // `start` on Windows is a cmd builtin, not an exe — must invoke via cmd.
-            const cmd =
-              process.platform === 'darwin'
-                ? 'open'
-                : process.platform === 'win32'
-                  ? 'cmd'
-                  : 'xdg-open';
-            const args =
-              process.platform === 'win32'
-                ? ['/c', 'start', '', data.viewerPath]
-                : [data.viewerPath];
-            execFile(cmd, args, (err) => {
-              if (err) console.error('  Could not open viewer:', err.message);
-            });
+            openInBrowser(data.viewerPath);
             console.log(`  Opened in browser.`);
           } else if (data.viewerPath) {
             console.log(`  Viewer: ${data.viewerPath}`);
@@ -3450,23 +3538,17 @@ async function handleStatusCommand(): Promise<StatusData> {
 
       case 'report': {
         const sessionDirArg = getArg('--session') ?? '.sweetlink';
-        // Find latest session directory
         if (!fs.existsSync(sessionDirArg)) {
           console.error(`[Sweetlink] Session directory not found: ${sessionDirArg}`);
           process.exit(1);
         }
-        const reportSessions = fs
-          .readdirSync(sessionDirArg)
-          .filter((f: string) => f.startsWith('session-'))
-          .sort()
-          .reverse();
-        if (reportSessions.length === 0) {
+        const reportSessionDir = findLatestSessionDir(sessionDirArg);
+        if (!reportSessionDir) {
           console.error(
             '[Sweetlink] No session found. Run `record start` and `record stop` first.'
           );
           process.exit(1);
         }
-        const reportSessionDir = path.join(sessionDirArg, reportSessions[0]!);
 
         if (hasFlag('--clipboard')) {
           // Copy SUMMARY.md to clipboard
@@ -3489,7 +3571,7 @@ async function handleStatusCommand(): Promise<StatusData> {
             );
             process.exit(1);
           }
-          result = { mode: 'clipboard', session: reportSessions[0] };
+          result = { mode: 'clipboard', session: path.basename(reportSessionDir) };
         } else if (hasFlag('--serve')) {
           // Serve viewer.html on a random port
           const viewerPath = path.join(reportSessionDir, 'viewer.html');
@@ -3568,7 +3650,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           }
           const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
           process.stdout.write(summaryContent);
-          result = { mode: 'stdout', session: reportSessions[0] };
+          result = { mode: 'stdout', session: path.basename(reportSessionDir) };
         }
         break;
       }
@@ -3875,16 +3957,7 @@ async function handleStatusCommand(): Promise<StatusData> {
         } else if (sub === 'open') {
           // Open the index.html in the browser
           if (data.indexPath) {
-            const { execFile } = await import('child_process');
-            const cmd =
-              process.platform === 'darwin'
-                ? 'open'
-                : process.platform === 'win32'
-                  ? 'cmd'
-                  : 'xdg-open';
-            const cmdArgs =
-              process.platform === 'win32' ? ['/c', 'start', '', data.indexPath] : [data.indexPath];
-            execFile(cmd, cmdArgs, () => {});
+            openInBrowser(data.indexPath);
             console.log(`[Sweetlink] Opened ${data.indexPath}`);
           }
           result = { indexPath: data.indexPath };

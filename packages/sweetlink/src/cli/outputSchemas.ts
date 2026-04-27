@@ -12,7 +12,7 @@
 export interface JsonEnvelope<T = unknown> {
   ok: boolean;
   command: string;
-  data: T;
+  data: T | null;
   error?: string;
   duration: number;
 }
@@ -124,6 +124,42 @@ export interface SnapshotData {
   diff?: string;
 }
 
+export interface InspectData {
+  url: string;
+  title: string;
+  generatedAt: string;
+  viewport: { width: number; height: number; deviceScaleFactor?: number };
+  vitals: { fcp: number | null; pageSize: number | null };
+  artifacts: {
+    dir: string;
+    summaryMarkdown: string;
+    contextJson: string;
+    screenshotPng: string;
+    snapshotMarkdown: string;
+    consoleText: string;
+    networkText: string;
+    a11yJson?: string;
+  };
+  counts: {
+    refs: number;
+    consoleEntries: number;
+    consoleErrors: number;
+    consoleWarnings: number;
+    networkEntries: number;
+    networkFailures: number;
+    a11yViolations?: number;
+    a11yIncomplete?: number;
+  };
+  refs: Array<{ ref: string; role: string; name: string }>;
+  console: { entries: unknown[]; formatted: string };
+  network: { entries: unknown[]; formatted: string };
+  a11y?: unknown;
+  failureArtifacts: string[];
+  nextActions: string[];
+  expectedOutcome?: string;
+  actionTranscript?: Array<{ action: string; target?: string; result?: string }>;
+}
+
 // ============================================================================
 // Schema string registry (for --output-schema)
 // ============================================================================
@@ -131,7 +167,7 @@ export interface SnapshotData {
 const ENVELOPE_SCHEMA = `interface JsonEnvelope<T> {
   ok: boolean;
   command: string;
-  data: T;
+  data: T | null;
   error?: string;
   duration: number;
 }`;
@@ -238,6 +274,42 @@ export const SCHEMAS: Record<string, string> = {
   tree: string;
   refs?: Array<{ ref: string; role: string; name: string }>;
   diff?: string;
+}`,
+
+  inspect: `interface InspectData {
+  url: string;
+  title: string;
+  generatedAt: string;
+  viewport: { width: number; height: number; deviceScaleFactor?: number };
+  vitals: { fcp: number | null; pageSize: number | null };
+  artifacts: {
+    dir: string;
+    summaryMarkdown: string;
+    contextJson: string;
+    screenshotPng: string;
+    snapshotMarkdown: string;
+    consoleText: string;
+    networkText: string;
+    a11yJson?: string;
+  };
+  counts: {
+    refs: number;
+    consoleEntries: number;
+    consoleErrors: number;
+    consoleWarnings: number;
+    networkEntries: number;
+    networkFailures: number;
+    a11yViolations?: number;
+    a11yIncomplete?: number;
+  };
+  refs: Array<{ ref: string; role: string; name: string }>;
+  console: { entries: unknown[]; formatted: string };
+  network: { entries: unknown[]; formatted: string };
+  a11y?: unknown;
+  failureArtifacts: string[];
+  nextActions: string[];
+  expectedOutcome?: string;
+  actionTranscript?: Array<{ action: string; target?: string; result?: string }>;
 }`,
 
   console: `interface ConsoleData {

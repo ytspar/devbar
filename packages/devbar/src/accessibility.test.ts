@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AxeResult, AxeViolation } from '@ytspar/sweetlink/types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   a11yToMarkdown,
   clearA11yCache,
@@ -408,9 +408,7 @@ describe('a11yToMarkdown', () => {
           help: 'Elements must have sufficient color contrast',
           helpUrl: 'https://example.com/color-contrast',
           tags: ['wcag2aa'],
-          nodes: [
-            { html: '<div class="low-contrast">text</div>', target: ['div.low-contrast'] },
-          ],
+          nodes: [{ html: '<div class="low-contrast">text</div>', target: ['div.low-contrast'] }],
         },
         {
           id: 'image-alt',
@@ -419,9 +417,7 @@ describe('a11yToMarkdown', () => {
           help: 'Images require alt attribute',
           helpUrl: 'https://example.com/image-alt',
           tags: ['wcag2a'],
-          nodes: [
-            { html: '<img src="photo.jpg">', target: ['img'] },
-          ],
+          nodes: [{ html: '<img src="photo.jpg">', target: ['img'] }],
         },
       ],
       passes: [],

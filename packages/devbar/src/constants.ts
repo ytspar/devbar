@@ -88,9 +88,12 @@ export const PALETTE = {
   emeraldGlow: 'rgba(16, 185, 129, 0.4)',
   emeraldDark: '#047857',
   red: '#ef4444',
+  redDark: '#dc2626',
   orange: '#f97316',
   amber: '#f59e0b',
+  amberDark: '#92400e',
   blue: '#3b82f6',
+  blueDark: '#2563eb',
   purple: '#a855f7',
   cyan: '#06b6d4',
   pink: '#ec4899',
@@ -111,9 +114,9 @@ export const BUTTON_COLORS = {
   schema: PALETTE.amber,
   a11y: PALETTE.pink,
   ruler: PALETTE.lime,
-  error: PALETTE.red,
-  warning: PALETTE.amber,
-  info: PALETTE.blue,
+  error: PALETTE.redDark,
+  warning: PALETTE.amberDark,
+  info: PALETTE.blueDark,
 } as const;
 
 /** Category colors for outline display */
@@ -595,10 +598,10 @@ export const ACTION_BUTTON_BASE_STYLES = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  width: '22px',
-  height: '22px',
-  minWidth: '22px',
-  minHeight: '22px',
+  width: '24px',
+  height: '24px',
+  minWidth: '24px',
+  minHeight: '24px',
   flexShrink: '0',
   borderRadius: '50%',
   border: '1px solid',
@@ -656,6 +659,16 @@ export const DEVBAR_STYLES = `
   transform: scale(1.1);
   background-color: var(--devbar-color-primary-glow);
   box-shadow: 0 0 8px var(--devbar-color-primary-glow);
+}
+[data-devbar] button:focus-visible,
+[data-devbar] [role="button"]:focus-visible,
+[data-devbar] [tabindex]:focus-visible,
+[data-devbar-overlay] button:focus-visible,
+[data-devbar-overlay] [role="button"]:focus-visible,
+[data-devbar-overlay] [tabindex]:focus-visible {
+  outline: 2px solid var(--devbar-color-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--devbar-color-primary-glow);
 }
 .devbar-badge {
   transition: transform 150ms ease-out, box-shadow 150ms ease-out;
@@ -722,26 +735,48 @@ export const DEVBAR_STYLES = `
   flex-basis: auto;
   flex-shrink: 0;
 }
+.devbar-actions::before {
+  content: "agent tools";
+  color: var(--devbar-color-text-muted);
+  font-size: 0.5625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0.78;
+}
 /* BASE only (< 640px): fit content, centered horizontally */
 @media (max-width: 639px) {
   /* Expanded state: center and constrain width (exclude overlays and tooltips) */
   [data-devbar]:not(.devbar-collapse):not([data-devbar-overlay]):not([data-devbar-tooltip]) {
     width: auto !important;
     min-width: auto !important;
-    max-width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 24px) !important;
+    bottom: calc(env(safe-area-inset-bottom) + 12px) !important;
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%) !important;
   }
   /* Collapsed state: JS handles positioning based on captured dot location */
   .devbar-main {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: calc(100vw - 24px);
+    padding: 0.5rem !important;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .devbar-main::-webkit-scrollbar {
+    display: none;
   }
   /* Keep status row (connection dot + info) on same line */
   .devbar-status {
     flex-wrap: nowrap !important;
     justify-content: center;
+    flex-shrink: 0;
+    scroll-snap-align: start;
   }
   .devbar-info {
     justify-content: center;
@@ -750,9 +785,20 @@ export const DEVBAR_STYLES = `
   }
   .devbar-actions {
     justify-content: space-evenly;
-    margin-top: 0.25rem;
+    margin-top: 0;
     flex-wrap: nowrap;
-    width: 100%;
+    width: auto;
+    flex-shrink: 0;
+    scroll-snap-align: end;
+  }
+  .devbar-actions::before {
+    content: "swipe tools";
+  }
+  .devbar-actions button {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
   }
   .devbar-settings-grid {
     grid-template-columns: 1fr !important;

@@ -533,12 +533,12 @@ describe('renderSettingsPopover', () => {
 
   // ---- Features section --------------------------------------------------
 
-  it('contains Features section with toggle rows', () => {
+  it('contains Evidence workflow section with toggle rows', () => {
     const state = createMockState();
     renderSettingsPopover(state);
 
     const allText = state.overlayElement!.textContent!;
-    expect(allText).toContain('Features');
+    expect(allText).toContain('Evidence workflow');
     expect(allText).toContain('Screenshot Button');
     expect(allText).toContain('Console Badges');
     expect(allText).toContain('Tooltips');

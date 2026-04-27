@@ -58,6 +58,9 @@ export {
 } from './network.js';
 // Re-export outline/schema functions
 export { extractDocumentOutline, outlineToMarkdown } from './outline.js';
+// Official plugins
+export { type AppVersionPluginOptions, appVersionPlugin } from './plugins/appVersion.js';
+export { type GitBranchPluginOptions, gitBranchPlugin } from './plugins/gitBranch.js';
 // Configuration presets
 export {
   initDebug,
@@ -84,7 +87,6 @@ export {
   type SaveLocation,
   type SettingsChangeCallback,
 } from './settings.js';
-
 // Storage inspection utilities
 export {
   type CookieItem,
@@ -100,7 +102,6 @@ export {
   setLocalStorageItem,
   setSessionStorageItem,
 } from './storage.js';
-
 // Re-export types
 export type {
   ConsoleLog,
@@ -112,7 +113,6 @@ export type {
   SweetlinkCommand,
   ThemeMode,
 } from './types.js';
-
 // Logo exports for library branding
 export {
   type CreateLogoOptions,
@@ -123,10 +123,6 @@ export {
   DEVBAR_LOGO_VIEWBOX,
   getDevBarLogoSvg,
 } from './ui/icons.js';
-
-// Official plugins
-export { appVersionPlugin, type AppVersionPluginOptions } from './plugins/appVersion.js';
-export { gitBranchPlugin, type GitBranchPluginOptions } from './plugins/gitBranch.js';
 
 // Re-export utilities for external use
 export {

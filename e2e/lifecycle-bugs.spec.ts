@@ -6,23 +6,32 @@
 
 import { expect, test } from '@playwright/test';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import * as http from 'http';
 import { cli, freePort } from './_harness.js';
 
 test.describe.configure({ mode: 'serial', timeout: 60_000 });
 
-async function withApp(fn: (url: string, cwd: string, port: number) => Promise<void>): Promise<void> {
+async function withApp(
+  fn: (url: string, cwd: string, port: number) => Promise<void>
+): Promise<void> {
   const port = await freePort();
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sl-life-'));
-  const server = http.createServer((_req, res) => { res.writeHead(200); res.end('ok'); });
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200);
+    res.end('ok');
+  });
   await new Promise<void>((r) => server.listen(port, '127.0.0.1', r));
   try {
     await fn(`http://127.0.0.1:${port}/`, cwd, port);
   } finally {
     // Best-effort daemon stop so we don't leak forks.
-    try { await cli(['daemon', 'stop', '--url', `http://127.0.0.1:${port}/`], cwd); } catch { /* ignore */ }
+    try {
+      await cli(['daemon', 'stop', '--url', `http://127.0.0.1:${port}/`], cwd);
+    } catch {
+      /* ignore */
+    }
     await new Promise<void>((r) => server.close(() => r()));
     fs.rmSync(cwd, { recursive: true, force: true });
   }
@@ -59,7 +68,10 @@ test('BUG N — daemon stop (with --url) shuts down the running daemon', async (
     let stopped = false;
     while (Date.now() < deadline) {
       const status = await cli(['daemon', 'status', '--url', url], cwd);
-      if (/No daemon running/.test(status.stdout)) { stopped = true; break; }
+      if (/No daemon running/.test(status.stdout)) {
+        stopped = true;
+        break;
+      }
       await new Promise((r) => setTimeout(r, 150));
     }
     expect(stopped, 'daemon should report not running within 3s of stop').toBe(true);

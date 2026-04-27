@@ -142,13 +142,28 @@ export function freshParseState(): ParseState {
   return { curX: null, curY: null, downAtMs: null };
 }
 
+/**
+ * Parse a hex value from `getevent` output. A hostile / unusual adb daemon
+ * (manufacturer firmware, network adb at 5555) can emit non-hex tokens or
+ * extra-large values; reject those rather than letting NaN/huge numbers
+ * propagate into the overlay filter and silently break ffmpeg.
+ */
+function safeHex(value: string | undefined, max: number): number | null {
+  if (!value) return null;
+  if (!/^[0-9a-fA-F]+$/.test(value)) return null;
+  const n = parseInt(value, 16);
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return n;
+}
+
 export function processGetEventChunk(
   text: string,
   state: ParseState,
   scaleX: number,
   scaleY: number,
   startMs: number,
-  nowMs: number
+  nowMs: number,
+  bounds?: { maxX: number; maxY: number; screenWidth: number; screenHeight: number }
 ): TapEvent[] {
   const out: TapEvent[] = [];
   for (const line of text.split('\n')) {
@@ -156,19 +171,25 @@ export function processGetEventChunk(
     if (!m) continue;
     const [, evType, evCode, valueStr] = m;
     if (evType === 'EV_ABS' && evCode === 'ABS_MT_POSITION_X') {
-      state.curX = parseInt(valueStr!, 16);
+      const v = safeHex(valueStr, bounds?.maxX ?? Number.MAX_SAFE_INTEGER);
+      if (v !== null) state.curX = v;
     } else if (evType === 'EV_ABS' && evCode === 'ABS_MT_POSITION_Y') {
-      state.curY = parseInt(valueStr!, 16);
+      const v = safeHex(valueStr, bounds?.maxY ?? Number.MAX_SAFE_INTEGER);
+      if (v !== null) state.curY = v;
     } else if (evType === 'EV_KEY' && evCode === 'BTN_TOUCH') {
       if (valueStr === 'DOWN') {
         state.downAtMs = nowMs;
       } else if (valueStr === 'UP') {
         if (state.curX !== null && state.curY !== null && state.downAtMs !== null) {
-          out.push({
-            x: Math.round(state.curX * scaleX),
-            y: Math.round(state.curY * scaleY),
-            t: (state.downAtMs - startMs) / 1000,
-          });
+          const px = Math.round(state.curX * scaleX);
+          const py = Math.round(state.curY * scaleY);
+          const sw = bounds?.screenWidth;
+          const sh = bounds?.screenHeight;
+          const x = sw ? Math.max(0, Math.min(sw, px)) : px;
+          const y = sh ? Math.max(0, Math.min(sh, py)) : py;
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            out.push({ x, y, t: (state.downAtMs - startMs) / 1000 });
+          }
         }
         state.curX = null;
         state.curY = null;
@@ -182,21 +203,32 @@ export function processGetEventChunk(
 /**
  * Spawn a `getevent -l` listener for the given input path. Returns the
  * child process plus a live array of tap events that the caller can read
- * after they SIGTERM the process.
+ * after they await `done` (or kill the process and await close).
+ *
+ * `done` resolves once the proc 'close' event fires AND the trailing
+ * buffered partial line has been processed — without it, taps in the final
+ * milliseconds before SIGTERM are silently dropped.
  */
 export function captureTapsLive(
   deviceSerial: string,
   info: TouchDeviceInfo,
   startMs: number
-): { proc: ChildProcess; taps: TapEvent[] } {
+): { proc: ChildProcess; taps: TapEvent[]; done: Promise<void> } {
   const taps: TapEvent[] = [];
   const state = freshParseState();
   const scaleX = info.screenWidth / info.maxX;
   const scaleY = info.screenHeight / info.maxY;
+  const bounds = {
+    maxX: info.maxX,
+    maxY: info.maxY,
+    screenWidth: info.screenWidth,
+    screenHeight: info.screenHeight,
+  };
 
   const proc = spawn('adb', ['-s', deviceSerial, 'shell', 'getevent', '-l', info.path], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  proc.unref(); // don't keep the parent process alive past its main work
   let buffer = '';
   proc.stdout?.on('data', (chunk: Buffer) => {
     buffer += chunk.toString();
@@ -205,9 +237,29 @@ export function captureTapsLive(
     if (lastNl === -1) return;
     const ready = buffer.slice(0, lastNl);
     buffer = buffer.slice(lastNl + 1);
-    const newTaps = processGetEventChunk(ready, state, scaleX, scaleY, startMs, Date.now());
+    const newTaps = processGetEventChunk(ready, state, scaleX, scaleY, startMs, Date.now(), bounds);
     taps.push(...newTaps);
   });
 
-  return { proc, taps };
+  const done = new Promise<void>((resolve) => {
+    proc.on('close', () => {
+      // Flush trailing buffer — anything that didn't end with \n.
+      if (buffer.length > 0) {
+        const newTaps = processGetEventChunk(
+          buffer,
+          state,
+          scaleX,
+          scaleY,
+          startMs,
+          Date.now(),
+          bounds
+        );
+        taps.push(...newTaps);
+        buffer = '';
+      }
+      resolve();
+    });
+  });
+
+  return { proc, taps, done };
 }

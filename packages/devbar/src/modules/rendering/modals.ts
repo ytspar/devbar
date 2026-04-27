@@ -35,6 +35,7 @@ import {
   createModalOverlay,
   createStyledButton,
 } from '../../ui/index.js';
+import { focusModal } from '../../ui/modals.js';
 import {
   calculateCostEstimate,
   closeDesignReviewConfirm,
@@ -45,6 +46,7 @@ import {
 } from '../screenshot.js';
 import type { DevBarState } from '../types.js';
 import { clearChildren } from './common.js';
+import { createModalEvidenceContext } from './evidenceContext.js';
 
 // ============================================================================
 // Outline Modal
@@ -60,7 +62,7 @@ export function renderOutlineModal(state: DevBarState): void {
   };
 
   const overlay = createModalOverlay(closeModal);
-  const modal = createModalBox(color);
+  const modal = createModalBox(color, 'Document Outline');
 
   const header = createModalHeader({
     color,
@@ -75,6 +77,10 @@ export function renderOutlineModal(state: DevBarState): void {
     saveLocation: state.options.saveLocation,
     isSaving: state.savingOutline,
     savedPath: state.lastOutline,
+    evidenceContext: createModalEvidenceContext(state, 'Document Outline', {
+      artifactPath: state.lastOutline,
+      observation: `${outline.length} top-level semantic node${outline.length === 1 ? '' : 's'} found.`,
+    }),
   });
   modal.appendChild(header);
 
@@ -91,6 +97,7 @@ export function renderOutlineModal(state: DevBarState): void {
 
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  focusModal(modal);
 }
 
 function renderOutlineNodes(
@@ -189,7 +196,7 @@ export function renderSchemaModal(state: DevBarState): void {
   };
 
   const overlay = createModalOverlay(closeModal);
-  const modal = createModalBox(color);
+  const modal = createModalBox(color, 'Page Schema');
 
   const missingTags = checkMissingTags(schema);
   const favicons = extractFavicons();
@@ -207,6 +214,12 @@ export function renderSchemaModal(state: DevBarState): void {
     saveLocation: state.options.saveLocation,
     isSaving: state.savingSchema,
     savedPath: state.lastSchema,
+    evidenceContext: createModalEvidenceContext(state, 'Page Schema', {
+      artifactPath: state.lastSchema,
+      observation: missingTags.length
+        ? `${missingTags.length} recommended metadata item${missingTags.length === 1 ? '' : 's'} missing.`
+        : 'Schema evidence captured for this page.',
+    }),
   });
   modal.appendChild(header);
 
@@ -236,6 +249,7 @@ export function renderSchemaModal(state: DevBarState): void {
 
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  focusModal(modal);
 }
 
 function renderSchemaSectionHeader(
@@ -830,13 +844,14 @@ export function renderA11yModal(state: DevBarState): void {
   };
 
   const overlay = createModalOverlay(closeModal);
-  const modal = createModalBox(color);
+  const modal = createModalBox(color, 'Accessibility Audit');
 
   setupA11yLoadingState(modal, color, closeModal, state);
   overlay.appendChild(modal);
 
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  focusModal(modal);
 
   // Run the audit async and replace content when done
   runA11yAudit()
@@ -867,6 +882,13 @@ export function renderA11yModal(state: DevBarState): void {
         saveLocation: state.options.saveLocation,
         isSaving: state.savingA11yAudit,
         savedPath: state.lastA11yAudit,
+        evidenceContext: createModalEvidenceContext(state, titleText, {
+          artifactPath: state.lastA11yAudit,
+          observation:
+            violationCount === 0
+              ? `${result.passes.length} axe rule${result.passes.length === 1 ? '' : 's'} passed.`
+              : `${violationCount} accessibility violation${violationCount === 1 ? '' : 's'} found.`,
+        }),
       });
       modal.appendChild(header);
 
@@ -938,6 +960,8 @@ function renderA11ySuccessContent(
   result: { violations: AxeViolation[]; passes: Array<{ id: string; description: string }> },
   color: string
 ): void {
+  renderA11yCoverageSummary(content, result, color);
+
   if (result.violations.length === 0) {
     const successMsg = document.createElement('div');
     Object.assign(successMsg.style, {
@@ -1008,6 +1032,19 @@ function renderA11ySuccessContent(
       renderA11yViolationGroup(content, impact, violations);
     }
   }
+}
+
+function renderA11yCoverageSummary(
+  content: HTMLDivElement,
+  result: { violations: AxeViolation[]; passes: Array<{ id: string; description: string }> },
+  color: string
+): void {
+  const checked = [
+    `${result.passes.length} axe rule${result.passes.length === 1 ? '' : 's'} passed`,
+    `${result.violations.length} violation${result.violations.length === 1 ? '' : 's'} found`,
+    'current DOM, focus semantics, names, landmarks, forms, and color contrast where browser APIs expose enough paint data',
+  ];
+  content.appendChild(createInfoBox(color, 'What was checked', checked.join(' · ')));
 }
 
 function createViolationNodeEl(node: { html: string }): HTMLDivElement {
@@ -1157,7 +1194,7 @@ export function renderDesignReviewConfirmModal(state: DevBarState): void {
   const closeModal = () => closeDesignReviewConfirm(state);
 
   const overlay = createModalOverlay(closeModal);
-  const modal = createModalBox(color);
+  const modal = createModalBox(color, 'AI Design Review');
   modal.style.maxWidth = '450px';
 
   // Minimal header (title + close only, no Copy MD / Save)
@@ -1204,6 +1241,7 @@ export function renderDesignReviewConfirmModal(state: DevBarState): void {
 
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  focusModal(modal);
 }
 
 function renderApiKeyNotConfiguredContent(): HTMLElement {

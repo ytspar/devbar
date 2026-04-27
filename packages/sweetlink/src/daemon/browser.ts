@@ -241,7 +241,8 @@ export async function takeResponsiveScreenshots(opts: {
     // Small wait for layout to settle
     await p.waitForTimeout(100);
     const buffer = await p.screenshot({ fullPage: opts.fullPage });
-    const label = width <= 480 ? `mobile-${width}` : width <= 1024 ? `tablet-${width}` : `desktop-${width}`;
+    const label =
+      width <= 480 ? `mobile-${width}` : width <= 1024 ? `tablet-${width}` : `desktop-${width}`;
     // Report the ACTUAL captured image dimensions, not the formula-derived
     // viewport. Matters for full-page captures where the image is taller
     // than the viewport.

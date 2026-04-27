@@ -76,15 +76,22 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
         // Auto-start daemon if configured
         if (options.daemon) {
           const url = `http://localhost:${vitePort}`;
-          import('./daemon/client.js').then(({ ensureDaemon }) => {
-            ensureDaemon(process.cwd(), url, { headed: options.headed }).then((state) => {
-              console.log(`[Sweetlink] Daemon ready on port ${state.port} (target: ${url})`);
-            }).catch((err) => {
-              console.warn('[Sweetlink] Daemon auto-start failed:', err instanceof Error ? err.message : err);
+          import('./daemon/client.js')
+            .then(({ ensureDaemon }) => {
+              ensureDaemon(process.cwd(), url, { headed: options.headed })
+                .then((state) => {
+                  console.log(`[Sweetlink] Daemon ready on port ${state.port} (target: ${url})`);
+                })
+                .catch((err) => {
+                  console.warn(
+                    '[Sweetlink] Daemon auto-start failed:',
+                    err instanceof Error ? err.message : err
+                  );
+                });
+            })
+            .catch(() => {
+              console.warn('[Sweetlink] Daemon module not available');
             });
-          }).catch(() => {
-            console.warn('[Sweetlink] Daemon module not available');
-          });
         }
       });
     },

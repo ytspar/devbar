@@ -17,6 +17,25 @@ import {
 import { attachButtonTooltip, attachTextTooltip } from '../tooltips.js';
 import { closeAllModals, type DevBarState } from '../types.js';
 
+/**
+ * Show "X downloaded!" or "X saved!" with a clickable path. The
+ * "endsWith('downloaded')" sentinel is a cross-module contract — the
+ * screenshot/outline/schema/a11y handlers append " · downloaded" to
+ * `state.lastX` to signal a download path was picked instead of a real
+ * filesystem path. Centralizing here keeps the four call sites in lockstep.
+ */
+function addSavedTooltip(
+  h: { addSuccess: (line: string, path?: string) => void },
+  noun: string,
+  artifactPath: string
+): void {
+  const isDownloaded = artifactPath.endsWith('downloaded');
+  h.addSuccess(
+    isDownloaded ? `${noun} downloaded!` : `${noun} saved!`,
+    isDownloaded ? undefined : artifactPath
+  );
+}
+
 export function createConsoleBadge(
   state: DevBarState,
   type: 'error' | 'warn' | 'info',
@@ -37,7 +56,7 @@ export function createConsoleBadge(
     height: '18px',
     padding: '0 5px',
     borderRadius: '9999px',
-    backgroundColor: isActive ? color : withAlpha(color, 90),
+    backgroundColor: color,
     color: '#fff',
     fontSize: '0.625rem',
     fontWeight: '600',
@@ -144,10 +163,10 @@ export function createScreenshotButton(state: DevBarState, accentColor: string):
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '22px',
-    height: '22px',
-    minWidth: '22px',
-    minHeight: '22px',
+    width: '24px',
+    height: '24px',
+    minWidth: '24px',
+    minHeight: '24px',
     flexShrink: '0',
     borderRadius: '50%',
     border: '1px solid',
@@ -279,11 +298,7 @@ export function createOutlineButton(state: DevBarState): HTMLButtonElement {
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, BUTTON_COLORS.outline, (_tooltip, h) => {
     if (state.lastOutline) {
-      const isDownloaded = state.lastOutline.endsWith('downloaded');
-      h.addSuccess(
-        isDownloaded ? 'Outline downloaded!' : 'Outline saved!',
-        isDownloaded ? undefined : state.lastOutline
-      );
+      addSavedTooltip(h, 'Outline', state.lastOutline);
       return;
     }
 
@@ -318,11 +333,7 @@ export function createSchemaButton(state: DevBarState): HTMLButtonElement {
   // Attach HTML tooltip
   attachButtonTooltip(state, btn, BUTTON_COLORS.schema, (_tooltip, h) => {
     if (state.lastSchema) {
-      const isDownloaded = state.lastSchema.endsWith('downloaded');
-      h.addSuccess(
-        isDownloaded ? 'Schema downloaded!' : 'Schema saved!',
-        isDownloaded ? undefined : state.lastSchema
-      );
+      addSavedTooltip(h, 'Schema', state.lastSchema);
       return;
     }
 
@@ -361,11 +372,7 @@ export function createA11yButton(state: DevBarState): HTMLButtonElement {
 
   attachButtonTooltip(state, btn, BUTTON_COLORS.a11y, (_tooltip, h) => {
     if (state.lastA11yAudit) {
-      const isDownloaded = state.lastA11yAudit.endsWith('downloaded');
-      h.addSuccess(
-        isDownloaded ? 'A11y report downloaded!' : 'A11y report saved!',
-        isDownloaded ? undefined : state.lastA11yAudit
-      );
+      addSavedTooltip(h, 'A11y report', state.lastA11yAudit);
       return;
     }
 

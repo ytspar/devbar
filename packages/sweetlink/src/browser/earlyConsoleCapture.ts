@@ -76,7 +76,7 @@ export const EARLY_CONSOLE_CAPTURE_SCRIPT = `
 declare global {
   interface Window {
     __sweetlinkEarlyLogs?: Array<{
-      level: string;
+      level: 'log' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
       message: string;
       timestamp: string;
     }>;

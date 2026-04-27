@@ -7,9 +7,9 @@
 
 import { expect, test } from '@playwright/test';
 import * as fs from 'fs';
+import * as http from 'http';
 import * as os from 'os';
 import * as path from 'path';
-import * as http from 'http';
 import { cli, freePort, pngDimensions } from './_harness.js';
 
 const ARTIFACT_DIR = '/tmp/sweetlink-e2e-artifacts/ruler';
@@ -44,7 +44,7 @@ test('ruler --selector measures element bounds + writes overlay PNG', async () =
     const out = path.join(cwd, 'ruler.png');
     const result = await cli(
       ['ruler', '--url', url, '--selector', '#hdr', '--selector', '.card', '--output', out],
-      cwd,
+      cwd
     );
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain('#hdr');
@@ -65,7 +65,7 @@ test('ruler --format json emits parseable JSON with element coords', async () =>
   await withFixture(async (url, cwd) => {
     const result = await cli(
       ['ruler', '--url', url, '--selector', '#hdr', '--format', 'json'],
-      cwd,
+      cwd
     );
     expect(result.exitCode, result.stderr).toBe(0);
     // JSON starts after the leading [Sweetlink] log lines.
@@ -82,7 +82,7 @@ test('ruler reports alignment delta between two selectors', async () => {
   await withFixture(async (url, cwd) => {
     const result = await cli(
       ['ruler', '--url', url, '--selector', '#hdr', '--selector', '.card'],
-      cwd,
+      cwd
     );
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/Alignment.*Δ[xy]=/);

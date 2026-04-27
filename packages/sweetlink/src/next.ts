@@ -42,18 +42,18 @@ function detectNextPort(): number {
     // --port 3002 or -p 3002
     if ((arg === '--port' || arg === '-p') && args[i + 1]) {
       const port = parseInt(args[i + 1]!, 10);
-      if (!isNaN(port)) return port;
+      if (!Number.isNaN(port)) return port;
     }
     // --port=3002
     if (arg?.startsWith('--port=')) {
       const port = parseInt(arg.split('=')[1]!, 10);
-      if (!isNaN(port)) return port;
+      if (!Number.isNaN(port)) return port;
     }
   }
 
   if (process.env.PORT) {
     const port = parseInt(process.env.PORT, 10);
-    if (!isNaN(port)) return port;
+    if (!Number.isNaN(port)) return port;
   }
 
   return 3000;

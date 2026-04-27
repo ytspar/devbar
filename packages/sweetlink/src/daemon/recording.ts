@@ -12,13 +12,13 @@
  * - The video file path is available via `page.video().path()` after close
  */
 
-import { execFileSync } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import type { SessionManifest, ActionEntry } from './session.js';
+import { DEFAULT_VIEWPORT } from '../viewportUtils.js';
 import { installCursorHighlight } from './cursor.js';
 import { consoleBuffer, installListeners, networkBuffer } from './listeners.js';
-import { DEFAULT_VIEWPORT } from '../viewportUtils.js';
+import type { ActionEntry, SessionManifest } from './session.js';
+import { detectGit } from './utils.js';
 
 type Browser = import('playwright').Browser;
 type BrowserContext = import('playwright').BrowserContext;
@@ -58,18 +58,14 @@ let recordingLabel: string | null = null;
 let consoleStartCursor = 0;
 let networkStartCursor = 0;
 
-function detectGit(): { branch: string | null; commit: string | null } {
-  try {
-    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    const commit = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
-      encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    return { branch: branch !== 'HEAD' ? branch : null, commit };
-  } catch {
-    return { branch: null, commit: null };
-  }
+export interface RecordingEventCursors {
+  consoleStartCursor: number;
+  networkStartCursor: number;
+}
+
+export function getRecordingEventCursors(): RecordingEventCursors | null {
+  if (!recording) return null;
+  return { consoleStartCursor, networkStartCursor };
 }
 
 // ============================================================================
@@ -143,8 +139,8 @@ export async function startRecording(
   startedAt = Date.now();
   actions = [];
   screenshotPaths = [];
-  consoleStartCursor = consoleBuffer.size;
-  networkStartCursor = networkBuffer.size;
+  consoleStartCursor = consoleBuffer.cursor;
+  networkStartCursor = networkBuffer.cursor;
   recordingUrl = url;
   recordingLabel = options?.label ?? null;
 
@@ -155,7 +151,9 @@ export async function startRecording(
   recordingGitBranch = git.branch;
   recordingGitCommit = git.commit;
 
-  console.error(`[Daemon] Recording started: ${sessionId} (video: ${viewport.width}x${viewport.height})`);
+  console.error(
+    `[Daemon] Recording started: ${sessionId} (video: ${viewport.width}x${viewport.height})`
+  );
   return { sessionId };
 }
 
@@ -172,7 +170,7 @@ export function getRecordingPage(): Page | null {
  * Captures a screenshot at the moment of the action for the viewer thumbnail.
  */
 export async function logAction(
-  action: string,
+  action: import('./session.js').RecordedAction,
   args: string[],
   page: Page,
   boundingBox?: { x: number; y: number; width: number; height: number },
@@ -206,7 +204,8 @@ export async function logAction(
               position: 'fixed',
               left: `${cx}px`,
               top: `${cy}px`,
-              width: '0', height: '0',
+              width: '0',
+              height: '0',
               pointerEvents: 'none',
               zIndex: '2147483647',
               transform: 'translate(-50%, -50%)',
@@ -215,8 +214,11 @@ export async function logAction(
             const dot = document.createElement('div');
             Object.assign(dot.style, {
               position: 'absolute',
-              left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-              width: '20px', height: '20px',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '20px',
+              height: '20px',
               borderRadius: '50%',
               background: 'rgba(255, 64, 32, 0.85)',
               border: '3px solid #fff',
@@ -225,10 +227,12 @@ export async function logAction(
             m.appendChild(dot);
             document.body.appendChild(m);
           },
-          { cx, cy },
+          { cx, cy }
         );
         markerInjected = true;
-      } catch { /* page may not be ready */ }
+      } catch {
+        /* page may not be ready */
+      }
     }
     const buffer = await page.screenshot();
     if (markerInjected) {
@@ -237,7 +241,9 @@ export async function logAction(
           const m = document.getElementById('__sl_action_marker__');
           if (m) m.remove();
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     await fs.writeFile(screenshotPath, buffer);
     screenshotPaths.push(screenshotPath);
@@ -287,7 +293,9 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     // Close the page and context to finalize the video
     try {
       await recordingPage.close();
-    } catch { /* may already be closed */ }
+    } catch {
+      /* may already be closed */
+    }
   }
 
   if (recordingContext) {
@@ -295,10 +303,14 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     // before closing the context.
     try {
       await recordingContext.tracing.stop({ path: path.join(sessionDir, 'trace.zip') });
-    } catch { /* tracing may not have been started */ }
+    } catch {
+      /* tracing may not have been started */
+    }
     try {
       await recordingContext.close();
-    } catch { /* may already be closed */ }
+    } catch {
+      /* may already be closed */
+    }
   }
 
   // Move the video file to a predictable name
@@ -320,8 +332,8 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   // ring buffers are daemon-global so timestamp filtering alone would
   // miss events that fire after startRecording but share a millisecond
   // with init-time events. Cursor-based slicing is atomic.
-  const consoleSlice = consoleBuffer.toArray().slice(consoleStartCursor);
-  const networkSlice = networkBuffer.toArray().slice(networkStartCursor);
+  const consoleSlice = consoleBuffer.since(consoleStartCursor);
+  const networkSlice = networkBuffer.since(networkStartCursor);
   const consoleErrors = consoleSlice.filter((e) => e.level === 'error').length;
   const networkFailures = networkSlice.filter((e) => e.status === 0 || e.status >= 400).length;
 

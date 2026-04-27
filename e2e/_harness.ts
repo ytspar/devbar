@@ -13,7 +13,7 @@
  * helpers block Playwright's event loop and break the daemon's IPC.
  */
 
-import { spawn, fork, type ChildProcess } from 'child_process';
+import { type ChildProcess, fork, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as os from 'os';
@@ -48,6 +48,66 @@ export interface CliResult {
   exitCode: number;
 }
 
+export class DaemonReqError extends Error {
+  readonly action: string;
+  readonly response: { ok: boolean; data?: Record<string, unknown>; error?: string };
+  readonly data?: Record<string, unknown>;
+
+  constructor(
+    action: string,
+    response: { ok: boolean; data?: Record<string, unknown>; error?: string }
+  ) {
+    super(response.error ?? `daemon ${action} failed`);
+    this.name = 'DaemonReqError';
+    this.action = action;
+    this.response = response;
+    this.data = response.data;
+  }
+}
+
+export interface AgentContextBundle {
+  url: string;
+  title: string;
+  generatedAt: string;
+  viewport: { width: number; height: number; deviceScaleFactor?: number };
+  vitals?: { fcp: number | null; pageSize: number | null };
+  artifacts: {
+    dir: string;
+    contextJson: string;
+    summaryMarkdown: string;
+    screenshotPng: string;
+    snapshotMarkdown: string;
+    consoleText: string;
+    networkText: string;
+    a11yJson?: string;
+  };
+  counts: {
+    refs: number;
+    consoleEntries: number;
+    consoleErrors: number;
+    consoleWarnings: number;
+    networkEntries: number;
+    networkFailures: number;
+    a11yViolations?: number;
+    a11yIncomplete?: number;
+  };
+  refs: Array<{ ref: string; role: string; name: string }>;
+  console?: { entries: unknown[]; formatted: string };
+  network?: { entries: unknown[]; formatted: string };
+  a11y?: unknown;
+  expectedOutcome?: string;
+  actionTranscript?: Array<{ action: string; target?: string; result?: string }>;
+  failureArtifacts?: string[];
+  nextActions: string[];
+}
+
+export interface AgentContextOptions {
+  expectedOutcome?: string;
+  actionTranscript?: Array<{ action: string; target?: string; result?: string }>;
+  last?: number;
+  includeA11y?: boolean;
+}
+
 export async function freePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
     const srv = http.createServer();
@@ -64,10 +124,7 @@ export async function freePort(): Promise<number> {
   });
 }
 
-async function serveStatic(
-  port: number,
-  getBody: () => string,
-): Promise<http.Server> {
+async function serveStatic(port: number, getBody: () => string): Promise<http.Server> {
   const server = http.createServer((_req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
@@ -81,13 +138,13 @@ async function serveStatic(
 
 async function startDaemon(
   projectRoot: string,
-  url: string,
+  url: string
 ): Promise<{ state: DaemonState; child: ChildProcess }> {
-  const child = fork(
-    DAEMON_ENTRY,
-    ['--url', url, '--project-root', projectRoot],
-    { cwd: projectRoot, detached: false, stdio: 'ignore' },
-  );
+  const child = fork(DAEMON_ENTRY, ['--url', url, '--project-root', projectRoot], {
+    cwd: projectRoot,
+    detached: false,
+    stdio: 'ignore',
+  });
 
   const appPort = new URL(url).port;
   const stateFile = path.join(projectRoot, '.sweetlink', `daemon-${appPort}.json`);
@@ -103,7 +160,9 @@ async function startDaemon(
           body: '{}',
         });
         if (res.ok) return { state, child };
-      } catch { /* not ready */ }
+      } catch {
+        /* not ready */
+      }
     }
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -113,7 +172,7 @@ async function startDaemon(
 export async function daemonReq(
   state: DaemonState,
   action: string,
-  params: Record<string, unknown> = {},
+  params: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`http://127.0.0.1:${state.port}/api/${action}`, {
     method: 'POST',
@@ -123,8 +182,12 @@ export async function daemonReq(
     },
     body: JSON.stringify({ params }),
   });
-  const body = (await res.json()) as { ok: boolean; data?: Record<string, unknown>; error?: string };
-  if (!body.ok) throw new Error(body.error ?? `daemon ${action} failed`);
+  const body = (await res.json()) as {
+    ok: boolean;
+    data?: Record<string, unknown>;
+    error?: string;
+  };
+  if (!body.ok) throw new DaemonReqError(action, body);
   return body.data ?? {};
 }
 
@@ -136,8 +199,12 @@ export function cli(args: string[], cwd: string): Promise<CliResult> {
     });
     let stdout = '';
     let stderr = '';
-    child.stdout?.on('data', (d) => { stdout += d.toString(); });
-    child.stderr?.on('data', (d) => { stderr += d.toString(); });
+    child.stdout?.on('data', (d) => {
+      stdout += d.toString();
+    });
+    child.stderr?.on('data', (d) => {
+      stderr += d.toString();
+    });
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       stderr += '\n[cli helper] timeout after 30s';
@@ -148,7 +215,7 @@ export function cli(args: string[], cwd: string): Promise<CliResult> {
     });
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr: stderr + `\n[spawn] ${err.message}`, exitCode: 1 });
+      resolve({ stdout, stderr: `${stderr}\n[spawn] ${err.message}`, exitCode: 1 });
     });
   });
 }
@@ -168,10 +235,20 @@ export async function makeFixture(html: string): Promise<Fixture> {
     daemon: state,
     daemonChild: child,
     staticServer,
-    setHtml(next: string) { body = next; },
+    setHtml(next: string) {
+      body = next;
+    },
     async cleanup() {
-      try { await daemonReq(state, 'shutdown'); } catch { /* ignore */ }
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      try {
+        await daemonReq(state, 'shutdown');
+      } catch {
+        /* ignore */
+      }
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        /* ignore */
+      }
       await new Promise<void>((r) => staticServer.close(() => r()));
       fs.rmSync(projectRoot, { recursive: true, force: true });
     },
@@ -186,4 +263,25 @@ export function pngDimensions(png: Buffer): { width: number; height: number } {
 /** Decode a base64-encoded screenshot string into a Buffer. */
 export function decodeScreenshot(b64: string): Buffer {
   return Buffer.from(b64, 'base64');
+}
+
+/**
+ * Capture a compact, LLM-friendly evidence bundle for a scenario.
+ *
+ * The daemon owns artifact generation so CLI usage and tests produce the same
+ * schema: screenshot, refs, console/network deltas, a11y, transcript, expected
+ * outcome, next actions, and any failure artifacts.
+ */
+export async function collectAgentContext(
+  fixture: Fixture,
+  scenario: string,
+  options: AgentContextOptions = {}
+): Promise<AgentContextBundle> {
+  return (await daemonReq(fixture.daemon, 'inspect', {
+    label: scenario,
+    expectedOutcome: options.expectedOutcome,
+    actionTranscript: options.actionTranscript ?? [],
+    last: options.last ?? 50,
+    includeA11y: options.includeA11y ?? true,
+  })) as unknown as AgentContextBundle;
 }

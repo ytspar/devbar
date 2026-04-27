@@ -28,8 +28,10 @@ export const PORT_RETRY_DELAY_MS = 100;
 /**
  * Structure for captured console log entries
  */
+export type ConsoleLogLevel = 'log' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
+
 export interface ConsoleLog {
-  level: 'log' | 'error' | 'warn' | 'info' | 'debug' | string;
+  level: ConsoleLogLevel;
   message: string;
   timestamp: number;
   stack?: string;

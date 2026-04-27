@@ -56,9 +56,12 @@ vi.mock('http', () => ({
 vi.mock('ws', () => {
   // Return the shared mock instance from the constructor so identity checks pass.
   // Using a Proxy to make `vi.fn()` callable with `new` while returning mockWssInstance.
-  const WebSocketServer = new Proxy(vi.fn(() => mockWssInstance), {
-    construct: () => mockWssInstance,
-  });
+  const WebSocketServer = new Proxy(
+    vi.fn(() => mockWssInstance),
+    {
+      construct: () => mockWssInstance,
+    }
+  );
   return {
     WebSocketServer,
     WebSocket: { OPEN: 1, CLOSED: 3 },

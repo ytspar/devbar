@@ -5,8 +5,8 @@
  * Includes: metadata, action timeline, error summary, screenshots list.
  */
 
-import type { SessionManifest, ActionEntry } from './session.js';
 import type { ConsoleEntry, NetworkEntry } from './listeners.js';
+import type { ActionEntry, SessionManifest } from './session.js';
 
 // ============================================================================
 // Types
@@ -136,7 +136,7 @@ function renderMetadata(options: SummaryOptions): string {
 }
 
 function renderStatus(options: SummaryOptions): string {
-  const { manifest, consoleEntries = [], networkEntries = [], serverErrors = [] } = options;
+  const { consoleEntries = [], networkEntries = [], serverErrors = [] } = options;
 
   const consoleErrors = consoleEntries.filter((e) => e.level === 'error').length;
   const consoleWarnings = consoleEntries.filter((e) => e.level === 'warning').length;
@@ -250,5 +250,5 @@ export function generateSummary(options: SummaryOptions): string {
     renderVideo(options.manifest),
   ].filter(Boolean);
 
-  return sections.join('\n\n') + '\n';
+  return `${sections.join('\n\n')}\n`;
 }

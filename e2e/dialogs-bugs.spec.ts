@@ -8,7 +8,11 @@
 import { expect, test } from '@playwright/test';
 import { daemonReq, makeFixture } from './_harness.js';
 
-interface DialogEntry { type: string; message: string; defaultValue?: string }
+interface DialogEntry {
+  type: string;
+  message: string;
+  defaultValue?: string;
+}
 
 function dialogPage(): string {
   return `<!DOCTYPE html><html><body>
@@ -32,7 +36,8 @@ test('dialog buffer captures alert + confirm + prompt without hanging', async ()
     expect(Date.now() - t0, 'page navigation should not hang on dialogs').toBeLessThan(10_000);
 
     const data = (await daemonReq(fx.daemon, 'dialog-read')) as {
-      total: number; entries: DialogEntry[];
+      total: number;
+      entries: DialogEntry[];
     };
     expect(data.total).toBe(3);
     const types = data.entries.map((e) => e.type).sort();

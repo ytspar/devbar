@@ -322,15 +322,15 @@ export async function measureViaPlaywright(options: {
       // half their highlights cut off. (page.viewportSize is missing
       // from some test doubles, hence the typeof guard.)
       const vp = typeof page.viewportSize === 'function' ? page.viewportSize() : null;
-      const extendsBelow = vp ? result.results.some((r) =>
-        r.elements.some((e) => e.rect.top + e.rect.height > vp.height)
-      ) : false;
+      const extendsBelow = vp
+        ? result.results.some((r) => r.elements.some((e) => e.rect.top + e.rect.height > vp.height))
+        : false;
       await page.screenshot({ path: options.output, fullPage: extendsBelow });
       screenshotPath = options.output;
       if (options.verbose) {
         console.log(
           `[Sweetlink Ruler] Screenshot saved to: ${options.output}` +
-          (extendsBelow ? ' (full page — measured elements extend below viewport)' : '')
+            (extendsBelow ? ' (full page — measured elements extend below viewport)' : '')
         );
       }
     }

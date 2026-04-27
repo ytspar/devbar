@@ -144,6 +144,56 @@ describe('RingBuffer', () => {
     });
   });
 
+  describe('cursor and since', () => {
+    it('returns entries added after a cursor', () => {
+      const buf = new RingBuffer<number>(5);
+      buf.push(1);
+      buf.push(2);
+      const cursor = buf.cursor;
+      buf.push(3);
+      buf.push(4);
+
+      expect(buf.since(cursor)).toEqual([3, 4]);
+    });
+
+    it('keeps cursor absolute after overflow', () => {
+      const buf = new RingBuffer<number>(3);
+      buf.push(1);
+      buf.push(2);
+      buf.push(3);
+      const cursor = buf.cursor;
+      buf.push(4);
+      buf.push(5);
+
+      expect(buf.toArray()).toEqual([3, 4, 5]);
+      expect(buf.since(cursor)).toEqual([4, 5]);
+    });
+
+    it('returns retained entries when the cursor predates the buffer window', () => {
+      const buf = new RingBuffer<number>(3);
+      const cursor = buf.cursor;
+      buf.push(1);
+      buf.push(2);
+      buf.push(3);
+      buf.push(4);
+      buf.push(5);
+
+      expect(buf.since(cursor)).toEqual([3, 4, 5]);
+    });
+
+    it('resets cursor on clear', () => {
+      const buf = new RingBuffer<number>(3);
+      buf.push(1);
+      buf.push(2);
+      expect(buf.cursor).toBe(2);
+
+      buf.clear();
+
+      expect(buf.cursor).toBe(0);
+      expect(buf.since(0)).toEqual([]);
+    });
+  });
+
   describe('clear', () => {
     it('resets buffer to empty', () => {
       const buf = new RingBuffer<number>(5);

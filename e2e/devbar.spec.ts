@@ -6,6 +6,13 @@
  */
 
 import { expect, type Page, test } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const axeSource = fs.readFileSync(
+  path.join(process.cwd(), 'packages/devbar/node_modules/axe-core/axe.min.js'),
+  'utf-8'
+);
 
 // Test viewports matching Tailwind breakpoints
 const VIEWPORTS = {
@@ -27,7 +34,7 @@ const POSITIONS = [
 ] as const;
 
 // Selector for the DevBar component
-const DEVBAR_SELECTOR = '[class*="devbar"]';
+const DEVBAR_SELECTOR = '[data-devbar="true"][role="toolbar"][aria-label="DevBar"]';
 
 // Helper to wait for DevBar to be visible
 async function waitForDevBar(page: Page): Promise<void> {
@@ -42,6 +49,183 @@ function getDevBar(page: Page): ReturnType<Page['locator']> {
 // Helper to get demo section mask for screenshots
 function getDemoMask(page: Page): ReturnType<Page['locator']>[] {
   return [page.locator('.demo-section')];
+}
+
+interface AxeResult {
+  violations: Array<{ id: string; impact?: string; help: string; nodes: unknown[] }>;
+  incomplete: Array<{ id: string; impact?: string; help: string; nodes: unknown[] }>;
+  passes: Array<{ id: string }>;
+}
+
+interface ContrastSample {
+  text: string;
+  selector: string;
+  ratio: number;
+  foreground: string;
+  background: string;
+}
+
+async function runDevBarAxe(page: Page): Promise<AxeResult> {
+  await page.addScriptTag({ content: axeSource });
+  return page.evaluate(async (selector) => {
+    const axe = (
+      window as unknown as {
+        axe: { run: (context: unknown, options: unknown) => Promise<AxeResult> };
+      }
+    ).axe;
+    // axe-core treats `include` inside RunOptions as no-op — selectors must
+    // ride the context argument, not the options. Without this, the run
+    // scans the entire page and any unrelated playground violation will
+    // fail this DevBar-only test.
+    return axe.run(
+      { include: [[selector]] },
+      { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] } }
+    );
+  }, DEVBAR_SELECTOR) as Promise<AxeResult>;
+}
+
+async function collectDevBarContrastSamples(page: Page): Promise<ContrastSample[]> {
+  return page.evaluate((selector) => {
+    interface Rgba {
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    }
+
+    function parseColor(value: string): Rgba | null {
+      if (!value || value === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
+
+      const rgbMatch = value.match(/rgba?\(([^)]+)\)/);
+      if (rgbMatch) {
+        const parts = rgbMatch[1]!.split(',').map((p) => p.trim());
+        return {
+          r: Number(parts[0]),
+          g: Number(parts[1]),
+          b: Number(parts[2]),
+          a: parts[3] === undefined ? 1 : Number(parts[3]),
+        };
+      }
+
+      const srgbMatch = value.match(
+        /color\(srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*([0-9.]+))?\)/
+      );
+      if (srgbMatch) {
+        return {
+          r: Number(srgbMatch[1]) * 255,
+          g: Number(srgbMatch[2]) * 255,
+          b: Number(srgbMatch[3]) * 255,
+          a: srgbMatch[4] === undefined ? 1 : Number(srgbMatch[4]),
+        };
+      }
+
+      const hexMatch = value.match(/#([0-9a-f]{6})/i);
+      if (hexMatch) {
+        const hex = hexMatch[1]!;
+        return {
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+          a: 1,
+        };
+      }
+
+      const colorMixMatch = value.match(
+        /color-mix\(in srgb,\s*(#[0-9a-f]{6}|rgba?\([^)]+\)|color\(srgb[^)]+\))\s+([0-9.]+)%,\s*transparent\)/i
+      );
+      if (colorMixMatch) {
+        const color = parseColor(colorMixMatch[1]!);
+        if (!color) return null;
+        return { ...color, a: color.a * (Number(colorMixMatch[2]) / 100) };
+      }
+
+      return null;
+    }
+
+    function blend(top: Rgba, bottom: Rgba): Rgba {
+      const a = top.a + bottom.a * (1 - top.a);
+      if (a === 0) return { r: 0, g: 0, b: 0, a: 0 };
+      return {
+        r: (top.r * top.a + bottom.r * bottom.a * (1 - top.a)) / a,
+        g: (top.g * top.a + bottom.g * bottom.a * (1 - top.a)) / a,
+        b: (top.b * top.a + bottom.b * bottom.a * (1 - top.a)) / a,
+        a,
+      };
+    }
+
+    function luminance(color: Rgba): number {
+      const channels = [color.r, color.g, color.b].map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+    }
+
+    function contrast(foreground: Rgba, background: Rgba): number {
+      const fg = luminance(foreground);
+      const bg = luminance(background);
+      const lighter = Math.max(fg, bg);
+      const darker = Math.min(fg, bg);
+      return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    function effectiveBackground(element: Element): Rgba {
+      const chain: Element[] = [];
+      let current: Element | null = element;
+      while (current) {
+        chain.unshift(current);
+        current = current.parentElement;
+      }
+
+      let background: Rgba = { r: 255, g: 255, b: 255, a: 1 };
+      for (const node of chain) {
+        const color = parseColor(getComputedStyle(node).backgroundColor);
+        if (color && color.a > 0) {
+          background = blend(color, background);
+        }
+      }
+      return background;
+    }
+
+    function colorToString(color: Rgba): string {
+      return `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${color.a.toFixed(2)})`;
+    }
+
+    function directText(element: Element): string {
+      return Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent?.trim() ?? '')
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    const root = document.querySelector(selector);
+    if (!root) return [];
+
+    return Array.from(root.querySelectorAll<HTMLElement>('*'))
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        const text = directText(element);
+        const style = getComputedStyle(element);
+        return !!text && rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
+      })
+      .map((element) => {
+        const style = getComputedStyle(element);
+        const background = effectiveBackground(element);
+        const foreground = blend(parseColor(style.color) ?? { r: 0, g: 0, b: 0, a: 1 }, background);
+        return {
+          text: directText(element).slice(0, 80),
+          selector:
+            element.tagName.toLowerCase() +
+            (element.className ? `.${String(element.className).split(/\s+/)[0]}` : ''),
+          ratio: Number(contrast(foreground, background).toFixed(2)),
+          foreground: colorToString(foreground),
+          background: colorToString(background),
+        };
+      });
+  }, DEVBAR_SELECTOR);
 }
 
 // Helper to reset state and navigate to page
@@ -399,21 +583,212 @@ test.describe('DevBar Stress Tests', () => {
 });
 
 test.describe('DevBar Accessibility', () => {
-  test('should have proper contrast ratios', async ({ page }) => {
+  test('should have no axe violations and expose contrast evidence', async ({ page }, testInfo) => {
     await setupPage(page);
 
-    // Placeholder - actual contrast testing would use axe-core
-    await expect(getDevBar(page)).toBeVisible();
+    const [axeResult, contrastSamples] = await Promise.all([
+      runDevBarAxe(page),
+      collectDevBarContrastSamples(page),
+    ]);
+    const lowContrastSamples = contrastSamples.filter((sample) => sample.ratio < 4.5);
+
+    await testInfo.attach('devbar-accessibility-evidence.json', {
+      body: JSON.stringify(
+        {
+          axe: {
+            violations: axeResult.violations,
+            incomplete: axeResult.incomplete,
+            passCount: axeResult.passes.length,
+          },
+          contrastSamples,
+          lowContrastSamples,
+        },
+        null,
+        2
+      ),
+      contentType: 'application/json',
+    });
+
+    expect(axeResult.violations).toEqual([]);
+    expect(lowContrastSamples).toEqual([]);
   });
 
-  test('should be keyboard navigable', async ({ page }) => {
+  test('should expose named, focus-visible keyboard controls', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Keyboard focus traversal is verified in desktop Chromium; device projects cover touch targets.'
+    );
     await setupPage(page);
 
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
+    const focusable = page.locator(
+      `${DEVBAR_SELECTOR} button:not(#devbar-focus-sentinel), ${DEVBAR_SELECTOR} [role="button"]:not(#devbar-focus-sentinel), ${DEVBAR_SELECTOR} [tabindex]:not([tabindex="-1"]):not(#devbar-focus-sentinel)`
+    );
+    const controlCount = await focusable.count();
+    expect(controlCount).toBeGreaterThanOrEqual(6);
 
-    const focusedElement = page.locator(':focus');
-    await expect(focusedElement).toBeVisible();
+    const controls = await focusable.evaluateAll((elements) =>
+      elements
+        .filter((element) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
+        })
+        .map((element, index) => {
+          const htmlElement = element as HTMLElement;
+          const style = getComputedStyle(htmlElement);
+          const name =
+            htmlElement.getAttribute('aria-label') ||
+            htmlElement.getAttribute('title') ||
+            htmlElement.textContent?.trim() ||
+            '';
+          return {
+            index,
+            name,
+            tagName: htmlElement.tagName.toLowerCase(),
+            role: htmlElement.getAttribute('role'),
+            tabIndex: htmlElement.tabIndex,
+            disabled:
+              htmlElement.hasAttribute('disabled') ||
+              htmlElement.getAttribute('aria-disabled') === 'true',
+            width: Math.round(htmlElement.getBoundingClientRect().width),
+            height: Math.round(htmlElement.getBoundingClientRect().height),
+            cursor: style.cursor,
+          };
+        })
+    );
+
+    const focusOrder: Array<{ name: string; tagName: string; visibleFocus: boolean }> = [];
+    if (testInfo.project.name === 'chromium') {
+      for (let i = 0; i < Math.min(controlCount, 10); i++) {
+        await focusable.nth(i).focus();
+        const active = await page.evaluate((selector) => {
+          const activeElement = document.activeElement as HTMLElement | null;
+          const root = document.querySelector(selector);
+          if (!activeElement || !root?.contains(activeElement)) return null;
+          const style = getComputedStyle(activeElement);
+          const name =
+            activeElement.getAttribute('aria-label') ||
+            activeElement.getAttribute('title') ||
+            activeElement.textContent?.trim() ||
+            '';
+          return {
+            name,
+            tagName: activeElement.tagName.toLowerCase(),
+            visibleFocus:
+              activeElement.matches(':focus-visible') ||
+              (style.outlineStyle !== 'none' && style.outlineWidth !== '0px') ||
+              style.boxShadow !== 'none',
+          };
+        }, DEVBAR_SELECTOR);
+        if (!active) break;
+        focusOrder.push(active);
+      }
+    }
+
+    await testInfo.attach('devbar-keyboard-evidence.json', {
+      body: JSON.stringify(
+        {
+          project: testInfo.project.name,
+          controls,
+          focusOrder,
+          keyboardTraversal:
+            testInfo.project.name === 'chromium'
+              ? 'verified'
+              : 'covered by desktop project; this device project emits naming and touch evidence',
+        },
+        null,
+        2
+      ),
+      contentType: 'application/json',
+    });
+
+    expect(controls.map((item) => item.name)).toEqual(
+      expect.arrayContaining(['Screenshot', 'Accessibility Audit', 'Settings'])
+    );
+    expect(controls.every((item) => item.name.length > 0)).toBe(true);
+    expect(controls.every((item) => item.tabIndex >= 0 || item.disabled)).toBe(true);
+
+    if (testInfo.project.name === 'chromium') {
+      const controlNames = new Set(controls.map((item) => item.name));
+      expect(focusOrder.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(focusOrder.map((item) => item.name)).size).toBe(focusOrder.length);
+      expect(focusOrder.every((item) => controlNames.has(item.name))).toBe(true);
+      expect(focusOrder.every((item) => item.visibleFocus)).toBe(true);
+    }
+  });
+
+  test('should expose accessible settings modal semantics', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Modal keyboard semantics are verified in desktop Chromium; mobile affordance is covered by touch targets.'
+    );
+    await setupPage(page);
+
+    await page.locator('[data-testid="devbar-settings-button"]').click();
+    const overlay = page.locator('[data-devbar-overlay="true"]');
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+
+    await expect(overlay).toBeVisible();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await expect(dialog).toBeFocused();
+
+    const modalEvidence = await dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        role: element.getAttribute('role'),
+        ariaModal: element.getAttribute('aria-modal'),
+        ariaLabel: element.getAttribute('aria-label'),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        focusableControls: element.querySelectorAll('button, [role="button"], input, select')
+          .length,
+      };
+    });
+    await testInfo.attach('devbar-modal-evidence.json', {
+      body: JSON.stringify(modalEvidence, null, 2),
+      contentType: 'application/json',
+    });
+
+    expect(modalEvidence.focusableControls).toBeGreaterThanOrEqual(4);
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(overlay).toBeHidden();
+  });
+
+  test('should keep mobile toolbar controls large enough for touch', async ({ page }, testInfo) => {
+    await page.setViewportSize(VIEWPORTS.base);
+    await setupPage(page);
+
+    const controls = await page
+      .locator(`${DEVBAR_SELECTOR} button, ${DEVBAR_SELECTOR} [role="button"]`)
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
+          })
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              name:
+                element.getAttribute('aria-label') ||
+                element.getAttribute('title') ||
+                element.textContent?.trim() ||
+                element.tagName.toLowerCase(),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+          })
+      );
+    const tooSmall = controls.filter((control) => control.width < 24 || control.height < 24);
+
+    await testInfo.attach('devbar-mobile-touch-targets.json', {
+      body: JSON.stringify({ controls, tooSmall }, null, 2),
+      contentType: 'application/json',
+    });
+
+    expect(controls.length).toBeGreaterThanOrEqual(4);
+    expect(tooSmall).toEqual([]);
   });
 });

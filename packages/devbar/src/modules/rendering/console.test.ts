@@ -46,6 +46,7 @@ vi.mock('../../ui/index.js', () => ({
     (div as any)._closeFn = closeFn;
     return div;
   }),
+  focusModal: vi.fn(),
 }));
 
 vi.mock('../screenshot.js', () => ({
@@ -95,7 +96,7 @@ function createMockConsoleCapture(logs: ConsoleLog[]) {
 }
 
 function makeLogs(
-  entries: Array<{ level: string; message: string; timestamp?: number }>
+  entries: Array<{ level: ConsoleLog['level']; message: string; timestamp?: number }>
 ): ConsoleLog[] {
   return entries.map((e, i) => ({
     level: e.level,
@@ -204,7 +205,7 @@ describe('renderConsolePopup', () => {
     renderConsolePopup(state, capture);
 
     const boxCall = vi.mocked(createModalBox).mock.calls[0];
-    expect(boxCall[0]).toBe('#ef4444');
+    expect(boxCall[0]).toBe('#dc2626');
   });
 
   it('uses amber color for warn filter', () => {
@@ -213,7 +214,7 @@ describe('renderConsolePopup', () => {
     renderConsolePopup(state, capture);
 
     const boxCall = vi.mocked(createModalBox).mock.calls[0];
-    expect(boxCall[0]).toBe('#f59e0b');
+    expect(boxCall[0]).toBe('#92400e');
   });
 
   it('uses blue color for info filter', () => {
@@ -222,7 +223,7 @@ describe('renderConsolePopup', () => {
     renderConsolePopup(state, capture);
 
     const boxCall = vi.mocked(createModalBox).mock.calls[0];
-    expect(boxCall[0]).toBe('#3b82f6');
+    expect(boxCall[0]).toBe('#2563eb');
   });
 
   // ---- Empty state ----
@@ -310,7 +311,7 @@ describe('renderConsolePopup', () => {
 
     const content = document.querySelector('.devbar-modal-content') as HTMLElement;
     const message = content.children[0]?.children[1] as HTMLElement;
-    expect(message.style.color).toBe('#ef4444');
+    expect(message.style.color).toBe('#dc2626');
   });
 
   it('message span for warnings uses amber color', () => {
@@ -321,7 +322,7 @@ describe('renderConsolePopup', () => {
 
     const content = document.querySelector('.devbar-modal-content') as HTMLElement;
     const message = content.children[0]?.children[1] as HTMLElement;
-    expect(message.style.color).toBe('#f59e0b');
+    expect(message.style.color).toBe('#92400e');
   });
 
   it('message span for info uses blue color', () => {
@@ -332,7 +333,7 @@ describe('renderConsolePopup', () => {
 
     const content = document.querySelector('.devbar-modal-content') as HTMLElement;
     const message = content.children[0]?.children[1] as HTMLElement;
-    expect(message.style.color).toBe('#3b82f6');
+    expect(message.style.color).toBe('#2563eb');
   });
 
   it('log entries have padding and border-bottom separators', () => {

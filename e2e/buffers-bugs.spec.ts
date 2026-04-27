@@ -13,8 +13,17 @@
 import { expect, test } from '@playwright/test';
 import { daemonReq, makeFixture } from './_harness.js';
 
-interface ConsoleEntry { level: string; message: string; timestamp: number }
-interface NetworkEntry { method: string; url: string; status: number; timestamp: number }
+interface ConsoleEntry {
+  level: string;
+  message: string;
+  timestamp: number;
+}
+interface NetworkEntry {
+  method: string;
+  url: string;
+  status: number;
+  timestamp: number;
+}
 
 function noisyPage(): string {
   return `<!DOCTYPE html>
@@ -48,7 +57,10 @@ test.describe('Buffers — happy path baselines (after page load)', () => {
       await daemonReq(fx.daemon, 'screenshot');
       await settle();
       const data = (await daemonReq(fx.daemon, 'console-read')) as {
-        entries: ConsoleEntry[]; total: number; errorCount: number; warningCount: number;
+        entries: ConsoleEntry[];
+        total: number;
+        errorCount: number;
+        warningCount: number;
       };
       expect(data.total).toBeGreaterThanOrEqual(4);
       expect(data.errorCount).toBeGreaterThanOrEqual(2);
@@ -69,7 +81,8 @@ test.describe('Buffers — happy path baselines (after page load)', () => {
       await daemonReq(fx.daemon, 'screenshot');
       await settle();
       const data = (await daemonReq(fx.daemon, 'console-read', { errors: true })) as {
-        entries: ConsoleEntry[]; errorCount: number;
+        entries: ConsoleEntry[];
+        errorCount: number;
       };
       expect(data.entries.length).toBeGreaterThan(0);
       for (const e of data.entries) {
@@ -100,7 +113,9 @@ test.describe('Buffers — happy path baselines (after page load)', () => {
       await daemonReq(fx.daemon, 'screenshot');
       await settle();
       const data = (await daemonReq(fx.daemon, 'network-read')) as {
-        entries: NetworkEntry[]; total: number; failedCount: number;
+        entries: NetworkEntry[];
+        total: number;
+        failedCount: number;
       };
       expect(data.total).toBeGreaterThanOrEqual(2); // page + at least one fetch
       const urls = data.entries.map((e) => e.url).join(' ');
@@ -121,7 +136,8 @@ test.describe('Buffers — happy path baselines (after page load)', () => {
       // Diagnostic context if the assertion below fails.
       const summary = all.entries.map((e) => `${e.status} ${e.url}`).join('\n');
       const data = (await daemonReq(fx.daemon, 'network-read', { failed: true })) as {
-        entries: NetworkEntry[]; failedCount: number;
+        entries: NetworkEntry[];
+        failedCount: number;
       };
       expect(data.failedCount, `network buffer:\n${summary}`).toBeGreaterThanOrEqual(1);
       for (const e of data.entries) {
@@ -136,7 +152,10 @@ test.describe('Buffers — happy path baselines (after page load)', () => {
     const fx = await makeFixture(noisyPage());
     try {
       await daemonReq(fx.daemon, 'screenshot');
-      const data = (await daemonReq(fx.daemon, 'dialog-read')) as { total: number; entries: unknown[] };
+      const data = (await daemonReq(fx.daemon, 'dialog-read')) as {
+        total: number;
+        entries: unknown[];
+      };
       expect(data.total).toBe(0);
       expect(data.entries).toEqual([]);
     } finally {
@@ -153,36 +172,32 @@ test.describe('Buffers — known bugs (TDD: drop .fail when fixed)', () => {
   // captured. They should either init the browser OR return a clear
   // "no page loaded" error.
   // ----------------------------------------------------------------------
-  test(
-    'BUG I — console-read on a fresh daemon returns the configured page\'s console events',
-    async () => {
-      const fx = await makeFixture(noisyPage());
-      try {
-        // First request to the daemon — should still produce console entries
-        // for the noisy page (which the daemon is configured to point at).
-        const data = (await daemonReq(fx.daemon, 'console-read')) as {
-          total: number; errorCount: number;
-        };
-        expect(data.total).toBeGreaterThan(0);
-        expect(data.errorCount).toBeGreaterThanOrEqual(2);
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+  test("BUG I — console-read on a fresh daemon returns the configured page's console events", async () => {
+    const fx = await makeFixture(noisyPage());
+    try {
+      // First request to the daemon — should still produce console entries
+      // for the noisy page (which the daemon is configured to point at).
+      const data = (await daemonReq(fx.daemon, 'console-read')) as {
+        total: number;
+        errorCount: number;
+      };
+      expect(data.total).toBeGreaterThan(0);
+      expect(data.errorCount).toBeGreaterThanOrEqual(2);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
-  test(
-    'BUG I — network-read on a fresh daemon returns the configured page\'s requests',
-    async () => {
-      const fx = await makeFixture(noisyPage());
-      try {
-        const data = (await daemonReq(fx.daemon, 'network-read')) as {
-          total: number; failedCount: number;
-        };
-        expect(data.total).toBeGreaterThan(0);
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+  test("BUG I — network-read on a fresh daemon returns the configured page's requests", async () => {
+    const fx = await makeFixture(noisyPage());
+    try {
+      const data = (await daemonReq(fx.daemon, 'network-read')) as {
+        total: number;
+        failedCount: number;
+      };
+      expect(data.total).toBeGreaterThan(0);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 });

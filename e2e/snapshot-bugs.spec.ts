@@ -22,7 +22,11 @@ function saveArtifact(name: string, png: Buffer): void {
   fs.writeFileSync(path.join(ARTIFACT_DIR, name), png);
 }
 
-interface Ref { ref: string; role: string; name: string }
+interface Ref {
+  ref: string;
+  role: string;
+  name: string;
+}
 
 function refRichPage(): string {
   return `<!DOCTYPE html>
@@ -55,7 +59,9 @@ test.describe('Snapshot — happy path baselines', () => {
     const fx = await makeFixture(refRichPage());
     try {
       const data = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
-        refs: Ref[]; tree: string; count: number;
+        refs: Ref[];
+        tree: string;
+        count: number;
       };
       expect(data.refs.length).toBeGreaterThan(0);
       expect(data.refs[0]!.ref).toBe('@e1');
@@ -77,8 +83,12 @@ test.describe('Snapshot — happy path baselines', () => {
   test('snapshot { interactive: false } includes non-interactive elements', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const inter = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
-      const full = (await daemonReq(fx.daemon, 'snapshot', { interactive: false })) as { refs: Ref[] };
+      const inter = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
+      const full = (await daemonReq(fx.daemon, 'snapshot', { interactive: false })) as {
+        refs: Ref[];
+      };
       expect(full.refs.length).toBeGreaterThanOrEqual(inter.refs.length);
       // At least the heading should appear in the full snapshot
       const fullRoles = new Set(full.refs.map((r) => r.role));
@@ -91,10 +101,14 @@ test.describe('Snapshot — happy path baselines', () => {
   test('click-ref on a real button updates the page and is fast (< 3s)', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
       const btn = snap.refs.find((r) => r.role === 'button' && r.name === 'Button One')!;
       const t0 = Date.now();
-      const result = (await daemonReq(fx.daemon, 'click-ref', { ref: btn.ref })) as { clicked: string };
+      const result = (await daemonReq(fx.daemon, 'click-ref', { ref: btn.ref })) as {
+        clicked: string;
+      };
       expect(Date.now() - t0).toBeLessThan(3_000);
       expect(result.clicked).toBe(btn.ref);
     } finally {
@@ -105,10 +119,16 @@ test.describe('Snapshot — happy path baselines', () => {
   test('fill-ref on a text input writes and triggers input handlers', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
       const tb = snap.refs.find((r) => r.role === 'textbox')!;
-      const result = (await daemonReq(fx.daemon, 'fill-ref', { ref: tb.ref, value: 'hello world' })) as {
-        filled: string; value: string;
+      const result = (await daemonReq(fx.daemon, 'fill-ref', {
+        ref: tb.ref,
+        value: 'hello world',
+      })) as {
+        filled: string;
+        value: string;
       };
       expect(result.filled).toBe(tb.ref);
       expect(result.value).toBe('hello world');
@@ -120,9 +140,13 @@ test.describe('Snapshot — happy path baselines', () => {
   test('hover-ref on a link succeeds', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
       const link = snap.refs.find((r) => r.role === 'link')!;
-      const result = (await daemonReq(fx.daemon, 'hover-ref', { ref: link.ref })) as { hovered: string };
+      const result = (await daemonReq(fx.daemon, 'hover-ref', { ref: link.ref })) as {
+        hovered: string;
+      };
       expect(result.hovered).toBe(link.ref);
     } finally {
       await fx.cleanup();
@@ -132,7 +156,9 @@ test.describe('Snapshot — happy path baselines', () => {
   test('press-key sends a key to the page', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const result = (await daemonReq(fx.daemon, 'press-key', { key: 'Escape' })) as { pressed: string };
+      const result = (await daemonReq(fx.daemon, 'press-key', { key: 'Escape' })) as {
+        pressed: string;
+      };
       expect(result.pressed).toBe('Escape');
     } finally {
       await fx.cleanup();
@@ -183,7 +209,8 @@ test.describe('Snapshot — happy path baselines', () => {
       // Prime the refmap first.
       await daemonReq(fx.daemon, 'snapshot', { interactive: true });
       const data = (await daemonReq(fx.daemon, 'snapshot', {
-        interactive: true, annotate: true,
+        interactive: true,
+        annotate: true,
       })) as { screenshot: string; refs: Ref[] };
       expect(data.screenshot).toBeDefined();
       const png = decodeScreenshot(data.screenshot);
@@ -207,7 +234,9 @@ test.describe('Snapshot — known bugs (TDD: drop .fail when fixed)', () => {
   test('BUG G — click-ref on a disabled element fails fast', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
       const disabled = snap.refs.find((r) => r.role === 'button' && /disabled/i.test(r.name))!;
       expect(disabled).toBeDefined();
       const t0 = Date.now();
@@ -232,7 +261,9 @@ test.describe('Snapshot — known bugs (TDD: drop .fail when fixed)', () => {
   test('BUG H — fill-ref on a non-fillable element fails fast', async () => {
     const fx = await makeFixture(refRichPage());
     try {
-      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+      const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+        refs: Ref[];
+      };
       const opt = snap.refs.find((r) => r.role === 'option')!;
       expect(opt).toBeDefined();
       const t0 = Date.now();

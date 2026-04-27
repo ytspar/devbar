@@ -23,13 +23,19 @@ export interface DaemonState {
 // HTTP API
 // ============================================================================
 
-/** Actions the daemon HTTP server handles */
+/**
+ * Actions the daemon HTTP server handles. The demo-* commands are NOT in
+ * this union — they are CLI-only and operate on a file-backed state via
+ * `demoMod.*`, never reaching the daemon. Keeping them out of the type
+ * prevents callers from constructing requests the server will reject.
+ */
 export type DaemonAction =
   | 'ping'
   | 'shutdown'
   | 'screenshot'
   | 'screenshot-responsive'
   | 'snapshot'
+  | 'inspect'
   | 'click-ref'
   | 'click-css'
   | 'fill-ref'
@@ -46,15 +52,7 @@ export type DaemonAction =
   | 'record-pause'
   | 'record-resume'
   | 'sessions-list'
-  | 'generate-viewer'
-  | 'demo-init'
-  | 'demo-note'
-  | 'demo-exec'
-  | 'demo-screenshot'
-  | 'demo-snapshot'
-  | 'demo-pop'
-  | 'demo-verify'
-  | 'demo-status';
+  | 'generate-viewer';
 
 /** Request body for daemon HTTP POST */
 export interface DaemonRequest {

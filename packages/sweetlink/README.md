@@ -13,6 +13,7 @@ Sweetlink enables Claude AI agents to autonomously debug, test, and iterate on w
 ## Features
 
 - **📸 Screenshots** - Capture full page or element-specific screenshots (html2canvas + CDP)
+- **🧭 Inspect Context** - One command for screenshot paths, refs, console/network deltas, a11y, vitals, and next actions
 - **🖱️ Screenshot Button** - One-click screenshot capture with console logs from browser UI
 - **🔍 DOM Queries** - Query and inspect DOM elements with CSS selectors
 - **📊 Console Logs** - Capture and filter browser console output with JSON/summary formats
@@ -171,12 +172,51 @@ Add to your package.json for CLI access:
 Then use:
 
 ```bash
+pnpm sweetlink inspect --url http://localhost:3000
 pnpm sweetlink screenshot
 pnpm sweetlink logs
 pnpm sweetlink query --selector "h1"
 ```
 
+## Agent Protocol
+
+For LLM-driven frontend work, prefer a repeatable evidence loop:
+
+```bash
+# Inspect: generate the state bundle an agent should reason from
+pnpm sweetlink inspect --url http://localhost:3000 --label "initial state" --json
+
+# Act: use @e refs from snapshot.md/context.json, not brittle CSS selectors
+pnpm sweetlink click @e2 --url http://localhost:3000 --json
+
+# Verify: rerun inspect after the DOM or visual state changes
+pnpm sweetlink inspect --url http://localhost:3000 --label "after action" --expected "Menu opens" --json
+
+# Record: when evidence needs to travel with a PR
+pnpm sweetlink record start --url http://localhost:3000
+pnpm sweetlink record stop
+```
+
+`inspect` creates `.sweetlink/inspect/<timestamp-label>/SUMMARY.md`, `context.json`, `screenshot.png`, `snapshot.md`, `console.txt`, `network.txt`, and `a11y.json`. Agents should read `SUMMARY.md` first, use `@e` refs for `click`, `fill`, and `press`, retry stale refs by rerunning `inspect`, and attach the summary plus screenshot or recording artifacts to handoffs and PRs.
+
 ## CLI Usage
+
+### Inspect Context
+
+```bash
+# Human-readable summary with artifact paths
+pnpm sweetlink inspect --url http://localhost:3000 --label "checkout review"
+
+# Stable JSON schema for agents
+pnpm sweetlink inspect --url http://localhost:3000 --json
+
+# Add expected outcome and action transcript to the evidence bundle
+pnpm sweetlink inspect --url http://localhost:3000 \
+  --expected "Save button remains enabled" \
+  --action "clicked promo warning"
+```
+
+The `context` alias is equivalent to `inspect`.
 
 ### Screenshots
 

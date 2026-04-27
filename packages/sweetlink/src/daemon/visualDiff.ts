@@ -20,6 +20,15 @@ export interface VisualDiffResult {
   /** Path to the interactive HTML viewer with side-by-side + overlay views. */
   diffViewerPath?: string;
   pass: boolean;
+  /**
+   * When the comparison failed for IO/permission reasons (NOT a real pixel
+   * mismatch), this carries the error message. CI users debugging "100%
+   * mismatch" can check this to distinguish a real regression from a typo
+   * in baselineDir or a missing baseline.
+   */
+  error?: string;
+  /** True when the baseline was not found (vs. a real error). */
+  baselineMissing?: boolean;
 }
 
 // ============================================================================
@@ -77,7 +86,7 @@ export async function visualDiff(
     result.diffImagePath = options.outputPath;
 
     // Write a sibling .html viewer with toggle/overlay UI.
-    const viewerPath = options.outputPath.replace(/\.png$/i, '') + '.diff.html';
+    const viewerPath = `${options.outputPath.replace(/\.png$/i, '')}.diff.html`;
     const baselineB64 = baseline.toString('base64');
     const currentB64 = current.toString('base64');
     const html = `<!DOCTYPE html>
@@ -159,7 +168,14 @@ export async function diffDirectory(
       const baseline = await fs.readFile(baselinePath);
       const result = await visualDiff(baseline, current, options);
       results.push({ file, result });
-    } catch {
+    } catch (err) {
+      // Distinguish baseline-missing (the common new-screenshot case where
+      // the user is approving a new view) from real IO/permission errors.
+      // Without this distinction, both surface as "100% mismatch" — leaving
+      // CI users debugging a "visual regression" that's really a permissions
+      // typo or a path mistake.
+      const e = err as NodeJS.ErrnoException;
+      const baselineMissing = e?.code === 'ENOENT' && e.path === baselinePath;
       results.push({
         file,
         result: {
@@ -167,6 +183,10 @@ export async function diffDirectory(
           mismatchCount: 0,
           totalPixels: 0,
           pass: false,
+          error: baselineMissing
+            ? `Baseline not found: ${baselinePath}`
+            : `${e?.code ?? 'Error'}: ${e?.message ?? String(err)}`,
+          baselineMissing,
         },
       });
     }

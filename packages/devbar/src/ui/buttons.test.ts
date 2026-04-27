@@ -15,8 +15,8 @@ describe('getButtonStyles', () => {
     expect(styles.display).toBe('flex');
     expect(styles.alignItems).toBe('center');
     expect(styles.justifyContent).toBe('center');
-    expect(styles.width).toBe('22px');
-    expect(styles.height).toBe('22px');
+    expect(styles.width).toBe('24px');
+    expect(styles.height).toBe('24px');
     expect(styles.borderRadius).toBe('50%');
   });
 

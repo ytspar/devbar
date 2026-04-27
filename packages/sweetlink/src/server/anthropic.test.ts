@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callClaude, CLAUDE_MAX_TOKENS, CLAUDE_MODEL, CLAUDE_PRICING } from './anthropic.js';
+import { CLAUDE_MAX_TOKENS, CLAUDE_MODEL, CLAUDE_PRICING, callClaude } from './anthropic.js';
 
 describe('CLAUDE_MODEL', () => {
   it('is a valid Claude model ID', () => {

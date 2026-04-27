@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { generateSummary, type SummaryOptions } from './summary.js';
-import type { SessionManifest } from './session.js';
 import type { ConsoleEntry, NetworkEntry } from './listeners.js';
+import type { SessionManifest } from './session.js';
+import { generateSummary, type SummaryOptions } from './summary.js';
 
 // ============================================================================
 // Fixtures
@@ -149,9 +149,7 @@ describe('generateSummary', () => {
     });
 
     it('shows server error count', () => {
-      const serverErrors = [
-        { source: 'server' as const, message: 'panic', timestamp: 1 },
-      ];
+      const serverErrors = [{ source: 'server' as const, message: 'panic', timestamp: 1 }];
       const result = generateSummary(makeOptions({ serverErrors }));
       expect(result).toContain('| Server Errors | 1 | ❌ |');
     });
@@ -169,13 +167,21 @@ describe('generateSummary', () => {
           // CLI flag form (CSS selector) — should be unwrapped from --selector=...
           { timestamp: 1.5, action: 'click', args: ['--selector=#button'], duration: 50 },
           // Ref-based fill — should render as "@e2 ← \"hello\""
-          { timestamp: 3.2, action: 'fill', args: ['@e2', 'hello'], duration: 100, screenshot: 'action-1.png' },
+          {
+            timestamp: 3.2,
+            action: 'fill',
+            args: ['@e2', 'hello'],
+            duration: 100,
+            screenshot: 'action-1.png',
+          },
         ],
       });
       const result = generateSummary(makeOptions({ manifest }));
       expect(result).toContain('| Time | Action | Target | Took | Screenshot |');
       expect(result).toContain('| 1.5s | click | #button | 50ms | — |');
-      expect(result).toContain('| 3.2s | fill | @e2 ← "hello" | 100ms | [`action-1.png`](action-1.png) |');
+      expect(result).toContain(
+        '| 3.2s | fill | @e2 ← "hello" | 100ms | [`action-1.png`](action-1.png) |'
+      );
     });
   });
 

@@ -59,7 +59,10 @@ export const networkBuffer = new RingBuffer<NetworkEntry>(50_000);
 export const dialogBuffer = new RingBuffer<DialogEntry>(50_000);
 
 // Track pending requests for duration calculation
-const pendingRequests = new Map<string, { startTime: number; method: string; url: string; requestBody?: string }>();
+const pendingRequests = new Map<
+  string,
+  { startTime: number; method: string; url: string; requestBody?: string }
+>();
 
 // ============================================================================
 // Setup
@@ -83,9 +86,7 @@ export function installListeners(page: Page): void {
       timestamp: Date.now(),
       level: msg.type(),
       message: msg.text(),
-      location: msg.location()
-        ? `${msg.location().url}:${msg.location().lineNumber}`
-        : undefined,
+      location: msg.location() ? `${msg.location().url}:${msg.location().lineNumber}` : undefined,
     });
   });
 
@@ -96,7 +97,9 @@ export function installListeners(page: Page): void {
       try {
         const data = request.postData();
         if (data) requestBody = data.slice(0, BODY_CAPTURE_LIMIT);
-      } catch { /* postData may be unavailable */ }
+      } catch {
+        /* postData may be unavailable */
+      }
     }
     pendingRequests.set(request.url(), {
       startTime: Date.now(),
@@ -119,7 +122,9 @@ export function installListeners(page: Page): void {
           // Slice on the buffer (UTF-8 boundary safe enough for first 4KB)
           responseBody = buf.subarray(0, BODY_CAPTURE_LIMIT).toString('utf-8');
         }
-      } catch { /* body may not be available (e.g. redirect) */ }
+      } catch {
+        /* body may not be available (e.g. redirect) */
+      }
     }
 
     networkBuffer.push({
@@ -205,7 +210,7 @@ export function formatNetworkEntries(entries: NetworkEntry[]): string {
       const status = e.status === 0 ? 'FAIL' : String(e.status);
       const duration = `${e.duration}ms`;
       // Truncate long URLs
-      const url = e.url.length > 80 ? e.url.substring(0, 77) + '...' : e.url;
+      const url = e.url.length > 80 ? `${e.url.substring(0, 77)}...` : e.url;
       return `[${time}] ${status} ${e.method} ${url} ${duration}`;
     })
     .join('\n');

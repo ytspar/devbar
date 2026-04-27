@@ -276,8 +276,7 @@ describe('renderOutlineModal', () => {
     renderOutlineModal(state);
 
     const overlay = document.body.firstElementChild as HTMLElement;
-    const buttons = overlay.querySelectorAll('button');
-    const closeBtn = buttons[buttons.length - 1];
+    const closeBtn = overlay.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
     closeBtn.click();
 
     expect(state.showOutlineModal).toBe(false);
@@ -465,8 +464,7 @@ describe('renderSchemaModal', () => {
     renderSchemaModal(state);
 
     const overlay = document.body.firstElementChild as HTMLElement;
-    const buttons = overlay.querySelectorAll('button');
-    const closeBtn = buttons[buttons.length - 1];
+    const closeBtn = overlay.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
     closeBtn.click();
 
     expect(state.showSchemaModal).toBe(false);

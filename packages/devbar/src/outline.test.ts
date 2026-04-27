@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { OutlineNode } from '@ytspar/sweetlink/types';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { extractDocumentOutline, outlineToMarkdown } from './outline.js';
 
 // ============================================================================
@@ -31,7 +31,12 @@ describe('extractDocumentOutline', () => {
     const outline = extractDocumentOutline();
 
     expect(outline).toHaveLength(6);
-    expect(outline[0]).toMatchObject({ tagName: 'h1', level: 1, text: 'Title', category: 'heading' });
+    expect(outline[0]).toMatchObject({
+      tagName: 'h1',
+      level: 1,
+      text: 'Title',
+      category: 'heading',
+    });
     expect(outline[1]).toMatchObject({ tagName: 'h2', level: 2, text: 'Subtitle' });
     expect(outline[2]).toMatchObject({ tagName: 'h3', level: 3 });
     expect(outline[3]).toMatchObject({ tagName: 'h4', level: 4 });
@@ -142,7 +147,11 @@ describe('extractDocumentOutline', () => {
     const outline = extractDocumentOutline();
 
     expect(outline).toHaveLength(1);
-    expect(outline[0]).toMatchObject({ tagName: 'fieldset', text: 'Account Details', category: 'form' });
+    expect(outline[0]).toMatchObject({
+      tagName: 'fieldset',
+      text: 'Account Details',
+      category: 'form',
+    });
   });
 
   it('extracts figure with figcaption', () => {
@@ -155,7 +164,11 @@ describe('extractDocumentOutline', () => {
     const outline = extractDocumentOutline();
 
     expect(outline).toHaveLength(1);
-    expect(outline[0]).toMatchObject({ tagName: 'figure', text: 'A test image', category: 'grouping' });
+    expect(outline[0]).toMatchObject({
+      tagName: 'figure',
+      text: 'A test image',
+      category: 'grouping',
+    });
   });
 
   it('extracts details with summary', () => {
@@ -168,7 +181,11 @@ describe('extractDocumentOutline', () => {
     const outline = extractDocumentOutline();
 
     expect(outline).toHaveLength(1);
-    expect(outline[0]).toMatchObject({ tagName: 'details', text: 'Click to expand', category: 'grouping' });
+    expect(outline[0]).toMatchObject({
+      tagName: 'details',
+      text: 'Click to expand',
+      category: 'grouping',
+    });
   });
 
   it('extracts table with caption', () => {
@@ -513,9 +530,7 @@ describe('outlineToMarkdown', () => {
   });
 
   it('omits category when not defined', () => {
-    const outline: OutlineNode[] = [
-      { tagName: 'div', level: 0, text: 'Custom', children: [] },
-    ];
+    const outline: OutlineNode[] = [{ tagName: 'div', level: 0, text: 'Custom', children: [] }];
     const md = outlineToMarkdown(outline);
 
     expect(md).toContain('- `<div>` Custom');

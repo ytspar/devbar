@@ -727,7 +727,9 @@ describe('setupPerformanceMonitoring', () => {
     expect(() => setupPerformanceMonitoring(state)).not.toThrow();
 
     // All four observers should have logged warnings (may also include vitest internal warnings)
-    expect(warnSpy.mock.calls.filter((c) => c[0]?.toString().includes('[GlobalDevBar]'))).toHaveLength(4);
+    expect(
+      warnSpy.mock.calls.filter((c) => c[0]?.toString().includes('[GlobalDevBar]'))
+    ).toHaveLength(4);
     expect(warnSpy).toHaveBeenCalledWith(
       '[GlobalDevBar] FCP PerformanceObserver not supported',
       expect.any(Error)
@@ -761,10 +763,10 @@ describe('setupPerformanceMonitoring', () => {
       writable: true,
     });
 
-    const listeners: Record<string, Function[]> = {};
+    const listeners: Record<string, Array<() => void>> = {};
     vi.spyOn(window, 'addEventListener').mockImplementation((event: string, handler: any) => {
       if (!listeners[event]) listeners[event] = [];
-      listeners[event].push(handler);
+      listeners[event].push(handler as () => void);
     });
 
     const state = createMockState({ lcpValue: 300 });
@@ -774,7 +776,7 @@ describe('setupPerformanceMonitoring', () => {
     expect(state.perfStats).toBeNull();
 
     // Simulate load event
-    listeners['load']?.forEach((fn) => fn());
+    listeners.load?.forEach((fn) => fn());
     vi.advanceTimersByTime(100);
 
     expect(state.perfStats).not.toBeNull();

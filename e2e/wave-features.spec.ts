@@ -17,7 +17,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { cli, daemonReq, decodeScreenshot, makeFixture, pngDimensions } from './_harness.js';
 
-interface Ref { ref: string; role: string; name: string }
+interface Ref {
+  ref: string;
+  role: string;
+  name: string;
+}
 
 const ARTIFACT_DIR = '/tmp/sweetlink-e2e-artifacts/wave';
 function saveArtifact(name: string, png: Buffer): void {
@@ -44,6 +48,17 @@ const occludedPage = `<!DOCTYPE html><html><body style="margin:0">
      id="modal">overlay</div>
 </body></html>`;
 
+const preSessionNoisePage = `<!DOCTYPE html><html><body>
+<h1>Pre-session noise</h1>
+<script>console.error('pre-session-noise: should not appear in session evidence');</script>
+</body></html>`;
+
+const sessionNoisePage = `<!DOCTYPE html><html><body>
+<h1>Session noise</h1>
+<button aria-label="Noisy action">Noisy action</button>
+<script>console.error('session-noise: should appear in session evidence');</script>
+</body></html>`;
+
 test.describe.configure({ mode: 'serial', timeout: 60_000 });
 
 test('action duration is captured (> 0ms)', async () => {
@@ -59,7 +74,9 @@ test('action duration is captured (> 0ms)', async () => {
     const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
       manifest: { commands: Array<{ duration: number }> };
     };
-    const fillCmd = stop.manifest.commands.find((c) => (c as { action?: string }).action === 'fill');
+    const fillCmd = stop.manifest.commands.find(
+      (c) => (c as { action?: string }).action === 'fill'
+    );
     expect(fillCmd?.duration).toBeGreaterThan(0);
   } finally {
     await fx.cleanup();
@@ -89,10 +106,57 @@ test('record-start --label embeds in manifest + SUMMARY title', async () => {
     };
     expect(stop.manifest.label).toBe('login flow');
 
-    const summaryPath = path.join(fx.projectRoot, '.sweetlink', stop.manifest.sessionId, 'SUMMARY.md');
+    const summaryPath = path.join(
+      fx.projectRoot,
+      '.sweetlink',
+      stop.manifest.sessionId,
+      'SUMMARY.md'
+    );
     const summary = fs.readFileSync(summaryPath, 'utf-8');
     expect(summary).toMatch(/^# Session Report: login flow/m);
     expect(summary).toContain('**Label:** login flow');
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+test('record-stop report evidence is scoped to the active session', async () => {
+  const fx = await makeFixture(preSessionNoisePage);
+  try {
+    // Force daemon startup/page-load noise before the recording begins.
+    await daemonReq(fx.daemon, 'screenshot');
+
+    fx.setHtml(sessionNoisePage);
+    await daemonReq(fx.daemon, 'record-start', { label: 'scoped evidence' });
+    const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
+    const button = snap.refs.find((r) => r.name === 'Noisy action')!;
+    await daemonReq(fx.daemon, 'click-ref', { ref: button.ref });
+    const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
+      manifest: { sessionId: string; errors: { console: number } };
+    };
+
+    expect(stop.manifest.errors.console).toBe(1);
+
+    const summaryPath = path.join(
+      fx.projectRoot,
+      '.sweetlink',
+      stop.manifest.sessionId,
+      'SUMMARY.md'
+    );
+    const summary = fs.readFileSync(summaryPath, 'utf-8');
+    expect(summary).toContain('session-noise: should appear in session evidence');
+    expect(summary).not.toContain('pre-session-noise: should not appear in session evidence');
+
+    const manifestPath = path.join(
+      fx.projectRoot,
+      '.sweetlink',
+      stop.manifest.sessionId,
+      'sweetlink-session.json'
+    );
+    const persistedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
+      errors: { console: number };
+    };
+    expect(persistedManifest.errors.console).toBe(1);
   } finally {
     await fx.cleanup();
   }
@@ -130,7 +194,10 @@ test('sessions-list returns recorded sessions and writes index.html', async () =
     // Make a tiny recording so there's something to list.
     await daemonReq(fx.daemon, 'record-start', { label: 'first' });
     const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as { refs: Ref[] };
-    await daemonReq(fx.daemon, 'fill-ref', { ref: snap.refs.find((r) => r.role === 'textbox')!.ref, value: 'x' });
+    await daemonReq(fx.daemon, 'fill-ref', {
+      ref: snap.refs.find((r) => r.role === 'textbox')!.ref,
+      value: 'x',
+    });
     await daemonReq(fx.daemon, 'record-stop');
 
     const list = (await daemonReq(fx.daemon, 'sessions-list')) as {
@@ -174,10 +241,14 @@ test('visual-diff writes a side-by-side .diff.html viewer for mismatches', async
   const fx = await makeFixture(buttonsPage);
   try {
     const a = (await daemonReq(fx.daemon, 'screenshot')) as { screenshot: string };
-    const b = (await daemonReq(fx.daemon, 'screenshot', { viewport: '375x600' })) as { screenshot: string };
+    const b = (await daemonReq(fx.daemon, 'screenshot', { viewport: '375x600' })) as {
+      screenshot: string;
+    };
     const outPath = path.join(fx.projectRoot, 'diff.png');
     const result = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: a.screenshot, current: b.screenshot, outputPath: outPath,
+      baseline: a.screenshot,
+      current: b.screenshot,
+      outputPath: outPath,
     })) as { mismatchPercentage: number; diffViewerPath?: string; diffImagePath?: string };
     expect(result.mismatchPercentage).toBeGreaterThan(0);
     expect(result.diffViewerPath).toBeDefined();
@@ -194,8 +265,12 @@ test('visual-diff writes a side-by-side .diff.html viewer for mismatches', async
 test('--theme dark applies prefers-color-scheme to screenshot', async () => {
   const fx = await makeFixture(themedPage);
   try {
-    const lightResp = (await daemonReq(fx.daemon, 'screenshot', { theme: 'light' })) as { screenshot: string };
-    const darkResp = (await daemonReq(fx.daemon, 'screenshot', { theme: 'dark' })) as { screenshot: string };
+    const lightResp = (await daemonReq(fx.daemon, 'screenshot', { theme: 'light' })) as {
+      screenshot: string;
+    };
+    const darkResp = (await daemonReq(fx.daemon, 'screenshot', { theme: 'dark' })) as {
+      screenshot: string;
+    };
     const lightPng = decodeScreenshot(lightResp.screenshot);
     const darkPng = decodeScreenshot(darkResp.screenshot);
     saveArtifact('theme-light.png', lightPng);
@@ -230,7 +305,7 @@ test('CLI `record exec` runs a DSL and auto-stops', async () => {
   try {
     const result = await cli(
       ['record', 'exec', '--url', fx.url, '--label', 'dsl-test', 'fill @e2 hello there; press Tab'],
-      fx.projectRoot,
+      fx.projectRoot
     );
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stdout).toContain('Recording:');

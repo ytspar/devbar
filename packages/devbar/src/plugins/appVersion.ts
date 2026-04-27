@@ -28,7 +28,10 @@ export interface AppVersionPluginOptions {
  * @param options - Optional configuration
  * @returns A cleanup function that unregisters the control.
  */
-export function appVersionPlugin(version: string, options: AppVersionPluginOptions = {}): () => void {
+export function appVersionPlugin(
+  version: string,
+  options: AppVersionPluginOptions = {}
+): () => void {
   const { prefix = 'v', variant = 'default', onClick } = options;
 
   GlobalDevBar.registerControl({

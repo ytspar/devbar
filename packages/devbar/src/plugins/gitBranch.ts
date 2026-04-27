@@ -10,7 +10,7 @@
  *   // later: cleanup();
  */
 
-import { getGlobalDevBar, GlobalDevBar } from '../GlobalDevBar.js';
+import { GlobalDevBar, getGlobalDevBar } from '../GlobalDevBar.js';
 
 const CONTROL_ID = 'devbar-plugin-git-branch';
 const POLL_INTERVAL = 2000;

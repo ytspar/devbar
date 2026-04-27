@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { QueryDomCommand, SweetlinkResponse } from '../../types.js';
 import { handleQueryDOM } from './dom.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 describe('handleQueryDOM', () => {

@@ -158,47 +158,44 @@ test.describe('Recording — known bugs (TDD: drop .fail when fixed)', () => {
   // Bug A: console errors during recording are not reported in the manifest.
   // recording.ts hardcodes `errors: { console: 0, network: 0, server: 0 }`.
   // ----------------------------------------------------------------------
-  test(
-    'BUG A — manifest.errors.console reflects console errors fired during the session',
-    async () => {
-      const fx = await makeFixture(pageWithConsoleError());
-      try {
-        await daemonReq(fx.daemon, 'record-start');
-        // Give the recording page time to load + emit the synthetic errors.
-        await new Promise((r) => setTimeout(r, 750));
-        const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
-          manifest: { errors: { console: number; network: number; server: number } };
-        };
-        // We synthesised exactly two console.error calls in the fixture.
-        expect(stop.manifest.errors.console).toBeGreaterThanOrEqual(2);
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+  test('BUG A — manifest.errors.console reflects console errors fired during the session', async () => {
+    const fx = await makeFixture(pageWithConsoleError());
+    try {
+      await daemonReq(fx.daemon, 'record-start');
+      // Give the recording page time to load + emit the synthetic errors.
+      await new Promise((r) => setTimeout(r, 750));
+      const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
+        manifest: { errors: { console: number; network: number; server: number } };
+      };
+      // We synthesised exactly two console.error calls in the fixture.
+      expect(stop.manifest.errors.console).toBeGreaterThanOrEqual(2);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
   // ----------------------------------------------------------------------
   // Bug B: `screenshot` taken via the daemon during a recording is neither
   // logged as an action nor routed to the recording page. handleScreenshot
   // uses getPage(), not getRecordingPage(), and never calls logAction().
   // ----------------------------------------------------------------------
-  test(
-    'BUG B — daemon `screenshot` during recording logs a screenshot action',
-    async () => {
-      const fx = await makeFixture(pageWithButtons());
-      try {
-        await daemonReq(fx.daemon, 'record-start');
-        await daemonReq(fx.daemon, 'screenshot', {});
-        const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
-          manifest: { commands: Array<{ action: string }> };
-        };
-        const shotCmd = stop.manifest.commands.find((c) => c.action === 'screenshot');
-        expect(shotCmd, 'screenshot during recording should appear in manifest.commands').toBeDefined();
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+  test('BUG B — daemon `screenshot` during recording logs a screenshot action', async () => {
+    const fx = await makeFixture(pageWithButtons());
+    try {
+      await daemonReq(fx.daemon, 'record-start');
+      await daemonReq(fx.daemon, 'screenshot', {});
+      const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
+        manifest: { commands: Array<{ action: string }> };
+      };
+      const shotCmd = stop.manifest.commands.find((c) => c.action === 'screenshot');
+      expect(
+        shotCmd,
+        'screenshot during recording should appear in manifest.commands'
+      ).toBeDefined();
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
   // ----------------------------------------------------------------------
   // Bug C: CLI `click --selector` during a recording does not log an action.
@@ -206,29 +203,26 @@ test.describe('Recording — known bugs (TDD: drop .fail when fixed)', () => {
   // but the recording context has no devbar. There's also no `click @ref`
   // CLI verb. Until either is wired, recording cannot capture CSS clicks.
   // ----------------------------------------------------------------------
-  test(
-    'BUG C — CLI `click --selector "#b1"` during recording logs a click action',
-    async () => {
-      const fx = await makeFixture(pageWithButtons());
-      try {
-        await daemonReq(fx.daemon, 'record-start');
+  test('BUG C — CLI `click --selector "#b1"` during recording logs a click action', async () => {
+    const fx = await makeFixture(pageWithButtons());
+    try {
+      await daemonReq(fx.daemon, 'record-start');
 
-        const result = await cli(['click', '--selector', '#b1', '--url', fx.url], fx.projectRoot);
-        // Today this exits 1 with "No element found matching: #b1" because
-        // there's no devbar in the recording-context page.
-        expect(result.exitCode, `click failed: ${result.stdout}\n${result.stderr}`).toBe(0);
+      const result = await cli(['click', '--selector', '#b1', '--url', fx.url], fx.projectRoot);
+      // Today this exits 1 with "No element found matching: #b1" because
+      // there's no devbar in the recording-context page.
+      expect(result.exitCode, `click failed: ${result.stdout}\n${result.stderr}`).toBe(0);
 
-        const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
-          manifest: { commands: Array<{ action: string; args: string[] }> };
-        };
-        const clickCmd = stop.manifest.commands.find((c) => c.action === 'click');
-        expect(clickCmd).toBeDefined();
-        expect(clickCmd!.args.join(' ')).toContain('#b1');
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+      const stop = (await daemonReq(fx.daemon, 'record-stop')) as {
+        manifest: { commands: Array<{ action: string; args: string[] }> };
+      };
+      const clickCmd = stop.manifest.commands.find((c) => c.action === 'click');
+      expect(clickCmd).toBeDefined();
+      expect(clickCmd!.args.join(' ')).toContain('#b1');
+    } finally {
+      await fx.cleanup();
+    }
+  });
 
   // ----------------------------------------------------------------------
   // Bug D: ring buffers are global to the daemon and never scoped per
@@ -267,7 +261,10 @@ test.describe('Recording — known bugs (TDD: drop .fail when fixed)', () => {
       // Session 2 must not include session 1's errors.
       // Tolerate +1 for any device-pixel-ratio warning Chromium might
       // emit on its own — but never the 2 we synthesised in session 1.
-      expect(errors2, `session1=${errors1} session2=${errors2} (session2 should not inherit session1's errors)`).toBeLessThanOrEqual(errors1);
+      expect(
+        errors2,
+        `session1=${errors1} session2=${errors2} (session2 should not inherit session1's errors)`
+      ).toBeLessThanOrEqual(errors1);
       expect(errors2).toBeLessThan(2);
     } finally {
       await fx.cleanup();
@@ -286,7 +283,10 @@ test.describe('Recording — known bugs (TDD: drop .fail when fixed)', () => {
     try {
       // Snapshot first to populate refs.
       const snapResult = await cli(['snapshot', '--url', fx.url], fx.projectRoot);
-      expect(snapResult.exitCode, `snapshot failed:\nSTDOUT:\n${snapResult.stdout}\nSTDERR:\n${snapResult.stderr}`).toBe(0);
+      expect(
+        snapResult.exitCode,
+        `snapshot failed:\nSTDOUT:\n${snapResult.stdout}\nSTDERR:\n${snapResult.stderr}`
+      ).toBe(0);
       const refMatch = snapResult.stdout.match(/@e(\d+)\s+\[button\]/);
       expect(refMatch, `no button ref in snapshot:\n${snapResult.stdout}`).not.toBeNull();
       const ref = `@e${refMatch![1]}`;

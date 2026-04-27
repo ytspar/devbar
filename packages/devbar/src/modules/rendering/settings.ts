@@ -33,6 +33,10 @@ export function renderSettingsPopover(state: DevBarState): void {
 
   const popover = document.createElement('div');
   popover.setAttribute('data-devbar', 'true');
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-modal', 'true');
+  popover.setAttribute('aria-label', 'Settings');
+  popover.tabIndex = -1;
 
   // Position: centered over the devbar on desktop, centered on screen on mobile
   const isTop = position.startsWith('top');
@@ -99,6 +103,7 @@ export function renderSettingsPopover(state: DevBarState): void {
   overlay.appendChild(popover);
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  popover.focus();
 }
 
 // ============================================================================
@@ -140,6 +145,10 @@ function createThemeSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
 
   const themeSection = createSettingsSection('Theme');
+  appendSettingHint(
+    themeSection,
+    'Match the host app, force dark, or force light while reviewing.'
+  );
 
   const themeOptions = document.createElement('div');
   Object.assign(themeOptions.style, { display: 'flex', gap: '6px' });
@@ -168,7 +177,11 @@ type SettingsPositionValue =
   | 'bottom-center';
 
 function createDisplaySection(state: DevBarState): HTMLDivElement {
-  const displaySection = createSettingsSection('Display');
+  const displaySection = createSettingsSection('Display & appearance');
+  appendSettingHint(
+    displaySection,
+    'Change where DevBar lives and how evidence captures are rendered.'
+  );
 
   displaySection.appendChild(createPositionPicker(state));
   displaySection.appendChild(createCompactModeToggle(state));
@@ -490,7 +503,13 @@ function createScreenshotQualitySlider(state: DevBarState): HTMLDivElement {
 function createFeaturesSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
 
-  const featuresSection = createSettingsSection('Features');
+  const featuresSection = createSettingsSection('Evidence workflow');
+  appendSettingHint(
+    featuresSection,
+    'Choose the controls and save behavior an agent sees during inspect, verify, and handoff.'
+  );
+
+  featuresSection.appendChild(createSaveLocationSelector(state));
 
   featuresSection.appendChild(
     createToggleRow('Screenshot Button', state.options.showScreenshot, accentColor, () => {
@@ -516,9 +535,14 @@ function createFeaturesSection(state: DevBarState): HTMLDivElement {
     })
   );
 
-  // Save location selector
+  return featuresSection;
+}
+
+function createSaveLocationSelector(state: DevBarState): HTMLDivElement {
+  const { accentColor } = state.options;
+
   const saveLocRow = document.createElement('div');
-  Object.assign(saveLocRow.style, { marginBottom: '6px' });
+  Object.assign(saveLocRow.style, { marginBottom: '10px' });
 
   const saveLocLabel = document.createElement('div');
   Object.assign(saveLocLabel.style, {
@@ -529,8 +553,19 @@ function createFeaturesSection(state: DevBarState): HTMLDivElement {
   saveLocLabel.textContent = 'Save Method';
   saveLocRow.appendChild(saveLocLabel);
 
+  const saveLocHint = document.createElement('div');
+  Object.assign(saveLocHint.style, {
+    color: CSS_COLORS.textMuted,
+    fontSize: '0.5625rem',
+    lineHeight: '1.4',
+    marginBottom: '8px',
+  });
+  saveLocHint.textContent =
+    'Auto saves artifacts through Sweetlink when connected, otherwise downloads in-browser.';
+  saveLocRow.appendChild(saveLocHint);
+
   const saveLocOptions = document.createElement('div');
-  Object.assign(saveLocOptions.style, { display: 'flex', gap: '6px' });
+  Object.assign(saveLocOptions.style, { display: 'flex', gap: '6px', flexWrap: 'wrap' });
 
   const saveLocChoices: Array<{ value: 'auto' | 'local' | 'download'; label: string }> = [
     { value: 'auto', label: 'Auto' },
@@ -556,9 +591,7 @@ function createFeaturesSection(state: DevBarState): HTMLDivElement {
   });
 
   saveLocRow.appendChild(saveLocOptions);
-  featuresSection.appendChild(saveLocRow);
-
-  return featuresSection;
+  return saveLocRow;
 }
 
 type SettingsMetricKey = 'breakpoint' | 'fcp' | 'lcp' | 'cls' | 'inp' | 'pageSize';
@@ -567,6 +600,10 @@ function createMetricsSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
 
   const metricsSection = createSettingsSection('Metrics');
+  appendSettingHint(
+    metricsSection,
+    'Keep the toolbar focused by hiding metrics that are not useful now.'
+  );
 
   const metricsToggles: Array<{ key: SettingsMetricKey; label: string }> = [
     { key: 'breakpoint', label: 'Breakpoint' },
@@ -665,6 +702,18 @@ function createSettingsSection(title: string, hasBorder = true): HTMLDivElement 
   return section;
 }
 
+function appendSettingHint(section: HTMLDivElement, text: string): void {
+  const hint = document.createElement('div');
+  Object.assign(hint.style, {
+    color: CSS_COLORS.textMuted,
+    fontSize: '0.5625rem',
+    lineHeight: '1.4',
+    margin: '-2px 0 10px',
+  });
+  hint.textContent = text;
+  section.appendChild(hint);
+}
+
 function createSettingsRadioButton(options: {
   label: string;
   isActive: boolean;
@@ -678,7 +727,8 @@ function createSettingsRadioButton(options: {
 
   const btn = document.createElement('button');
   Object.assign(btn.style, {
-    padding: '4px 10px',
+    padding: '6px 10px',
+    minHeight: '28px',
     backgroundColor: isActive ? withAlpha(accentColor, 13) : 'transparent',
     border: `1px solid ${isActive ? accentColor : 'transparent'}`,
     borderRadius: '4px',
@@ -722,7 +772,9 @@ function createToggleRow(
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: '28px',
     marginBottom: '6px',
+    gap: '12px',
   });
 
   const labelEl = document.createElement('span');

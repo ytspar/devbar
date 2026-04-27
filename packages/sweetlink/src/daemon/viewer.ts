@@ -15,9 +15,10 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import type { SessionManifest } from './session.js';
 import type { ConsoleEntry, NetworkEntry } from './listeners.js';
+import type { SessionManifest } from './session.js';
 import { generateSummary } from './summary.js';
+import { escapeHtml } from './utils.js';
 
 export interface ViewerOptions {
   sessionDir: string;
@@ -33,14 +34,7 @@ export interface ViewerOptions {
   inlineVideo?: boolean;
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+// escapeHtml moved to ./utils.ts
 
 export async function generateViewer(
   manifest: SessionManifest,
@@ -58,7 +52,9 @@ export async function generateViewer(
       const buffer = await fs.readFile(videoPath);
       videoExists = true;
       if (wantInline) videoBase64 = buffer.toString('base64');
-    } catch { /* video file may not exist */ }
+    } catch {
+      /* video file may not exist */
+    }
   }
 
   // Load action screenshots as base64 fallback
@@ -68,18 +64,20 @@ export async function generateViewer(
       try {
         const buffer = await fs.readFile(path.join(options.sessionDir, cmd.screenshot));
         screenshots.push({ name: cmd.screenshot, data: buffer.toString('base64') });
-      } catch { /* skip missing */ }
+      } catch {
+        /* skip missing */
+      }
     }
   }
 
   const totalErrors = manifest.errors.console + manifest.errors.network + manifest.errors.server;
-  const sanitizedConsole = (options.consoleEntries ?? []).map(e => ({
+  const sanitizedConsole = (options.consoleEntries ?? []).map((e) => ({
     timestamp: e.timestamp,
     level: e.level,
     message: String(e.message).slice(0, 500),
     location: e.location ? String(e.location).slice(0, 200) : undefined,
   }));
-  const sanitizedNetwork = (options.networkEntries ?? []).map(e => ({
+  const sanitizedNetwork = (options.networkEntries ?? []).map((e) => ({
     timestamp: e.timestamp,
     method: e.method,
     url: String(e.url).slice(0, 200),
@@ -87,16 +85,18 @@ export async function generateViewer(
     duration: e.duration,
   }));
 
-  const timelineHtml = manifest.commands.map((cmd, i) => {
-    const action = escapeHtml(`${cmd.action} ${cmd.args.join(' ')}`);
-    const bb = cmd.boundingBox;
-    const bbInfo = bb ? ` at (${Math.round(bb.x)},${Math.round(bb.y)})` : '';
-    return `<div class="action-item" data-index="${i}" data-time="${cmd.timestamp.toFixed(3)}">
+  const timelineHtml = manifest.commands
+    .map((cmd, i) => {
+      const action = escapeHtml(`${cmd.action} ${cmd.args.join(' ')}`);
+      const bb = cmd.boundingBox;
+      const bbInfo = bb ? ` at (${Math.round(bb.x)},${Math.round(bb.y)})` : '';
+      return `<div class="action-item" data-index="${i}" data-time="${cmd.timestamp.toFixed(3)}">
       <span class="action-ts">${cmd.timestamp.toFixed(1)}s</span>
       <span class="action-cmd">${action}</span>
       <span class="action-pos">${escapeHtml(bbInfo)}</span>
     </div>`;
-  }).join('\n');
+    })
+    .join('\n');
 
   const hasVideo = videoExists;
 
@@ -204,9 +204,9 @@ export async function generateViewer(
     <h1>Sweetlink Session</h1>
   </div>
   <div style="display:flex;gap:12px;align-items:center">
-    ${manifest.gitBranch ? `<span class="git-info">${escapeHtml(manifest.gitBranch)}${manifest.gitCommit ? ' @ ' + escapeHtml(manifest.gitCommit) : ''}</span><span style="color:var(--color-border)">|</span>` : ''}
+    ${manifest.gitBranch ? `<span class="git-info">${escapeHtml(manifest.gitBranch)}${manifest.gitCommit ? ` @ ${escapeHtml(manifest.gitCommit)}` : ''}</span><span style="color:var(--color-border)">|</span>` : ''}
     <span style="font-size:0.625rem;color:var(--color-text-muted)">${manifest.duration.toFixed(1)}s &middot; ${manifest.commands.length} actions${hasVideo ? ' &middot; video' : ''}</span>
-    <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : totalErrors + ' errors'}</span>
+    <span class="badge ${totalErrors === 0 ? 'green' : 'red'}">${totalErrors === 0 ? '0 errors' : `${totalErrors} errors`}</span>
     <button class="share-btn" id="btn-copy-report" title="Copy summary report to clipboard">Copy Report</button>
     <button class="share-btn" id="btn-download" title="Download this viewer as a file">Download</button>
   </div>
@@ -214,13 +214,14 @@ export async function generateViewer(
 <div class="main">
   <div class="video-pane">
     <div class="video-container" id="video-container">
-      ${hasVideo
-        ? videoBase64
-          ? `<video id="player" src="data:video/webm;base64,${videoBase64}" preload="auto"></video>`
-          : `<video id="player" src="${escapeHtml(manifest.video!)}" preload="auto"></video>`
-        : screenshots.length > 0
-          ? `<img id="screenshot-img" src="data:image/png;base64,${screenshots[0]!.data}" />`
-          : '<div class="empty">No video or screenshots</div>'
+      ${
+        hasVideo
+          ? videoBase64
+            ? `<video id="player" src="data:video/webm;base64,${videoBase64}" preload="auto"></video>`
+            : `<video id="player" src="${escapeHtml(manifest.video!)}" preload="auto"></video>`
+          : screenshots.length > 0
+            ? `<img id="screenshot-img" src="data:image/png;base64,${screenshots[0]!.data}" />`
+            : '<div class="empty">No video or screenshots</div>'
       }
       <canvas class="overlay-canvas" id="overlay"></canvas>
     </div>
@@ -228,10 +229,12 @@ export async function generateViewer(
     <div class="controls">
       <div class="scrub-track" id="scrub-track">
         <div class="scrub-fill" id="scrub-fill"></div>
-        ${manifest.commands.map((cmd, i) => {
-          const pct = manifest.duration > 0 ? (cmd.timestamp / manifest.duration) * 100 : 0;
-          return `<div class="scrub-marker" data-index="${i}" data-time="${cmd.timestamp}" style="left:${pct}%" title="${escapeHtml(cmd.action + ' ' + cmd.args.join(' '))}"></div>`;
-        }).join('')}
+        ${manifest.commands
+          .map((cmd, i) => {
+            const pct = manifest.duration > 0 ? (cmd.timestamp / manifest.duration) * 100 : 0;
+            return `<div class="scrub-marker" data-index="${i}" data-time="${cmd.timestamp}" style="left:${pct}%" title="${escapeHtml(`${cmd.action} ${cmd.args.join(' ')}`)}"></div>`;
+          })
+          .join('')}
       </div>
       <div class="control-row">
         ${hasVideo ? '<button class="btn" id="btn-play">Play</button>' : ''}
@@ -263,13 +266,15 @@ export async function generateViewer(
   </div>
 </div>
 <script>
-var actions = ${JSON.stringify(manifest.commands.map(c => ({
-    timestamp: c.timestamp,
-    action: c.action,
-    args: c.args,
-    boundingBox: c.boundingBox,
-  })))};
-var screenshots = ${JSON.stringify(screenshots.map(s => s.data))};
+var actions = ${JSON.stringify(
+    manifest.commands.map((c) => ({
+      timestamp: c.timestamp,
+      action: c.action,
+      args: c.args,
+      boundingBox: c.boundingBox,
+    }))
+  )};
+var screenshots = ${JSON.stringify(screenshots.map((s) => s.data))};
 var duration = ${manifest.duration};
 var hasVideo = ${hasVideo};
 var summaryReport = ${JSON.stringify(summaryMd)};

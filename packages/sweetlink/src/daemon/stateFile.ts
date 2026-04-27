@@ -59,7 +59,7 @@ export function writeDaemonState(projectRoot: string, state: DaemonState, appPor
   }
 
   const stateFile = getStateFilePath(projectRoot, appPort);
-  const tmpFile = stateFile + '.tmp';
+  const tmpFile = `${stateFile}.tmp`;
 
   // Atomic write: write to tmp, then rename
   fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -152,7 +152,7 @@ export function acquireLock(projectRoot: string, appPort?: number): boolean {
     // Check if the lock is stale (holding process is dead)
     try {
       const pid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
-      if (!isNaN(pid)) {
+      if (!Number.isNaN(pid)) {
         try {
           // Signal 0 checks if process exists without killing it
           process.kill(pid, 0);

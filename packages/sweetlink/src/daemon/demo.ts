@@ -6,9 +6,10 @@
  * tutorial/proof document with embedded command outputs and screenshots.
  */
 
-import { execFileSync, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { detectGit } from './utils.js';
 
 // ============================================================================
 // Types
@@ -40,19 +41,7 @@ export interface DemoSection {
 // Helpers
 // ============================================================================
 
-function detectGit(): { branch: string | null; commit: string | null } {
-  try {
-    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    const commit = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
-      encoding: 'utf-8', timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    return { branch: branch !== 'HEAD' ? branch : null, commit };
-  } catch {
-    return { branch: null, commit: null };
-  }
-}
+// detectGit + escapeHtml live in ./utils.ts so all callers share one source.
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -76,7 +65,7 @@ function screenshotCount(state: DemoState): number {
 export async function initDemo(
   title: string,
   outputDir: string,
-  options?: { url?: string },
+  options?: { url?: string }
 ): Promise<DemoState> {
   await fs.mkdir(outputDir, { recursive: true });
 
@@ -124,11 +113,13 @@ export function addExec(state: DemoState, command: string, args: string[]): Demo
   let exitCode = 0;
 
   try {
-    output = String(execSync(fullCommand, {
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }));
+    output = String(
+      execSync(fullCommand, {
+        encoding: 'utf-8',
+        timeout: 30_000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    );
   } catch (err: unknown) {
     const execError = err as { stdout?: string; stderr?: string; status?: number };
     output = (execError.stdout ?? '') + (execError.stderr ?? '');
@@ -157,7 +148,7 @@ export function addExec(state: DemoState, command: string, args: string[]): Demo
 export async function addScreenshot(
   state: DemoState,
   screenshotBuffer: Buffer,
-  caption?: string,
+  caption?: string
 ): Promise<DemoState> {
   const index = screenshotCount(state) + 1;
   const filename = `demo-screenshot-${index}.png`;
@@ -288,11 +279,13 @@ export async function verifyDemo(state: DemoState): Promise<{
 
     let actual = '';
     try {
-      actual = String(execSync(section.command, {
-        encoding: 'utf-8',
-        timeout: 30_000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }));
+      actual = String(
+        execSync(section.command, {
+          encoding: 'utf-8',
+          timeout: 30_000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+      );
     } catch (err: unknown) {
       const execError = err as { stdout?: string; stderr?: string };
       actual = (execError.stdout ?? '') + (execError.stderr ?? '');

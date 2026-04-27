@@ -8,9 +8,31 @@
 import { fork } from 'child_process';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  acquireLock,
+  extractPort,
+  isDaemonAlive,
+  readDaemonState,
+  releaseLock,
+} from './stateFile.js';
 import type { DaemonResponse, DaemonState } from './types.js';
 import { DAEMON_POLL_INTERVAL_MS, DAEMON_SPAWN_TIMEOUT_MS } from './types.js';
-import { acquireLock, extractPort, isDaemonAlive, readDaemonState, releaseLock } from './stateFile.js';
+
+export class DaemonRequestError extends Error {
+  readonly action: string;
+  readonly status: number;
+  readonly response: DaemonResponse;
+  readonly data?: Record<string, unknown>;
+
+  constructor(action: string, status: number, response: DaemonResponse) {
+    super(response.error ?? `Daemon request failed: ${action}`);
+    this.name = 'DaemonRequestError';
+    this.action = action;
+    this.status = status;
+    this.response = response;
+    this.data = response.data;
+  }
+}
 
 /**
  * Ensure a daemon is running for the given project root and URL.
@@ -123,7 +145,7 @@ export async function daemonRequest(
   const body = (await response.json()) as DaemonResponse;
 
   if (!body.ok) {
-    throw new Error(body.error ?? `Daemon request failed: ${action}`);
+    throw new DaemonRequestError(action, response.status, body);
   }
 
   return body;

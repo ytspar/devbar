@@ -38,20 +38,3 @@ export async function getHtml2Canvas(): Promise<Html2CanvasFunc> {
   }
   return html2canvasPromise;
 }
-
-/**
- * Check if html2canvas has been loaded
- */
-export function isHtml2CanvasLoaded(): boolean {
-  return html2canvasPromise !== null;
-}
-
-/**
- * Preload html2canvas without waiting for result.
- * Useful for warming up the cache before user interaction.
- */
-export function preloadHtml2Canvas(): void {
-  getHtml2Canvas().catch(() => {
-    // Silently ignore preload errors
-  });
-}

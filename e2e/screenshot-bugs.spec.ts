@@ -60,7 +60,9 @@ test.describe('Screenshot — happy path baselines', () => {
     const fx = await makeFixture(shortPage());
     try {
       const data = (await daemonReq(fx.daemon, 'screenshot')) as {
-        screenshot: string; width: number; height: number;
+        screenshot: string;
+        width: number;
+        height: number;
       };
       const png = decodeScreenshot(data.screenshot);
       saveArtifact('hifi-default.png', png);
@@ -128,7 +130,9 @@ test.describe('Screenshot — happy path baselines', () => {
     try {
       const data = (await daemonReq(fx.daemon, 'screenshot-devices', {
         devices: ['iphone-14', 'desktop'],
-      })) as { screenshots: Array<{ device: string; width: number; height: number; screenshot: string }> };
+      })) as {
+        screenshots: Array<{ device: string; width: number; height: number; screenshot: string }>;
+      };
       expect(data.screenshots).toHaveLength(2);
       const iphone = data.screenshots.find((s) => /iphone/i.test(s.device));
       const desktop = data.screenshots.find((s) => /desktop/i.test(s.device));
@@ -171,7 +175,7 @@ test.describe('Screenshot — happy path baselines', () => {
     try {
       const result = await cli(
         ['screenshot', '--hifi', '--url', fx.url, '--output', outPath],
-        fx.projectRoot,
+        fx.projectRoot
       );
       expect(result.exitCode, result.stderr).toBe(0);
       expect(fs.existsSync(outPath)).toBe(true);
@@ -191,26 +195,22 @@ test.describe('Screenshot — known bugs (TDD: drop .fail when fixed)', () => {
   // daemon response has width=1512, height=982 (DEFAULT_VIEWPORT). The
   // dimensions field should reflect the captured image, not the viewport.
   // ----------------------------------------------------------------------
-  test(
-    'BUG F — --full-page response dims match the actual PNG, not viewport',
-    async () => {
-      const fx = await makeFixture(tallPage());
-      try {
-        const data = (await daemonReq(fx.daemon, 'screenshot', {
-          fullPage: true,
-        })) as { screenshot: string; width: number; height: number };
-        const png = decodeScreenshot(data.screenshot);
-        const dims = pngDimensions(png);
-        // Sanity: PNG itself captured the full 3000px.
-        expect(dims.height).toBeGreaterThanOrEqual(2900);
-        // Bug: daemon-reported height should equal the actual PNG height.
-        expect(data.height).toBe(dims.height);
-        expect(data.width).toBe(dims.width);
-        saveArtifact('full-page-tall.png', png);
-      } finally {
-        await fx.cleanup();
-      }
-    },
-  );
+  test('BUG F — --full-page response dims match the actual PNG, not viewport', async () => {
+    const fx = await makeFixture(tallPage());
+    try {
+      const data = (await daemonReq(fx.daemon, 'screenshot', {
+        fullPage: true,
+      })) as { screenshot: string; width: number; height: number };
+      const png = decodeScreenshot(data.screenshot);
+      const dims = pngDimensions(png);
+      // Sanity: PNG itself captured the full 3000px.
+      expect(dims.height).toBeGreaterThanOrEqual(2900);
+      // Bug: daemon-reported height should equal the actual PNG height.
+      expect(data.height).toBe(dims.height);
+      expect(data.width).toBe(dims.width);
+      saveArtifact('full-page-tall.png', png);
+    } finally {
+      await fx.cleanup();
+    }
+  });
 });
-

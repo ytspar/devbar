@@ -47,7 +47,10 @@ export async function uploadEvidence(
 
   // Check if viewer.html exists
   const viewerPath = path.join(sessionDir, 'viewer.html');
-  const hasViewer = await fs.access(viewerPath).then(() => true).catch(() => false);
+  const hasViewer = await fs
+    .access(viewerPath)
+    .then(() => true)
+    .catch(() => false);
   if (hasViewer) {
     body += `> Interactive viewer: \`${viewerPath}\`\n`;
   }
@@ -119,7 +122,7 @@ export async function captureTerminal(
   const lines = output.split('\n');
   const timePerLine = duration / Math.max(lines.length, 1);
   for (let i = 0; i < lines.length; i++) {
-    events.push([i * timePerLine, 'o', lines[i]! + '\n']);
+    events.push([i * timePerLine, 'o', `${lines[i]!}\n`]);
   }
 
   // Write asciicast v2 format
@@ -139,10 +142,7 @@ export async function captureTerminal(
   // Generate self-contained HTML player
   const htmlFilename = `terminal-${Date.now()}.html`;
   const htmlPath = path.join(outputDir, htmlFilename);
-  const escapedOutput = output
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  const escapedOutput = output.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const html = `<!DOCTYPE html>
 <html><head>

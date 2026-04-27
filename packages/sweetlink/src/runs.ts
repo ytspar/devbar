@@ -23,23 +23,37 @@ export interface RunSlotOptions {
   app?: string;
   /** Override the run identifier. Defaults to env SWEETLINK_RUN or HHMM. */
   run?: string;
-  /** Subdirectory inside the run slot — typically "term" / "sim" / "" (sessions). */
-  kind?: 'term' | 'sim' | 'session' | '';
+  /** Subdirectory inside the run slot. Omit for the session root. */
+  kind?: 'term' | 'sim' | 'session';
 }
 
-let _cachedRun: string | null = null;
-function defaultRunId(): string {
-  if (_cachedRun) return _cachedRun;
-  if (process.env.SWEETLINK_RUN) {
-    _cachedRun = process.env.SWEETLINK_RUN;
-    return _cachedRun;
+/**
+ * Slugify a user-supplied namespace segment into something safe to use as a
+ * directory name. Without this, `--app ../../../tmp/x` would let a malicious
+ * caller (CI template, package.json script, batch JSON producer) write
+ * artifacts anywhere the user can write — including ~/.ssh/authorized_keys
+ * or LaunchAgents. Limited charset matches the existing --label slugifier.
+ */
+export function slugifyNamespace(value: string): string {
+  const cleaned = value
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  if (!cleaned) {
+    throw new Error(
+      `Invalid namespace "${value}" — must contain at least one alphanumeric, dash, or underscore character`
+    );
   }
+  return cleaned;
+}
+
+function defaultRunId(): string {
+  if (process.env.SWEETLINK_RUN) return slugifyNamespace(process.env.SWEETLINK_RUN);
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   // HHMM-SS — short and human-readable. The date component lives in the
   // parent directory, so duplicating it here would be noise.
-  _cachedRun = `${pad(d.getHours())}${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-  return _cachedRun;
+  return `${pad(d.getHours())}${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
 }
 
 function todayYmd(): string {
@@ -52,6 +66,10 @@ function todayYmd(): string {
  * Resolve the artifact directory for a capture.
  * - With `app`:  <base>/<app>/<YYYYMMDD>/<run>[/<kind>]
  * - Without:     <base>[/<kindMap>]   (back-compat with .sweetlink/term, etc.)
+ *
+ * `app` and `run` are slugified to prevent path traversal — anyone who can
+ * influence a sweetlink invocation (npm script, CI template, batch stdin)
+ * could otherwise pass `../../../tmp/x` and target arbitrary writable paths.
  */
 export function runSlot(options: RunSlotOptions): string {
   const baseDir = options.baseDir.endsWith('.sweetlink')
@@ -63,13 +81,14 @@ export function runSlot(options: RunSlotOptions): string {
     return path.join(baseDir, options.kind);
   }
 
-  const run = options.run ?? defaultRunId();
-  const head = path.join(baseDir, options.app, todayYmd(), run);
+  const safeApp = slugifyNamespace(options.app);
+  const safeRun = options.run ? slugifyNamespace(options.run) : defaultRunId();
+  const head = path.join(baseDir, safeApp, todayYmd(), safeRun);
   if (!options.kind || options.kind === 'session') return head;
   return path.join(head, options.kind);
 }
 
-/** Reset the cached run id — used in tests. */
+/** Reset internal caches — kept for back-compat with existing tests; now a no-op. */
 export function _resetRunCache(): void {
-  _cachedRun = null;
+  /* no-op: runIds are no longer cached at module level */
 }

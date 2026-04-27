@@ -32,6 +32,14 @@ export interface ModalConfig {
   isSaving?: boolean;
   /** Path where data was saved or download confirmation message */
   savedPath?: string | null;
+  /** Agent-readable context that explains where this evidence came from */
+  evidenceContext?: ModalEvidenceContext;
+}
+
+export interface ModalEvidenceContext {
+  title?: string;
+  items: Array<{ label: string; value: string }>;
+  copyText?: string;
 }
 
 /**
@@ -49,16 +57,38 @@ export function createModalOverlay(onClose: () => void): HTMLDivElement {
 }
 
 /**
- * Create modal box with border and shadow
+ * Create modal box with border and shadow.
+ * Pass `ariaLabel` to give the dialog an accessible name so screen readers
+ * announce its title — without it, axe flags the dialog as unnamed and SR
+ * users hear "dialog" with no context.
  */
-export function createModalBox(color: string): HTMLDivElement {
+export function createModalBox(color: string, ariaLabel?: string): HTMLDivElement {
   const modal = document.createElement('div');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  if (ariaLabel) modal.setAttribute('aria-label', ariaLabel);
+  modal.tabIndex = -1;
   Object.assign(modal.style, {
     ...MODAL_BOX_BASE_STYLES,
     border: `1px solid ${color}`,
     boxShadow: `${DEVBAR_THEME.shadows.dropXl}, 0 0 0 1px ${withAlpha(color, 20)}`,
   });
   return modal;
+}
+
+/**
+ * Move focus to a modal once it's been added to the DOM. Uses queueMicrotask
+ * so the focus happens after the current frame's append, when the element
+ * is connected and focusable.
+ */
+export function focusModal(modal: HTMLElement): void {
+  queueMicrotask(() => {
+    try {
+      modal.focus();
+    } catch {
+      /* element was removed before microtask ran */
+    }
+  });
 }
 
 /**
@@ -76,6 +106,7 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     saveLocation = 'auto',
     isSaving,
     savedPath,
+    evidenceContext,
   } = config;
   const effectiveSave = resolveSaveLocation(saveLocation, sweetlinkConnected);
 
@@ -197,7 +228,114 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
     header.appendChild(savedConfirm);
   }
 
+  if (evidenceContext) {
+    header.appendChild(createEvidenceContextBox(color, evidenceContext));
+  }
+
   return header;
+}
+
+function createEvidenceContextBox(
+  color: string,
+  evidenceContext: ModalEvidenceContext
+): HTMLDivElement {
+  const box = document.createElement('div');
+  Object.assign(box.style, {
+    width: '100%',
+    marginTop: '4px',
+    padding: '10px 12px',
+    backgroundColor: withAlpha(color, 6),
+    border: `1px solid ${withAlpha(color, 19)}`,
+    borderRadius: '6px',
+    display: 'grid',
+    gap: '8px',
+  });
+
+  const topRow = document.createElement('div');
+  Object.assign(topRow.style, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  });
+
+  const title = document.createElement('span');
+  Object.assign(title.style, {
+    color,
+    fontSize: '0.625rem',
+    fontWeight: '600',
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+  });
+  title.textContent = evidenceContext.title ?? 'Agent Context';
+  topRow.appendChild(title);
+
+  if (evidenceContext.copyText) {
+    const copyBtn = createStyledButton({
+      color,
+      text: 'Copy Context',
+      padding: '4px 8px',
+      fontSize: '0.625rem',
+    });
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(evidenceContext.copyText ?? '');
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy Context';
+        }, 1500);
+      } catch {
+        copyBtn.textContent = 'Copy Failed';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy Context';
+        }, 1500);
+      }
+    };
+    topRow.appendChild(copyBtn);
+  }
+
+  box.appendChild(topRow);
+
+  const itemGrid = document.createElement('div');
+  Object.assign(itemGrid.style, {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+    gap: '6px 10px',
+  });
+
+  for (const item of evidenceContext.items) {
+    const pair = document.createElement('div');
+    Object.assign(pair.style, { minWidth: '0' });
+
+    const label = document.createElement('div');
+    Object.assign(label.style, {
+      color: CSS_COLORS.textMuted,
+      fontSize: '0.5625rem',
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em',
+      marginBottom: '2px',
+    });
+    label.textContent = item.label;
+    pair.appendChild(label);
+
+    const value = document.createElement('div');
+    Object.assign(value.style, {
+      color: CSS_COLORS.textSecondary,
+      fontFamily: 'monospace',
+      fontSize: '0.625rem',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+    value.title = item.value;
+    value.textContent = item.value;
+    pair.appendChild(value);
+
+    itemGrid.appendChild(pair);
+  }
+
+  box.appendChild(itemGrid);
+  return box;
 }
 
 /**

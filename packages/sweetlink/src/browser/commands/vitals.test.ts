@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SweetlinkResponse } from '../../types.js';
 import { handleGetVitals } from './vitals.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 describe('handleGetVitals', () => {
@@ -411,7 +410,6 @@ describe('handleGetVitals', () => {
     // Force a non-Error throw by making performance.getEntriesByType throw a string
     mockPerformance({
       getEntriesByType: vi.fn(() => {
-        // biome-ignore lint/complexity/noUselessLoneBlockStatements: intentional throw of non-Error
         throw 'string error';
       }),
     });

@@ -5,7 +5,7 @@
  * and localStorage fallback.
  */
 
-import { PALETTE } from './constants.js';
+import { CSS_COLORS, PALETTE } from './constants.js';
 import type { ThemeMode } from './types.js';
 
 // ============================================================================
@@ -93,8 +93,8 @@ export interface DevBarSettings {
 // Default Settings
 // ============================================================================
 
-/** Default accent color (emerald) */
-const DEFAULT_ACCENT_COLOR = PALETTE.emerald;
+/** Default accent color follows the active theme for light/dark contrast. */
+const DEFAULT_ACCENT_COLOR = CSS_COLORS.primary;
 
 /** Preset accent colors for the color picker */
 export const ACCENT_COLOR_PRESETS = [

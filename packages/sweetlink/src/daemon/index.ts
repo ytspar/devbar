@@ -11,7 +11,7 @@
 import * as crypto from 'crypto';
 import { setHeadedMode } from './browser.js';
 import { startServer } from './server.js';
-import { extractPort, removeDaemonState, releaseLock, writeDaemonState } from './stateFile.js';
+import { extractPort, releaseLock, removeDaemonState, writeDaemonState } from './stateFile.js';
 import { DAEMON_PORT_MAX, DAEMON_PORT_MIN } from './types.js';
 
 // ============================================================================
@@ -67,14 +67,18 @@ async function main(): Promise<void> {
       });
 
       // Write state file so the CLI can find us (scoped by app port)
-      writeDaemonState(projectRoot, {
-        pid: process.pid,
-        port,
-        token,
-        startedAt: new Date().toISOString(),
-        url,
-        lastActivity: new Date().toISOString(),
-      }, appPort);
+      writeDaemonState(
+        projectRoot,
+        {
+          pid: process.pid,
+          port,
+          token,
+          startedAt: new Date().toISOString(),
+          url,
+          lastActivity: new Date().toISOString(),
+        },
+        appPort
+      );
 
       const stateFileName = appPort ? `daemon-${appPort}.json` : 'daemon.json';
       console.error(`[Daemon] Started on port ${port} (PID: ${process.pid})`);

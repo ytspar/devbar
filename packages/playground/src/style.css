@@ -17,6 +17,7 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
+  scroll-padding-bottom: clamp(7rem, 14vh, 11rem);
 }
 
 body {
@@ -29,7 +30,8 @@ body {
     radial-gradient(ellipse at 80% 80%, rgba(168, 85, 247, 0.05) 0%, transparent 40%);
   color: var(--devbar-color-text);
   min-height: 100vh;
-  padding-bottom: 80px;
+  padding-bottom: clamp(7rem, 14vh, 11rem);
+  overflow-x: hidden;
 
   /* Green-tinged grays -- shift neutral blue-grays toward the emerald accent */
   --devbar-color-text-secondary: #8ca89c;
@@ -91,9 +93,9 @@ body {
 /* Theme toggle — fixed top-right */
 .theme-toggle {
   position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 100;
+  top: max(1rem, env(safe-area-inset-top));
+  right: max(1rem, env(safe-area-inset-right));
+  z-index: 1000;
   display: flex;
   align-items: center;
   gap: 0.375rem;
@@ -106,6 +108,7 @@ body {
   letter-spacing: 0.1em;
   padding: 0.375rem 0.625rem;
   white-space: nowrap;
+  max-width: calc(100vw - 2rem);
   cursor: pointer;
   backdrop-filter: blur(8px);
   transition:
@@ -678,12 +681,12 @@ body {
   }
 
   .landing-hero {
-    padding: 2rem 2rem 1.5rem;
+    padding: 4.5rem 2rem 1.5rem;
     margin-bottom: 1.5rem;
   }
 
   .landing-logo-img {
-    width: 320px;
+    width: min(320px, calc(100vw - 4rem));
   }
 
   .landing-tagline {
@@ -706,7 +709,7 @@ body {
 
 @media (max-width: 640px) {
   .demo-container {
-    padding: 1rem;
+    padding: 1rem 1rem 4rem;
   }
 
   .demo-header {
@@ -838,7 +841,7 @@ body.theme-light {
 
 .landing-hero {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: clamp(3rem, 6vw, 4.25rem) 2rem 3rem;
   max-width: 900px;
   margin: 0 auto 3rem;
 }
@@ -848,10 +851,12 @@ body.theme-light {
   justify-content: center;
   margin: 0 0 1.5rem;
   font-weight: normal;
+  overflow: visible;
 }
 
 .landing-logo-img {
-  width: 400px;
+  display: block;
+  width: min(400px, calc(100vw - 4rem));
   height: auto;
 }
 
@@ -928,6 +933,92 @@ body.theme-light {
   margin-bottom: 1.5rem;
   font-size: 0.6875rem;
   letter-spacing: 0.05em;
+}
+
+.assistant-loop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 auto 1.25rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: assistant-loop;
+}
+
+.assistant-loop-step {
+  position: relative;
+  min-height: 9rem;
+  padding: 0.875rem;
+  text-align: left;
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.14), transparent 52%), var(--devbar-color-bg-card);
+  border: 1px solid var(--devbar-color-border);
+  border-radius: var(--devbar-radius-md);
+  box-shadow: var(--devbar-shadow-sm);
+  counter-increment: assistant-loop;
+}
+
+.assistant-loop-step::before {
+  content: "0" counter(assistant-loop);
+  display: block;
+  margin-bottom: 1rem;
+  font-family: var(--devbar-font-mono);
+  font-size: 0.6875rem;
+  color: var(--devbar-color-primary);
+  letter-spacing: 0.14em;
+}
+
+.assistant-loop-name {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--devbar-color-primary);
+  font-size: 0.75rem;
+  font-weight: var(--devbar-font-semibold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.assistant-loop-detail {
+  display: block;
+  color: var(--devbar-color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.landing-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  border-radius: var(--devbar-radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--devbar-transition-fast),
+    box-shadow var(--devbar-transition-fast),
+    transform var(--devbar-transition-fast);
+}
+
+.landing-command:hover {
+  border-color: var(--devbar-color-primary);
+  box-shadow: 0 0 14px var(--devbar-color-primary-glow);
+  transform: translateY(-1px);
+}
+
+.landing-command-label {
+  color: var(--devbar-color-text-muted);
+  font-size: 0.625rem;
+  font-weight: var(--devbar-font-semibold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landing-command code {
+  font-family: var(--devbar-font-mono);
+  font-size: 0.875rem;
+  color: var(--devbar-color-primary);
 }
 
 .release-meta {
@@ -1179,6 +1270,15 @@ body.theme-light {
   padding: 0 2rem;
 }
 
+.release-summary {
+  max-width: 660px;
+  margin: -1rem auto 1.25rem;
+  color: var(--devbar-color-text-secondary);
+  font-size: var(--devbar-text-base);
+  line-height: var(--devbar-leading-relaxed);
+  text-align: center;
+}
+
 /* Release history graph */
 .release-graph-wrap {
   margin-bottom: 1.5rem;
@@ -1294,6 +1394,9 @@ body.theme-light {
   gap: 0;
   border: 1px solid var(--devbar-color-border);
   border-top: none;
+  max-height: 34rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .changelog-loading {
@@ -1553,13 +1656,64 @@ body::after {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 900px) {
+  .assistant-loop {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
   .landing-hero {
-    padding: 1.5rem 1rem;
+    padding-top: 4.5rem;
   }
 
   .landing-logo-img {
-    width: 260px;
+    width: min(320px, calc(100vw - 4rem));
+  }
+}
+
+@media (max-width: 480px) {
+  .landing-hero {
+    padding: 4.75rem 1rem 1.5rem;
+  }
+
+  .landing-logo-img {
+    width: min(280px, calc(100vw - 2rem));
+  }
+
+  .theme-toggle {
+    top: calc(1.25rem + env(safe-area-inset-top, 0px));
+    right: auto;
+    left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    padding: 0.5rem 0.625rem;
+    font-size: 0.6875rem;
+  }
+
+  .assistant-loop {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-loop-step {
+    min-height: 0;
+  }
+
+  .landing-command,
+  .landing-install {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .landing-command {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .landing-command code,
+  .landing-install code {
+    font-size: 0.75rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .landing-features,
@@ -1567,6 +1721,14 @@ body::after {
   .landing-quickstart,
   .landing-changelog {
     padding: 0 1rem;
+  }
+
+  .release-summary {
+    text-align: left;
+  }
+
+  .changelog-list {
+    max-height: 28rem;
   }
 
   .changelog-entry {

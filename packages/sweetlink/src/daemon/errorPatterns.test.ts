@@ -133,7 +133,9 @@ describe('detectServerErrors', () => {
 
   describe('Java errors', () => {
     it('detects Exception in thread', () => {
-      const result = detectServerErrors('Exception in thread "main" java.lang.NullPointerException');
+      const result = detectServerErrors(
+        'Exception in thread "main" java.lang.NullPointerException'
+      );
       expect(result).toHaveLength(1);
       expect(result[0].language).toBe('Java');
       expect(result[0].pattern).toBe('Exception in thread');
@@ -285,7 +287,9 @@ describe('detectServerErrors', () => {
 
   describe('clean output', () => {
     it('returns empty array for clean output', () => {
-      const result = detectServerErrors('Server started on port 3000\nListening for connections...');
+      const result = detectServerErrors(
+        'Server started on port 3000\nListening for connections...'
+      );
       expect(result).toEqual([]);
     });
 

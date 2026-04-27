@@ -11,7 +11,7 @@
  * - tooltip cleanup
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Mock all sub-modules before importing render
 vi.mock('./collapsed.js', () => ({
@@ -51,13 +51,12 @@ vi.mock('./common.js', () => {
 });
 
 import type { DevBarState } from '../types.js';
-import { render } from './index.js';
-
 import { renderCollapsed } from './collapsed.js';
-import { renderCompact } from './compact.js';
 import { setRenderGuard } from './common.js';
+import { renderCompact } from './compact.js';
 import { renderConsolePopup } from './console.js';
 import { renderExpanded } from './expanded.js';
+import { render } from './index.js';
 import {
   renderA11yModal,
   renderDesignReviewConfirmModal,
@@ -295,10 +294,7 @@ describe('render dispatch (index.ts)', () => {
     const state = createMockState();
     render(state, createMockConsoleCapture(), []);
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[GlobalDevBar] Render failed:',
-      expect.any(Error)
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('[GlobalDevBar] Render failed:', expect.any(Error));
     // Container should still exist (appended before try block)
     expect(state.container).not.toBeNull();
 

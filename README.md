@@ -178,6 +178,23 @@ pnpm sweetlink click --selector "button.submit"
 pnpm sweetlink refresh
 ```
 
+## Agent Protocol
+
+Use Sweetlink as an inspect-act-verify loop instead of isolated screenshots:
+
+```bash
+# 1. Capture one LLM-friendly state bundle
+pnpm sweetlink inspect --url http://localhost:5173 --label "initial state" --json
+
+# 2. Act through accessibility-tree refs from the bundle
+pnpm sweetlink click @e3 --url http://localhost:5173 --json
+
+# 3. Verify the result and attach evidence
+pnpm sweetlink inspect --url http://localhost:5173 --label "after click" --expected "Dialog opens" --json
+```
+
+`inspect` writes `.sweetlink/inspect/.../SUMMARY.md`, `context.json`, `screenshot.png`, `snapshot.md`, `console.txt`, `network.txt`, and `a11y.json`. Agents should read the summary first, use `@e` refs for `click`/`fill`/`press`, rerun `inspect` after DOM changes, and attach the generated artifacts or a `record stop` session summary to PRs.
+
 ## Adding App-Specific Functions (Custom Controls)
 
 devbar supports registering custom controls that appear in the toolbar. This lets you add app-specific debugging functions.

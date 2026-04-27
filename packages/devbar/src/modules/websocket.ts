@@ -29,7 +29,11 @@ import type { DevBarState } from './types.js';
 /** Close and null out any pending viewer window (blank tab opened on record-stop click). */
 function cleanupPendingWindow(state: DevBarState): void {
   if (state.pendingViewerWindow) {
-    try { state.pendingViewerWindow.close(); } catch { /* may already be closed */ }
+    try {
+      state.pendingViewerWindow.close();
+    } catch {
+      /* may already be closed */
+    }
     state.pendingViewerWindow = null;
   }
 }
@@ -112,7 +116,8 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
       // Handle recording responses (not in SweetlinkCommand union)
       if (message.type === 'record-start-response' && message.success) {
         state.recordingActive = true;
-        state.recordingSessionId = (message as Record<string, unknown>).sessionId as string ?? null;
+        state.recordingSessionId =
+          ((message as Record<string, unknown>).sessionId as string) ?? null;
         state.recordingStartedAt = Date.now();
         state.recordingTimer = setInterval(() => state.render(), 1000);
         state.render();

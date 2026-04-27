@@ -294,7 +294,11 @@ export function createLandingHero(): HTMLElement {
 
   // Tagline
   hero.appendChild(
-    createTextElement('p', 'landing-tagline', 'Development toolbar and AI debugging toolkit')
+    createTextElement(
+      'p',
+      'landing-tagline',
+      'The inspect → act → verify loop for AI-assisted frontend work'
+    )
   );
 
   // Badges
@@ -353,46 +357,109 @@ export function createLandingHero(): HTMLElement {
   fetchBadgeData();
   fetchReleaseInfo();
 
-  // Quick install — entire card is clickable to copy
-  const install = document.createElement('div');
-  install.className = 'landing-install';
-  install.setAttribute('role', 'button');
-  install.setAttribute('tabindex', '0');
-  install.setAttribute('aria-label', 'Copy install command');
-  const code = document.createElement('code');
-  code.textContent = 'pnpm add @ytspar/devbar @ytspar/sweetlink';
-  install.appendChild(code);
-  const copyLabel = document.createElement('span');
-  copyLabel.className = 'copy-btn';
-  copyLabel.textContent = 'Copy';
-  install.appendChild(copyLabel);
+  const loop = document.createElement('ol');
+  loop.className = 'assistant-loop';
+  for (const step of [
+    {
+      name: 'Inspect',
+      detail: 'Capture screenshot, refs, console, network, vitals, and a11y in one bundle.',
+    },
+    {
+      name: 'Act',
+      detail: 'Use stable @e refs to click, fill, press, and keep the agent out of selector soup.',
+    },
+    {
+      name: 'Verify',
+      detail:
+        'Rerun inspect, compare state, and surface stale refs or failed requests immediately.',
+    },
+    {
+      name: 'Record',
+      detail: 'Attach session summaries, artifacts, and visual proof to PRs or LLM handoffs.',
+    },
+  ]) {
+    const item = document.createElement('li');
+    item.className = 'assistant-loop-step';
+    item.appendChild(createTextElement('span', 'assistant-loop-name', step.name));
+    item.appendChild(createTextElement('span', 'assistant-loop-detail', step.detail));
+    loop.appendChild(item);
+  }
+  hero.appendChild(loop);
 
-  const doCopy = () => {
-    navigator.clipboard.writeText('pnpm add @ytspar/devbar @ytspar/sweetlink').then(
-      () => {
-        copyLabel.textContent = 'Copied!';
-        setTimeout(() => {
-          copyLabel.textContent = 'Copy';
-        }, 2000);
-      },
-      () => {
-        copyLabel.textContent = 'Failed';
-        setTimeout(() => {
-          copyLabel.textContent = 'Copy';
-        }, 2000);
-      }
+  hero.appendChild(
+    createCopyCard({
+      className: 'landing-command',
+      ariaLabel: 'Copy inspect command',
+      label: 'Agent context',
+      command: 'pnpm sweetlink inspect --url http://localhost:5173',
+    })
+  );
+
+  hero.appendChild(
+    createCopyCard({
+      className: 'landing-install',
+      ariaLabel: 'Copy install command',
+      command: 'pnpm add @ytspar/devbar @ytspar/sweetlink',
+    })
+  );
+
+  return hero;
+}
+
+/**
+ * Build a click-to-copy card. Used for the agent-context and install snippets
+ * — both wrap a `<code>` block in a clickable role=button div with keyboard
+ * support and a transient "Copied!" / "Failed" feedback label.
+ */
+function createCopyCard(opts: {
+  className: string;
+  ariaLabel: string;
+  label?: string;
+  command: string;
+}): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = opts.className;
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+  card.setAttribute('aria-label', opts.ariaLabel);
+
+  if (opts.label) {
+    const labelEl = document.createElement('span');
+    labelEl.className = 'landing-command-label';
+    labelEl.textContent = opts.label;
+    card.appendChild(labelEl);
+  }
+
+  const code = document.createElement('code');
+  code.textContent = opts.command;
+  card.appendChild(code);
+
+  const copyBtn = document.createElement('span');
+  copyBtn.className = 'copy-btn';
+  copyBtn.textContent = 'Copy';
+  card.appendChild(copyBtn);
+
+  const flashCopyState = (text: string): void => {
+    copyBtn.textContent = text;
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy';
+    }, 2000);
+  };
+  const doCopy = (): void => {
+    navigator.clipboard.writeText(opts.command).then(
+      () => flashCopyState('Copied!'),
+      () => flashCopyState('Failed')
     );
   };
-  install.addEventListener('click', doCopy);
-  install.addEventListener('keydown', (e) => {
+
+  card.addEventListener('click', doCopy);
+  card.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       doCopy();
     }
   });
-  hero.appendChild(install);
-
-  return hero;
+  return card;
 }
 
 /**
@@ -439,6 +506,12 @@ export function createChangelogSection(): HTMLElement {
 
   const heading = createTextElement('h2', 'section-heading', 'Releases');
   section.appendChild(heading);
+
+  const summary = document.createElement('p');
+  summary.className = 'release-summary';
+  summary.textContent =
+    'A bounded audit trail for shipped evidence features. Recent entries stay visible; the full history remains scrollable when you need provenance.';
+  section.appendChild(summary);
 
   // Release graph container (populated async)
   const graphWrap = document.createElement('div');
@@ -1015,34 +1088,34 @@ export function createSweetlinkSection(): HTMLElement {
 
   const features = [
     {
-      title: 'Token-Efficient Screenshots',
+      title: 'Inspect Context Bundles',
       description:
-        'Compressed images via WebSocket. ~1,000 tokens vs ~15,000 for CDP. Saves context window.',
+        'One command returns screenshot paths, interactive refs, console/network deltas, a11y results, vitals, and next actions.',
     },
     {
-      title: 'Console Log Streaming',
+      title: 'Ref-Based Actions',
       description:
-        'Real-time log capture with filtering. Errors, warnings, and info with timestamps.',
+        'Agents act through @e refs from the accessibility tree, with stale-ref screenshots and remediation hints when the DOM changes.',
     },
     {
-      title: 'HMR Auto-Capture',
+      title: 'Session Evidence',
       description:
-        'Automatic screenshots on hot reload. AI sees changes immediately after code edits.',
+        'Record browser sessions with action transcripts, scoped console/network evidence, videos, viewers, and PR-ready summaries.',
     },
     {
-      title: 'Design Review',
+      title: 'Accessibility Proof',
       description:
-        'Claude Vision integration for automated UI analysis. Catches visual bugs and accessibility issues.',
+        'Axe, contrast, focus, keyboard, modal, and touch-target checks turn vague accessibility claims into auditable artifacts.',
     },
     {
-      title: 'CLI for AI Agents',
+      title: 'Visual Verification',
       description:
-        'Commands that AI assistants can run: screenshot, logs, query, refresh. Built for automation.',
+        'Screenshots, responsive captures, annotated refs, and visual diffs help agents verify the UI state they changed.',
     },
     {
-      title: 'WebSocket Bridge',
+      title: 'Typed CLI Surface',
       description:
-        'Real-time bidirectional communication. Auto-reconnect with exponential backoff.',
+        'JSON schemas describe every command so LLM workflows can parse output reliably instead of scraping terminal prose.',
     },
   ];
 

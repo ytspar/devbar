@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock fs module
 vi.mock('fs', () => ({
@@ -26,7 +26,6 @@ import {
   getNavigationPreset,
   measureElementsScript,
   measureViaPlaywright,
-  type MeasurementOptions,
   type RulerOutput,
 } from './ruler.js';
 
@@ -184,7 +183,12 @@ describe('measureViaPlaywright', () => {
       {
         selector: '.box',
         elements: [
-          { index: 0, rect: { top: 10, left: 20, width: 100, height: 50 }, centerX: 70, centerY: 35 },
+          {
+            index: 0,
+            rect: { top: 10, left: 20, width: 100, height: 50 },
+            centerX: 70,
+            centerY: 35,
+          },
         ],
       },
     ],
@@ -211,9 +215,7 @@ describe('measureViaPlaywright', () => {
 
   it('closes browser even on error', async () => {
     mockPage.evaluate.mockRejectedValueOnce(new Error('eval failed'));
-    await expect(
-      measureViaPlaywright({ selectors: ['.box'] })
-    ).rejects.toThrow('eval failed');
+    await expect(measureViaPlaywright({ selectors: ['.box'] })).rejects.toThrow('eval failed');
     expect(mockBrowser.close).toHaveBeenCalled();
   });
 
@@ -261,15 +263,9 @@ describe('measureViaPlaywright', () => {
     expect(mockPage.evaluate).toHaveBeenCalledWith(
       expect.stringContaining('"showDimensions":true')
     );
-    expect(mockPage.evaluate).toHaveBeenCalledWith(
-      expect.stringContaining('"showPosition":false')
-    );
-    expect(mockPage.evaluate).toHaveBeenCalledWith(
-      expect.stringContaining('"showAlignment":true')
-    );
-    expect(mockPage.evaluate).toHaveBeenCalledWith(
-      expect.stringContaining('"limit":5')
-    );
+    expect(mockPage.evaluate).toHaveBeenCalledWith(expect.stringContaining('"showPosition":false'));
+    expect(mockPage.evaluate).toHaveBeenCalledWith(expect.stringContaining('"showAlignment":true'));
+    expect(mockPage.evaluate).toHaveBeenCalledWith(expect.stringContaining('"limit":5'));
   });
 
   it('passes custom options through', async () => {
@@ -285,12 +281,8 @@ describe('measureViaPlaywright', () => {
     expect(mockPage.evaluate).toHaveBeenCalledWith(
       expect.stringContaining('"showCenterLines":false')
     );
-    expect(mockPage.evaluate).toHaveBeenCalledWith(
-      expect.stringContaining('"showPosition":true')
-    );
-    expect(mockPage.evaluate).toHaveBeenCalledWith(
-      expect.stringContaining('"limit":20')
-    );
+    expect(mockPage.evaluate).toHaveBeenCalledWith(expect.stringContaining('"showPosition":true'));
+    expect(mockPage.evaluate).toHaveBeenCalledWith(expect.stringContaining('"limit":20'));
     expect(mockPage.evaluate).toHaveBeenCalledWith(
       expect.stringContaining('"colors":["#111","#222"]')
     );
@@ -302,9 +294,7 @@ describe('measureViaPlaywright', () => {
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('[Sweetlink Ruler] Injecting measurement overlay...')
     );
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[Sweetlink Ruler] Measured:')
-    );
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[Sweetlink Ruler] Measured:'));
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('[Sweetlink Ruler] Closing browser...')
     );

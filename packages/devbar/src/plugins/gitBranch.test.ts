@@ -8,7 +8,7 @@ vi.mock('../GlobalDevBar.js', () => ({
   },
 }));
 
-import { getGlobalDevBar, GlobalDevBar } from '../GlobalDevBar.js';
+import { GlobalDevBar, getGlobalDevBar } from '../GlobalDevBar.js';
 import { gitBranchPlugin } from './gitBranch.js';
 
 const mockGetGlobalDevBar = getGlobalDevBar as ReturnType<typeof vi.fn>;

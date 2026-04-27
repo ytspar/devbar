@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const screenshotMode = (process.env.E2E_SCREENSHOT_MODE ?? 'on') as
+  | 'off'
+  | 'on'
+  | 'only-on-failure';
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -19,7 +24,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
+    screenshot: screenshotMode,
   },
   projects: [
     {

@@ -29,7 +29,7 @@ import {
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
 import { setupKeyboardShortcuts } from './modules/keyboard.js';
 import { setupBreakpointDetection, setupPerformanceMonitoring } from './modules/performance.js';
-import { render as moduleRender } from './modules/rendering.js';
+import { render as moduleRender } from './modules/rendering/index.js';
 import { handleScreenshot as moduleHandleScreenshot } from './modules/screenshot.js';
 import {
   loadCompactMode,
@@ -51,21 +51,20 @@ import type {
   ThemeMode,
 } from './types.js';
 
+// Re-export settings types
+export type { DevBarPosition, DevBarSettings, MetricsVisibility } from './settings.js';
+export { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, getSettingsManager } from './settings.js';
 // Re-export types for backwards compatibility
 export type {
   ConsoleLog,
   DebugConfig,
-  SweetlinkCommand,
+  DevBarControl,
+  GlobalDevBarOptions,
   OutlineNode,
   PageSchema,
-  GlobalDevBarOptions,
-  DevBarControl,
+  SweetlinkCommand,
   ThemeMode,
 };
-
-// Re-export settings types
-export type { DevBarPosition, DevBarSettings, MetricsVisibility } from './settings.js';
-export { ACCENT_COLOR_PRESETS, DEFAULT_SETTINGS, getSettingsManager } from './settings.js';
 
 // html2canvas is lazy-loaded via getHtml2Canvas() to avoid bundling ~400KB upfront
 
@@ -91,7 +90,11 @@ export class GlobalDevBar {
 
   private static get customControls(): DevBarControl[] {
     if (typeof window === 'undefined') return [];
-    return ((window as unknown as Record<string, unknown>)[GlobalDevBar.CONTROLS_KEY] as DevBarControl[]) ?? [];
+    return (
+      ((window as unknown as Record<string, unknown>)[
+        GlobalDevBar.CONTROLS_KEY
+      ] as DevBarControl[]) ?? []
+    );
   }
 
   private static set customControls(value: DevBarControl[]) {

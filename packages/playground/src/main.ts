@@ -73,10 +73,12 @@ if (app) {
   app.appendChild(createSweetlinkSection());
   app.appendChild(createPackagesSection());
   app.appendChild(createQuickStartSection());
-  app.appendChild(createChangelogSection());
 
   // Interactive demo
   app.appendChild(createDemoContent());
+
+  // Release history is useful proof, but the demo should come first in the story.
+  app.appendChild(createChangelogSection());
 }
 
 // Initialize devbar (use gear icon to access settings)

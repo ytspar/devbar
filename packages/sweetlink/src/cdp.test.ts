@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
@@ -80,7 +80,9 @@ describe('getCDPBrowser', () => {
 
   it('handles non-Error thrown values', async () => {
     mockConnect.mockRejectedValueOnce('something weird');
-    await expect(getCDPBrowser()).rejects.toThrow('CDP connection failed: Failed to connect to Chrome');
+    await expect(getCDPBrowser()).rejects.toThrow(
+      'CDP connection failed: Failed to connect to Chrome'
+    );
   });
 });
 
@@ -101,10 +103,9 @@ describe('findLocalDevPage', () => {
     nonMatchingPage.goto = vi.fn();
 
     const page = await findLocalDevPage(mockBrowser as any);
-    expect(nonMatchingPage.goto).toHaveBeenCalledWith(
-      expect.stringContaining('localhost'),
-      { waitUntil: 'networkidle0' }
-    );
+    expect(nonMatchingPage.goto).toHaveBeenCalledWith(expect.stringContaining('localhost'), {
+      waitUntil: 'networkidle0',
+    });
     expect(page).toBe(nonMatchingPage);
   });
 
@@ -152,9 +153,7 @@ describe('screenshotViaCDP', () => {
 
   it('takes a full-page screenshot', async () => {
     await screenshotViaCDP({ fullPage: true });
-    expect(mockPage.screenshot).toHaveBeenCalledWith(
-      expect.objectContaining({ fullPage: true })
-    );
+    expect(mockPage.screenshot).toHaveBeenCalledWith(expect.objectContaining({ fullPage: true }));
   });
 
   it('saves to file when output is specified', async () => {
@@ -269,14 +268,6 @@ describe('getNetworkRequestsViaCDP', () => {
   });
 
   it('collects requests and matches responses', async () => {
-    let requestHandler: (req: any) => void;
-    let responseHandler: (res: any) => void;
-
-    mockPage.on.mockImplementation((event: string, handler: any) => {
-      if (event === 'request') requestHandler = handler;
-      if (event === 'response') responseHandler = handler;
-    });
-
     const resultPromise = getNetworkRequestsViaCDP();
 
     // Simulate a request+response after listeners are set up

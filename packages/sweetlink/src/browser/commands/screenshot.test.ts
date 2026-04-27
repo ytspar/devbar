@@ -49,7 +49,6 @@ vi.mock('../screenshotUtils.js', () => ({
 import { canvasToDataUrl, delay, prepareForCapture, scaleCanvas } from '../screenshotUtils.js';
 import { handleRequestScreenshot, handleScreenshot } from './screenshot.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 // ---------------------------------------------------------------------------

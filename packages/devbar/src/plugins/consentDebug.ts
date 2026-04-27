@@ -27,8 +27,8 @@
  *   // later: cleanup();
  */
 
-import { getGlobalDevBar, GlobalDevBar } from '../GlobalDevBar.js';
 import { CSS_COLORS, withAlpha } from '../constants.js';
+import { GlobalDevBar, getGlobalDevBar } from '../GlobalDevBar.js';
 import { createStyledButton } from '../ui/buttons.js';
 import {
   createEmptyMessage,
@@ -36,6 +36,7 @@ import {
   createModalContent,
   createModalHeader,
   createModalOverlay,
+  focusModal,
 } from '../ui/modals.js';
 
 const CONTROL_ID = 'devbar-plugin-consent-debug';
@@ -181,13 +182,12 @@ function getZaraz(): ZarazLike | undefined {
 }
 
 function deleteCookie(name: string): void {
+  // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is not available in all supported browsers.
   document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
 }
 
 function readCookie(name: string): string | null {
-  const match = document.cookie
-    .split('; ')
-    .find((entry) => entry.startsWith(`${name}=`));
+  const match = document.cookie.split('; ').find((entry) => entry.startsWith(`${name}=`));
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
@@ -295,9 +295,7 @@ function createStatusReadout(
 
 function openModal(opts: ResolvedOptions): void {
   const instance = getGlobalDevBar();
-  const existingOverlay = document.querySelector(
-    '[data-devbar-overlay="true"]'
-  );
+  const existingOverlay = document.querySelector('[data-devbar-overlay="true"]');
   if (existingOverlay) {
     existingOverlay.remove();
   }
@@ -310,7 +308,7 @@ function openModal(opts: ResolvedOptions): void {
   };
 
   const overlay = createModalOverlay(close);
-  const box = createModalBox(opts.color);
+  const box = createModalBox(opts.color, 'Consent Debug');
 
   const header = createModalHeader({
     color: opts.color,
@@ -351,12 +349,8 @@ function openModal(opts: ResolvedOptions): void {
     return btn;
   };
 
-  actionRow.appendChild(
-    mkAction('Show Banner', () => dispatchEvent(opts.showBannerEvent))
-  );
-  actionRow.appendChild(
-    mkAction('Show Notice', () => dispatchEvent(opts.showNoticeEvent))
-  );
+  actionRow.appendChild(mkAction('Show Banner', () => dispatchEvent(opts.showBannerEvent)));
+  actionRow.appendChild(mkAction('Show Notice', () => dispatchEvent(opts.showNoticeEvent)));
   actionRow.appendChild(
     mkAction('Accept All', () => {
       const zaraz = getZaraz();
@@ -402,6 +396,7 @@ function openModal(opts: ResolvedOptions): void {
   box.appendChild(content);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+  focusModal(box);
 
   // Track overlay on the devbar so its log listener skips re-render while
   // the modal is open (prevents a tear-down/rebuild loop on console noise).
@@ -419,9 +414,7 @@ function openModal(opts: ResolvedOptions): void {
  * `pollIntervalMs` and gives up after `maxWaitMs`. Returns a cleanup
  * function that stops polling and unregisters the control.
  */
-export function consentDebugPlugin(
-  options: ConsentDebugOptions = {}
-): () => void {
+export function consentDebugPlugin(options: ConsentDebugOptions = {}): () => void {
   const opts = resolveOptions(options);
 
   let stopped = false;

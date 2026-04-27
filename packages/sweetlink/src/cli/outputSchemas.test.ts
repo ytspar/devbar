@@ -28,6 +28,7 @@ describe('outputSchemas', () => {
       'status',
       'daemon',
       'snapshot',
+      'inspect',
       'console',
       'fill',
       'record',

@@ -27,7 +27,7 @@ test('term records a passing command into asciicast v2 + HTML player', async () 
   try {
     const result = await cli(
       ['term', '--label', 'unit', "printf 'hello\\n'; sleep 0.1; printf 'world\\n'"],
-      cwd,
+      cwd
     );
     expect(result.exitCode, result.stderr).toBe(0);
 
@@ -40,8 +40,10 @@ test('term records a passing command into asciicast v2 + HTML player', async () 
     expect(html).toBeDefined();
 
     // .cast is asciicast v2 — first line is JSON object, subsequent lines are JSON arrays.
-    const castLines = fs.readFileSync(path.join(termDir, cast), 'utf-8')
-      .split('\n').filter(Boolean);
+    const castLines = fs
+      .readFileSync(path.join(termDir, cast), 'utf-8')
+      .split('\n')
+      .filter(Boolean);
     const header = JSON.parse(castLines[0]!);
     expect(header.version).toBe(2);
     expect(header.title).toBe('unit');
@@ -55,7 +57,10 @@ test('term records a passing command into asciicast v2 + HTML player', async () 
       expect(typeof e[0]).toBe('number');
       expect(['o', 'i']).toContain(e[1]);
     }
-    const allOutput = events.filter((e) => e[1] === 'o').map((e) => e[2]).join('');
+    const allOutput = events
+      .filter((e) => e[1] === 'o')
+      .map((e) => e[2])
+      .join('');
     expect(allOutput).toContain('hello');
     expect(allOutput).toContain('world');
 
@@ -80,7 +85,7 @@ test('term captures ANSI colour escapes verbatim into the .cast file', async () 
     const result = await cli(
       // \033[31m = red, \033[0m = reset, \033[1m = bold
       ['term', '--label', 'colour', "printf '\\033[31mRED\\033[0m \\033[1mBOLD\\033[0m\\n'"],
-      cwd,
+      cwd
     );
     expect(result.exitCode, result.stderr).toBe(0);
 
@@ -96,7 +101,7 @@ test('term captures ANSI colour escapes verbatim into the .cast file', async () 
   }
 });
 
-test('term propagates the recorded command\'s exit code by default', async () => {
+test("term propagates the recorded command's exit code by default", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sl-term-'));
   try {
     const result = await cli(['term', '--label', 'fail', "printf 'oops\\n'; exit 7"], cwd);

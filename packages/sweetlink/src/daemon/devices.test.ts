@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseDevice, DEVICE_PRESETS } from './devices.js';
+import { DEVICE_PRESETS, parseDevice } from './devices.js';
 
 describe('DEVICE_PRESETS', () => {
   it('contains expected device keys', () => {
@@ -39,7 +39,7 @@ describe('DEVICE_PRESETS', () => {
   });
 
   it('desktop devices have isMobile=false', () => {
-    expect(DEVICE_PRESETS['desktop']!.isMobile).toBe(false);
+    expect(DEVICE_PRESETS.desktop!.isMobile).toBe(false);
     expect(DEVICE_PRESETS['desktop-hd']!.isMobile).toBe(false);
   });
 

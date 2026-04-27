@@ -23,14 +23,14 @@ const { mockFs } = vi.hoisted(() => ({
 vi.mock('fs', () => mockFs);
 
 import {
-  writeDaemonState,
-  readDaemonState,
-  removeDaemonState,
   acquireLock,
-  releaseLock,
+  getLockFilePath,
   getStateDir,
   getStateFilePath,
-  getLockFilePath,
+  readDaemonState,
+  releaseLock,
+  removeDaemonState,
+  writeDaemonState,
 } from './stateFile.js';
 import type { DaemonState } from './types.js';
 

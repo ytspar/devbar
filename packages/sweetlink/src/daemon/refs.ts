@@ -158,12 +158,13 @@ export function resolveRef(page: Page, ref: string): Locator {
   const entry = currentRefMap.byRef.get(ref);
   if (!entry) {
     const available = Array.from(currentRefMap.byRef.keys());
-    const preview = available.length <= 10
-      ? available.join(', ')
-      : available.slice(0, 8).join(', ') + ` ... (${available.length - 8} more)`;
+    const preview =
+      available.length <= 10
+        ? available.join(', ')
+        : `${available.slice(0, 8).join(', ')} ... (${available.length - 8} more)`;
     throw new Error(
       `Ref ${ref} is not in the current snapshot (have ${available.length}: ${preview}). ` +
-      `If the page changed, re-run \`sweetlink snapshot\` to refresh refs.`
+        `If the page changed, re-run \`sweetlink snapshot\` to refresh refs.`
     );
   }
 

@@ -11,7 +11,7 @@ export {
   setupBreakpointDetection,
   setupPerformanceMonitoring,
 } from './performance.js';
-export { render } from './rendering.js';
+export { render } from './rendering/index.js';
 export {
   calculateCostEstimate,
   closeDesignReviewConfirm,

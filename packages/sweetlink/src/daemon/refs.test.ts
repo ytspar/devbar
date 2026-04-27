@@ -7,15 +7,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseAriaSnapshot, formatRefMap } from './refs.js';
 import type { RefMap } from './refs.js';
+import { formatRefMap, parseAriaSnapshot } from './refs.js';
 
 describe('parseAriaSnapshot', () => {
   it('parses a simple button line', () => {
     const result = parseAriaSnapshot('  - button "Click me"');
-    expect(result).toEqual([
-      { ref: '@e1', role: 'button', name: 'Click me', attrs: {} },
-    ]);
+    expect(result).toEqual([{ ref: '@e1', role: 'button', name: 'Click me', attrs: {} }]);
   });
 
   it('parses multiple elements with sequential refs', () => {
@@ -62,11 +60,7 @@ describe('parseAriaSnapshot', () => {
   });
 
   it('skips elements with empty names', () => {
-    const snapshot = [
-      '  - button ""',
-      '  - button "Submit"',
-      '  - link "   "',
-    ].join('\n');
+    const snapshot = ['  - button ""', '  - button "Submit"', '  - link "   "'].join('\n');
 
     const result = parseAriaSnapshot(snapshot);
     expect(result).toHaveLength(1);
@@ -98,10 +92,7 @@ describe('parseAriaSnapshot', () => {
     });
 
     it('returns all roles when interactive is false', () => {
-      const snapshot = [
-        '  - heading "Title" [level=1]',
-        '  - button "Submit"',
-      ].join('\n');
+      const snapshot = ['  - heading "Title" [level=1]', '  - button "Submit"'].join('\n');
 
       const result = parseAriaSnapshot(snapshot, { interactive: false });
       expect(result).toHaveLength(2);
@@ -115,9 +106,23 @@ describe('parseAriaSnapshot', () => {
 
     it('includes all interactive role types', () => {
       const interactiveRoles = [
-        'button', 'link', 'textbox', 'checkbox', 'radio', 'combobox',
-        'listbox', 'menuitem', 'menuitemcheckbox', 'menuitemradio',
-        'option', 'searchbox', 'slider', 'spinbutton', 'switch', 'tab', 'treeitem',
+        'button',
+        'link',
+        'textbox',
+        'checkbox',
+        'radio',
+        'combobox',
+        'listbox',
+        'menuitem',
+        'menuitemcheckbox',
+        'menuitemradio',
+        'option',
+        'searchbox',
+        'slider',
+        'spinbutton',
+        'switch',
+        'tab',
+        'treeitem',
       ];
 
       for (const role of interactiveRoles) {
@@ -129,11 +134,7 @@ describe('parseAriaSnapshot', () => {
   });
 
   it('handles varying indentation', () => {
-    const snapshot = [
-      '- button "A"',
-      '  - button "B"',
-      '      - button "C"',
-    ].join('\n');
+    const snapshot = ['- button "A"', '  - button "B"', '      - button "C"'].join('\n');
 
     const result = parseAriaSnapshot(snapshot);
     expect(result).toHaveLength(3);
@@ -141,7 +142,9 @@ describe('parseAriaSnapshot', () => {
 });
 
 describe('formatRefMap', () => {
-  function makeRefMap(entries: Array<{ ref: string; role: string; name: string; attrs: Record<string, string> }>): RefMap {
+  function makeRefMap(
+    entries: Array<{ ref: string; role: string; name: string; attrs: Record<string, string> }>
+  ): RefMap {
     const byRef = new Map(entries.map((e) => [e.ref, e]));
     return { entries, byRef, rawSnapshot: '', timestamp: Date.now() };
   }
@@ -152,9 +155,7 @@ describe('formatRefMap', () => {
   });
 
   it('formats entries with role and name', () => {
-    const refMap = makeRefMap([
-      { ref: '@e1', role: 'button', name: 'Submit', attrs: {} },
-    ]);
+    const refMap = makeRefMap([{ ref: '@e1', role: 'button', name: 'Submit', attrs: {} }]);
     expect(formatRefMap(refMap)).toBe('  @e1 [button] "Submit"');
   });
 

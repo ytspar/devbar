@@ -17,6 +17,8 @@
 
 import { promises as fs } from 'fs';
 import * as path from 'path';
+import { escapeHtml as escapeAttr } from '../daemon/utils.js';
+import { type CastEvent, type CastHeader, escapeJsonForScript } from './cast.js';
 
 export interface PlayerOptions {
   castPath: string;
@@ -26,41 +28,69 @@ export interface PlayerOptions {
   outputPath?: string;
 }
 
-function escapeAttr(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 export async function generatePlayer(options: PlayerOptions): Promise<string> {
   const cast = await fs.readFile(options.castPath, 'utf-8');
   const lines = cast.split(/\r?\n/).filter(Boolean);
   if (lines.length === 0) throw new Error(`Empty .cast file: ${options.castPath}`);
 
-  const header = JSON.parse(lines[0]!) as {
-    version: number; width: number; height: number;
-    duration?: number; title?: string;
-  };
-  const events: Array<[number, string, string]> = [];
+  let header: CastHeader;
+  try {
+    header = JSON.parse(lines[0]!) as CastHeader;
+  } catch (err) {
+    const preview = lines[0]!.slice(0, 80);
+    throw new Error(
+      `Not a valid asciicast v2 file: ${options.castPath} — first line is not JSON: ${preview}`
+    );
+  }
+  if (header.version !== 2) {
+    throw new Error(
+      `Unsupported asciicast version ${header.version} (expected 2): ${options.castPath}`
+    );
+  }
+  const width = Number.isFinite(header.width) && header.width > 0 ? header.width : 80;
+  const height = Number.isFinite(header.height) && header.height > 0 ? header.height : 24;
+
+  const events: CastEvent[] = [];
   for (let i = 1; i < lines.length; i++) {
     try {
-      const e = JSON.parse(lines[i]!) as [number, string, string];
-      if (Array.isArray(e) && e.length === 3) events.push(e);
-    } catch { /* skip malformed lines */ }
+      const e = JSON.parse(lines[i]!) as unknown;
+      if (
+        Array.isArray(e) &&
+        e.length === 3 &&
+        typeof e[0] === 'number' &&
+        (e[1] === 'o' || e[1] === 'i') &&
+        typeof e[2] === 'string'
+      ) {
+        events.push(e as CastEvent);
+      }
+    } catch {
+      /* skip malformed lines */
+    }
   }
 
-  const totalDuration = header.duration
-    ?? (events.length ? events[events.length - 1]![0] : 0);
-  const titleText = options.title ?? header.title ?? path.basename(options.castPath);
-  const outputPath = options.outputPath
-    ?? options.castPath.replace(/\.cast$/i, '') + '.html';
+  if (events.length === 0) {
+    throw new Error(
+      `No events captured in ${options.castPath} — refusing to generate empty player`
+    );
+  }
 
-  // Embed the events as an inline JSON string. The player JS reads it on
-  // load and renders incrementally with `setTimeout` driven by the speed
-  // slider — no live network deps, no asciinema runtime.
-  const dataJson = JSON.stringify({ width: header.width, height: header.height, events });
+  const lastEventT = events[events.length - 1]![0];
+  const rawDuration = header.duration ?? lastEventT;
+  // Clamp to a sane range so the seek slider is functional.
+  const totalDuration =
+    Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.max(rawDuration, 1)
+      : Math.max(lastEventT, 1);
+
+  const titleText = options.title ?? header.title ?? path.basename(options.castPath);
+  const outputPath = options.outputPath ?? `${options.castPath.replace(/\.cast$/i, '')}.html`;
+
+  // Embed the events as an inline JSON string. JSON.stringify alone does NOT
+  // escape `</script>`, `<!--`, or U+2028/U+2029, so attacker-controlled
+  // bytes inside event data could break out of the script element and run
+  // attacker JS in any teammate who opens the shareable .html. Always pipe
+  // through escapeJsonForScript before string-interpolating.
+  const dataJson = escapeJsonForScript(JSON.stringify({ width, height, events }));
 
   const html = `<!DOCTYPE html>
 <html lang="en">

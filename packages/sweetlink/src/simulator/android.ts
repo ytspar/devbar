@@ -33,6 +33,66 @@ export interface AndroidRecordOptions {
    * missing — the raw recording is still produced.
    */
   overlays?: boolean;
+  /**
+   * When true, the spawned command sees the full process.env. Default
+   * false: only a minimal allowlist is forwarded to keep secrets out of
+   * the recorded artifact.
+   */
+  inheritEnv?: boolean;
+}
+
+const MINIMAL_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'SHELL',
+  'TZ',
+  'TMPDIR',
+  'PWD',
+];
+
+function pickMinimalEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of MINIMAL_ENV_KEYS) {
+    const v = process.env[key];
+    if (typeof v === 'string') out[key] = v;
+  }
+  return out;
+}
+
+/**
+ * Poll `adb shell stat -c %s <remotePath>` until the size is stable across
+ * two consecutive checks (or until we run out of attempts). Replaces a
+ * blind 500ms sleep — on slow physical devices, fuse-backed /sdcard, or
+ * USB-1 connections, the H.264 trailer can take several seconds to flush.
+ */
+async function waitForStableSize(device: string, remotePath: string): Promise<void> {
+  let last = -1;
+  for (let i = 0; i < 20; i++) {
+    try {
+      const out = await new Promise<string>((resolve, reject) => {
+        execFile(
+          'adb',
+          ['-s', device, 'shell', 'stat', '-c', '%s', remotePath],
+          { encoding: 'utf-8' },
+          (err, stdout) => {
+            if (err) reject(err);
+            else resolve(stdout);
+          }
+        );
+      });
+      const size = parseInt(out.trim(), 10);
+      if (Number.isFinite(size) && size > 0 && size === last) return;
+      last = size;
+    } catch {
+      // stat occasionally races screenrecord's create; keep polling.
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
 }
 
 export interface AndroidRecordResult {
@@ -123,8 +183,11 @@ export async function recordAndroidEmulator(
   // probe fails (e.g. unusual input device layout), we still produce the
   // raw recording, just without overlays.
   const wantOverlays = options.overlays !== false;
-  let tapCapture: { proc: ChildProcess; taps: Array<{ x: number; y: number; t: number }> } | null =
-    null;
+  let tapCapture: {
+    proc: ChildProcess;
+    taps: Array<{ x: number; y: number; t: number }>;
+    done: Promise<void>;
+  } | null = null;
   if (wantOverlays) {
     try {
       const { findTouchDevice, captureTapsLive } = await import('./androidTaps.js');
@@ -145,6 +208,15 @@ export async function recordAndroidEmulator(
     const child = spawn(options.shell ?? '/bin/sh', ['-c', options.command], {
       cwd: options.cwd,
       stdio: 'inherit',
+      env: options.inheritEnv
+        ? (process.env as NodeJS.ProcessEnv)
+        : (pickMinimalEnv() as NodeJS.ProcessEnv),
+    });
+    // Without an `error` handler, a missing shell or bad cwd would crash
+    // the parent process and orphan recProc + tapCapture.proc on the device.
+    child.on('error', (err) => {
+      console.error(`[Sweetlink] Failed to spawn user command: ${err.message}`);
+      resolve({ exitCode: 127 });
     });
     child.on('close', (code) => resolve({ exitCode: code ?? 0 }));
   });
@@ -178,8 +250,11 @@ export async function recordAndroidEmulator(
     }
   });
 
-  // Pull the file off the device. Wait a bit for screenrecord to fsync.
-  await new Promise((r) => setTimeout(r, 500));
+  // Pull the file off the device. Poll for stat-size stability — a fixed
+  // sleep is unreliable on slow devices, USB-1, or fuse-backed /sdcard.
+  // Without this, `adb pull` happily copies a partial file and silently
+  // hands the user a truncated .mp4.
+  await waitForStableSize(device, remotePath);
   await adb(['-s', device, 'pull', remotePath, options.output]);
   // Best-effort cleanup on the device.
   try {
@@ -198,8 +273,23 @@ export async function recordAndroidEmulator(
     } catch {
       /* ignore */
     }
-    // Brief settle for trailing buffer flushes.
-    await new Promise((r) => setTimeout(r, 200));
+    // Wait for the listener to actually exit + flush its trailing buffer
+    // (taps that landed in the last few hundred ms before SIGTERM). If it
+    // doesn't close in 2s, force-kill so we don't hang the CLI on a
+    // wedged adb shell.
+    await Promise.race([
+      tapCapture.done,
+      new Promise<void>((resolve) =>
+        setTimeout(() => {
+          try {
+            tapCapture?.proc.kill('SIGKILL');
+          } catch {
+            /* ignore */
+          }
+          resolve();
+        }, 2_000)
+      ),
+    ]);
     const taps = tapCapture.taps;
     tapCount = taps.length;
 

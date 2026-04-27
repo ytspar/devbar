@@ -38,7 +38,8 @@ test('identical screenshot bytes → 0% mismatch, pass=true', async () => {
     const a = (await daemonReq(fx.daemon, 'screenshot')) as { screenshot: string };
     fs.writeFileSync(path.join(ARTIFACT_DIR, 'identical-A.png'), decodeScreenshot(a.screenshot));
     const result = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: a.screenshot, current: a.screenshot,
+      baseline: a.screenshot,
+      current: a.screenshot,
     })) as { mismatchPercentage: number; mismatchCount: number; pass: boolean };
     expect(result.mismatchPercentage).toBe(0);
     expect(result.mismatchCount).toBe(0);
@@ -56,7 +57,8 @@ test('two captures of the same static page → 0% mismatch (deterministic encodi
     fs.writeFileSync(path.join(ARTIFACT_DIR, 'consecutive-A.png'), decodeScreenshot(a.screenshot));
     fs.writeFileSync(path.join(ARTIFACT_DIR, 'consecutive-B.png'), decodeScreenshot(b.screenshot));
     const result = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: a.screenshot, current: b.screenshot,
+      baseline: a.screenshot,
+      current: b.screenshot,
     })) as { mismatchPercentage: number; pass: boolean };
     // Static page, same viewport, no animations → bytes should match.
     expect(result.mismatchPercentage).toBeLessThan(1);
@@ -73,10 +75,14 @@ test('different viewport produces high mismatch + pass=false', async () => {
     const tiny = (await daemonReq(fx.daemon, 'screenshot', {
       viewport: '375x600',
     })) as { screenshot: string };
-    fs.writeFileSync(path.join(ARTIFACT_DIR, 'diff-baseline.png'), decodeScreenshot(baseline.screenshot));
+    fs.writeFileSync(
+      path.join(ARTIFACT_DIR, 'diff-baseline.png'),
+      decodeScreenshot(baseline.screenshot)
+    );
     fs.writeFileSync(path.join(ARTIFACT_DIR, 'diff-tiny.png'), decodeScreenshot(tiny.screenshot));
     const result = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: baseline.screenshot, current: tiny.screenshot,
+      baseline: baseline.screenshot,
+      current: tiny.screenshot,
     })) as { mismatchPercentage: number; pass: boolean };
     expect(result.mismatchPercentage).toBeGreaterThan(50);
     expect(result.pass).toBe(false);
@@ -93,10 +99,14 @@ test('threshold is honored: pass when mismatch <= threshold', async () => {
       viewport: '1280x800',
     })) as { screenshot: string };
     const strict = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: a.screenshot, current: b.screenshot, threshold: 0,
+      baseline: a.screenshot,
+      current: b.screenshot,
+      threshold: 0,
     })) as { pass: boolean };
     const lenient = (await daemonReq(fx.daemon, 'visual-diff', {
-      baseline: a.screenshot, current: b.screenshot, threshold: 1,
+      baseline: a.screenshot,
+      current: b.screenshot,
+      threshold: 1,
     })) as { pass: boolean };
     expect(strict.pass).toBe(false); // any mismatch fails strict
     expect(lenient.pass).toBe(true); // 100% threshold accepts any diff

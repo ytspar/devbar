@@ -148,7 +148,7 @@ export class ConsoleCapture {
       info: console.info.bind(console),
     };
 
-    const captureLog = (level: string, args: unknown[]) => {
+    const captureLog = (level: ConsoleLog['level'], args: unknown[]) => {
       const log: ConsoleLog = {
         level,
         message: formatArgs(args),

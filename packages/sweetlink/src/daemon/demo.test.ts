@@ -22,6 +22,7 @@ vi.mock('child_process', () => ({
 
 import { execFileSync, execSync } from 'child_process';
 import { promises as fs } from 'fs';
+import type { DemoState } from './demo.js';
 import {
   addExec,
   addNote,
@@ -33,7 +34,6 @@ import {
   verifyDemo,
   writeDemo,
 } from './demo.js';
-import type { DemoState } from './demo.js';
 
 /** Helper to create a minimal DemoState for tests that don't need initDemo */
 function makeState(overrides?: Partial<DemoState>): DemoState {
@@ -63,9 +63,7 @@ describe('Demo Document Builder', () => {
   describe('initDemo', () => {
     it('creates correct state with title, filePath, and git metadata', async () => {
       const mockExecFileSync = vi.mocked(execFileSync);
-      mockExecFileSync
-        .mockReturnValueOnce('main\n')
-        .mockReturnValueOnce('abc1234\n');
+      mockExecFileSync.mockReturnValueOnce('main\n').mockReturnValueOnce('abc1234\n');
 
       const state = await initDemo('My Tutorial', '/tmp/demo-out');
 
@@ -78,7 +76,9 @@ describe('Demo Document Builder', () => {
     });
 
     it('creates output directory recursively', async () => {
-      vi.mocked(execFileSync).mockImplementation(() => { throw new Error(); });
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error();
+      });
 
       await initDemo('Demo', '/tmp/deep/nested/dir');
 
@@ -86,7 +86,9 @@ describe('Demo Document Builder', () => {
     });
 
     it('writes the initial file via writeDemo', async () => {
-      vi.mocked(execFileSync).mockImplementation(() => { throw new Error(); });
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error();
+      });
 
       await initDemo('Demo', '/tmp/demo-out');
 
@@ -95,12 +97,14 @@ describe('Demo Document Builder', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(
         '/tmp/demo-out/DEMO.md',
         expect.any(String),
-        'utf-8',
+        'utf-8'
       );
     });
 
     it('stores url from options', async () => {
-      vi.mocked(execFileSync).mockImplementation(() => { throw new Error(); });
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error();
+      });
 
       const state = await initDemo('Demo', '/tmp/out', { url: 'http://localhost:3000' });
 
@@ -109,9 +113,7 @@ describe('Demo Document Builder', () => {
 
     it('handles detached HEAD (branch === HEAD)', async () => {
       const mockExecFileSync = vi.mocked(execFileSync);
-      mockExecFileSync
-        .mockReturnValueOnce('HEAD\n')
-        .mockReturnValueOnce('abc1234\n');
+      mockExecFileSync.mockReturnValueOnce('HEAD\n').mockReturnValueOnce('abc1234\n');
 
       const state = await initDemo('Demo', '/tmp/out');
 
@@ -120,7 +122,9 @@ describe('Demo Document Builder', () => {
     });
 
     it('handles git not available', async () => {
-      vi.mocked(execFileSync).mockImplementation(() => { throw new Error('not a git repo'); });
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error('not a git repo');
+      });
 
       const state = await initDemo('Demo', '/tmp/out');
 
@@ -181,7 +185,9 @@ describe('Demo Document Builder', () => {
     it('handles command failure with non-zero exit code', () => {
       vi.mocked(execSync).mockImplementation(() => {
         const err = new Error('Command failed') as Error & {
-          stdout: string; stderr: string; status: number;
+          stdout: string;
+          stderr: string;
+          status: number;
         };
         err.stdout = '';
         err.stderr = 'file not found\n';
@@ -241,10 +247,7 @@ describe('Demo Document Builder', () => {
 
       await addScreenshot(makeState(), buf, 'Test shot');
 
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        '/tmp/demo-out/demo-screenshot-1.png',
-        buf,
-      );
+      expect(fs.writeFile).toHaveBeenCalledWith('/tmp/demo-out/demo-screenshot-1.png', buf);
     });
 
     it('uses default caption when none provided', async () => {
@@ -483,14 +486,14 @@ describe('Demo Document Builder', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(
         '/tmp/demo-out/DEMO.md',
         expect.any(String),
-        'utf-8',
+        'utf-8'
       );
 
       // Second call: state JSON
       expect(fs.writeFile).toHaveBeenCalledWith(
         '/tmp/demo-out/demo-state.json',
         expect.any(String),
-        'utf-8',
+        'utf-8'
       );
     });
 
@@ -499,9 +502,9 @@ describe('Demo Document Builder', () => {
 
       await writeDemo(state);
 
-      const jsonCall = vi.mocked(fs.writeFile).mock.calls.find(
-        (call) => String(call[0]).endsWith('demo-state.json'),
-      );
+      const jsonCall = vi
+        .mocked(fs.writeFile)
+        .mock.calls.find((call) => String(call[0]).endsWith('demo-state.json'));
       expect(jsonCall).toBeDefined();
       const parsed = JSON.parse(jsonCall![1] as string);
       expect(parsed.title).toBe('Test Demo');
@@ -513,9 +516,9 @@ describe('Demo Document Builder', () => {
 
       await writeDemo(state);
 
-      const mdCall = vi.mocked(fs.writeFile).mock.calls.find(
-        (call) => String(call[0]).endsWith('DEMO.md'),
-      );
+      const mdCall = vi
+        .mocked(fs.writeFile)
+        .mock.calls.find((call) => String(call[0]).endsWith('DEMO.md'));
       expect(mdCall).toBeDefined();
       expect(mdCall![1]).toBe(renderDemo(state));
     });

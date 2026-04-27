@@ -1199,7 +1199,9 @@ describe('connectWebSocket - command handlers', () => {
   it('handles get-outline command successfully', async () => {
     const { extractDocumentOutline } = await import('../outline.js');
     const { outlineToMarkdown } = await import('../outline.js');
-    vi.mocked(extractDocumentOutline).mockReturnValue([{ tag: 'h1', text: 'Title', level: 1 }] as any);
+    vi.mocked(extractDocumentOutline).mockReturnValue([
+      { tag: 'h1', text: 'Title', level: 1 },
+    ] as any);
     vi.mocked(outlineToMarkdown).mockReturnValue('# Title');
 
     const state = createMockState();
@@ -1386,10 +1388,7 @@ describe('connectWebSocket - command handlers', () => {
       data: JSON.stringify({ type: 'schema-error', error: 'Schema failed' }),
     });
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[GlobalDevBar] Schema save failed:',
-      'Schema failed'
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('[GlobalDevBar] Schema save failed:', 'Schema failed');
     expect(state.render).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();
@@ -1517,7 +1516,6 @@ describe('connectWebSocket - command handlers', () => {
 
   it('handles get-vitals command', async () => {
     // Mock performance APIs
-    const origGetEntriesByType = performance.getEntriesByType;
     vi.spyOn(performance, 'getEntriesByType').mockImplementation((type: string) => {
       if (type === 'paint') {
         return [{ name: 'first-contentful-paint', startTime: 123.456 }] as any;

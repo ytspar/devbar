@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SweetlinkResponse } from '../../types.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 /**

@@ -118,8 +118,6 @@ import {
   createCompactToggleButton,
   createConsoleBadge,
   createOutlineButton,
-  createDemoButton,
-  createRecordButton,
   createRulerButton,
   createSchemaButton,
   createScreenshotButton,

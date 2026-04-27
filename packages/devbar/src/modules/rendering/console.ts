@@ -11,9 +11,11 @@ import {
   createModalContent,
   createModalHeader,
   createModalOverlay,
+  focusModal,
 } from '../../ui/index.js';
 import { consoleLogsToMarkdown, handleSaveConsoleLogs } from '../screenshot.js';
 import type { DevBarState } from '../types.js';
+import { createModalEvidenceContext } from './evidenceContext.js';
 
 export function renderConsolePopup(
   state: DevBarState,
@@ -40,7 +42,7 @@ export function renderConsolePopup(
   };
 
   const overlay = createModalOverlay(closeModal);
-  const modal = createModalBox(color);
+  const modal = createModalBox(color, `Console ${label}`);
 
   const header = createModalHeader({
     color,
@@ -55,6 +57,10 @@ export function renderConsolePopup(
     saveLocation: state.options.saveLocation,
     isSaving: state.savingConsoleLogs,
     savedPath: state.lastConsoleLogs,
+    evidenceContext: createModalEvidenceContext(state, `Console ${label}`, {
+      artifactPath: state.lastConsoleLogs,
+      observation: `${logs.length} ${filterType} log${logs.length === 1 ? '' : 's'} in the current filter.`,
+    }),
   });
   modal.appendChild(header);
 
@@ -71,6 +77,7 @@ export function renderConsolePopup(
 
   state.overlayElement = overlay;
   document.body.appendChild(overlay);
+  focusModal(modal);
 }
 
 function renderConsoleLogs(container: HTMLElement, logs: ConsoleLog[], color: string): void {

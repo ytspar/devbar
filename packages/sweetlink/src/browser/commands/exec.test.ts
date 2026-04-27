@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest';
 import type { ExecJsCommand, SweetlinkResponse } from '../../types.js';
 import { handleExecJS } from './exec.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 describe('handleExecJS', () => {

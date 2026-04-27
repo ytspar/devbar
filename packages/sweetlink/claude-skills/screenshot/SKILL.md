@@ -84,6 +84,8 @@ pnpm sweetlink screenshot --viewport mobile --force-cdp --output .tmp/screenshot
 
 ### Agent-Browser (Any URL)
 
+A live observability dashboard auto-opens at http://localhost:4848 on the user's first agent-browser command of a session (wired via PreToolUse hook in `~/.claude/settings.json`). Mention the URL when you start an agent-browser flow so the user can watch along.
+
 ```bash
 # Open page and screenshot
 agent-browser open http://localhost:3000

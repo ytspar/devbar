@@ -52,6 +52,7 @@ describe('consentDebugPlugin', () => {
     mockUnregister.mockClear();
     uninstallZaraz();
     (window as Window).__geo = undefined;
+    // biome-ignore lint/suspicious/noDocumentCookie: test setup needs to reset document cookie state.
     document.cookie = 'cf_consent=; Max-Age=0; Path=/';
   });
 

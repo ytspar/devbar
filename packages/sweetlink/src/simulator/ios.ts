@@ -8,7 +8,7 @@
  * exits, which is the documented way to flush the .mp4.
  */
 
-import { spawn, execFile, type ChildProcess } from 'child_process';
+import { type ChildProcess, execFile, spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
@@ -23,6 +23,36 @@ export interface IosRecordOptions {
   cwd?: string;
   /** Override shell. */
   shell?: string;
+  /**
+   * When true, the spawned command sees the full process.env. Default false:
+   * only a small allowlist (PATH/HOME/USER/LANG/SHELL/etc.) is forwarded so
+   * secrets in env (NPM_TOKEN, GH_TOKEN, ANTHROPIC_API_KEY, ...) cannot leak
+   * into the recorded .mp4 via stack traces or test logs.
+   */
+  inheritEnv?: boolean;
+}
+
+const MINIMAL_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TERM',
+  'SHELL',
+  'TZ',
+  'TMPDIR',
+  'PWD',
+];
+
+function pickMinimalEnv(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of MINIMAL_ENV_KEYS) {
+    const v = process.env[key];
+    if (typeof v === 'string') out[key] = v;
+  }
+  return out;
 }
 
 export interface IosRecordResult {
@@ -56,16 +86,23 @@ function simctl(args: string[], json: boolean = false): Promise<string> {
  * Discover a usable simulator UDID.
  * Preference order: explicit `device` arg → first booted device → none.
  */
-export async function findIosDevice(preference?: string): Promise<{ udid: string; name: string } | null> {
+export async function findIosDevice(
+  preference?: string
+): Promise<{ udid: string; name: string } | null> {
   const raw = await simctl(['list', 'devices', '--json'], true);
   const data = JSON.parse(raw) as {
-    devices: Record<string, Array<{ udid: string; name: string; state: string; isAvailable: boolean }>>;
+    devices: Record<
+      string,
+      Array<{ udid: string; name: string; state: string; isAvailable: boolean }>
+    >;
   };
-  const all = Object.values(data.devices).flat().filter((d) => d.isAvailable);
+  const all = Object.values(data.devices)
+    .flat()
+    .filter((d) => d.isAvailable);
 
   if (preference) {
-    const match = all.find((d) =>
-      d.udid === preference || d.name.toLowerCase() === preference.toLowerCase(),
+    const match = all.find(
+      (d) => d.udid === preference || d.name.toLowerCase() === preference.toLowerCase()
     );
     if (match) return { udid: match.udid, name: match.name };
   }
@@ -77,9 +114,7 @@ export async function findIosDevice(preference?: string): Promise<{ udid: string
 export async function recordIosSimulator(options: IosRecordOptions): Promise<IosRecordResult> {
   const device = await findIosDevice(options.device);
   if (!device) {
-    throw new Error(
-      'No booted iOS Simulator. Open Simulator.app or specify --device "iPhone 15".',
-    );
+    throw new Error('No booted iOS Simulator. Open Simulator.app or specify --device "iPhone 15".');
   }
 
   await fs.mkdir(path.dirname(options.output), { recursive: true });
@@ -92,52 +127,85 @@ export async function recordIosSimulator(options: IosRecordOptions): Promise<Ios
   const recProc: ChildProcess = spawn(
     'xcrun',
     ['simctl', 'io', device.udid, 'recordVideo', '--codec=h264', '--force', options.output],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', 'pipe', 'pipe'] }
   );
 
   // Capture stderr in case the recording fails to start (e.g. "device not booted").
   let recStderr = '';
-  recProc.stderr?.on('data', (d: Buffer) => { recStderr += d.toString(); });
+  recProc.stderr?.on('data', (d: Buffer) => {
+    recStderr += d.toString();
+  });
 
   // Give simctl ~600ms to start the recording (it needs to attach to the
   // simulator's IOSurface). If it died early, surface the error now.
   await new Promise((r) => setTimeout(r, 600));
   if (recProc.exitCode !== null) {
-    throw new Error(`recordVideo failed to start on ${device.name}: ${recStderr.trim() || 'unknown error'}`);
+    throw new Error(
+      `recordVideo failed to start on ${device.name}: ${recStderr.trim() || 'unknown error'}`
+    );
   }
 
-  // Run the user's command and capture its exit code.
+  // Run the user's command and capture its exit code. Add an `error`
+  // handler so a missing shell or bad cwd doesn't crash the parent process
+  // before we get a chance to clean up the orphaned recordVideo child.
   const startedAt = Date.now();
   const cmdResult = await new Promise<{ exitCode: number }>((resolve) => {
     const child = spawn(options.shell ?? '/bin/sh', ['-c', options.command], {
       cwd: options.cwd,
       stdio: 'inherit',
+      env: options.inheritEnv
+        ? (process.env as NodeJS.ProcessEnv)
+        : (pickMinimalEnv() as NodeJS.ProcessEnv),
+    });
+    child.on('error', (err) => {
+      console.error(`[Sweetlink] Failed to spawn user command: ${err.message}`);
+      resolve({ exitCode: 127 });
     });
     child.on('close', (code) => resolve({ exitCode: code ?? 0 }));
   });
   const durationSec = (Date.now() - startedAt) / 1000;
 
   // Stop recording: SIGINT triggers simctl's flush-and-exit path. SIGTERM
-  // would also work but truncates the trailing buffer.
-  const closed = await new Promise<boolean>((resolve) => {
-    let resolved = false;
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        // Recording didn't shut down within 5s — kill it forcefully.
-        try { recProc.kill('SIGKILL'); } catch { /* ignore */ }
-        resolve(false);
-      }
-    }, 5_000);
-    recProc.on('close', () => {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        resolve(true);
+  // would also work but truncates the trailing buffer. Wrapped in
+  // try/finally so orphaned recProc gets killed on any later failure.
+  let closed = false;
+  try {
+    closed = await new Promise<boolean>((resolve) => {
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          // Recording didn't shut down within 5s — kill it forcefully.
+          try {
+            recProc.kill('SIGKILL');
+          } catch {
+            /* ignore */
+          }
+          resolve(false);
+        }
+      }, 5_000);
+      recProc.on('close', () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          resolve(true);
+        }
+      });
+      try {
+        recProc.kill('SIGINT');
+      } catch {
+        /* ignore */
       }
     });
-    try { recProc.kill('SIGINT'); } catch { /* ignore */ }
-  });
+  } finally {
+    if (recProc.exitCode === null) {
+      try {
+        recProc.kill('SIGKILL');
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   return {
     output: options.output,

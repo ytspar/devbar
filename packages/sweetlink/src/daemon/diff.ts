@@ -120,64 +120,66 @@ function computeLCS(a: string[], b: string[]): string[] {
  *   uses absolute (document-relative) coordinates so they line up in
  *   the full-page image.
  */
-export async function annotateScreenshot(
-  page: Page,
-  refMap: RefMap
-): Promise<Buffer> {
+export async function annotateScreenshot(page: Page, refMap: RefMap): Promise<Buffer> {
   // Inject overlay elements
-  await page.evaluate((refs: Array<{ ref: string; role: string; name: string }>) => {
-    const container = document.createElement('div');
-    container.id = '__sweetlink_annotations__';
-    // Absolute positioning so labels stay attached to elements as the
-    // page scrolls — matters for full-page screenshots.
-    container.style.cssText =
-      'position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 2147483647;';
+  await page.evaluate(
+    (refs: Array<{ ref: string; role: string; name: string }>) => {
+      const container = document.createElement('div');
+      container.id = '__sweetlink_annotations__';
+      // Absolute positioning so labels stay attached to elements as the
+      // page scrolls — matters for full-page screenshots.
+      container.style.cssText =
+        'position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 2147483647;';
 
-    const sx = window.scrollX;
-    const sy = window.scrollY;
+      const sx = window.scrollX;
+      const sy = window.scrollY;
 
-    for (const refEntry of refs) {
-      // Find element by role + name using ARIA
-      let element: Element | null = null;
-      const allElements = Array.from(document.querySelectorAll('*'));
-      for (const el of allElements) {
-        const role = el.getAttribute('role') ?? (el as HTMLElement).tagName?.toLowerCase();
-        const name = el.getAttribute('aria-label') ??
-          (el as HTMLElement).textContent?.trim().substring(0, 50) ?? '';
+      for (const refEntry of refs) {
+        // Find element by role + name using ARIA
+        let element: Element | null = null;
+        const allElements = Array.from(document.querySelectorAll('*'));
+        for (const el of allElements) {
+          const role = el.getAttribute('role') ?? (el as HTMLElement).tagName?.toLowerCase();
+          const name =
+            el.getAttribute('aria-label') ??
+            (el as HTMLElement).textContent?.trim().substring(0, 50) ??
+            '';
 
-        const roleMatch = role === refEntry.role ||
-          (refEntry.role === 'button' && el.tagName === 'BUTTON') ||
-          (refEntry.role === 'link' && el.tagName === 'A') ||
-          (refEntry.role === 'textbox' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) ||
-          (refEntry.role === 'heading' && /^H[1-6]$/.test(el.tagName)) ||
-          (refEntry.role === 'img' && el.tagName === 'IMG') ||
-          (refEntry.role === 'checkbox' && el.getAttribute('type') === 'checkbox');
+          const roleMatch =
+            role === refEntry.role ||
+            (refEntry.role === 'button' && el.tagName === 'BUTTON') ||
+            (refEntry.role === 'link' && el.tagName === 'A') ||
+            (refEntry.role === 'textbox' &&
+              (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) ||
+            (refEntry.role === 'heading' && /^H[1-6]$/.test(el.tagName)) ||
+            (refEntry.role === 'img' && el.tagName === 'IMG') ||
+            (refEntry.role === 'checkbox' && el.getAttribute('type') === 'checkbox');
 
-        if (roleMatch && name.includes(refEntry.name.substring(0, 20))) {
-          element = el;
-          break;
+          if (roleMatch && name.includes(refEntry.name.substring(0, 20))) {
+            element = el;
+            break;
+          }
         }
-      }
 
-      if (!element) continue;
-      const rect = element.getBoundingClientRect();
-      // Skip elements without a real visual presence — these were
-      // producing stray labels at (0,0) on the screenshot.
-      if (rect.width < 1 || rect.height < 1) continue;
+        if (!element) continue;
+        const rect = element.getBoundingClientRect();
+        // Skip elements without a real visual presence — these were
+        // producing stray labels at (0,0) on the screenshot.
+        if (rect.width < 1 || rect.height < 1) continue;
 
-      // Document-space coords (so labels line up with the captured
-      // full-page image, not the viewport).
-      const docLeft = rect.left + sx;
-      const docTop = rect.top + sy;
-      const labelHeight = 18;
-      const padX = 6;
+        // Document-space coords (so labels line up with the captured
+        // full-page image, not the viewport).
+        const docLeft = rect.left + sx;
+        const docTop = rect.top + sy;
+        const labelHeight = 18;
+        const padX = 6;
 
-      // Place the label above the element when possible, else below.
-      const goAbove = docTop >= labelHeight + 2;
-      const labelTop = goAbove ? docTop - labelHeight - 2 : docTop + rect.height + 2;
+        // Place the label above the element when possible, else below.
+        const goAbove = docTop >= labelHeight + 2;
+        const labelTop = goAbove ? docTop - labelHeight - 2 : docTop + rect.height + 2;
 
-      const label = document.createElement('div');
-      label.style.cssText = `
+        const label = document.createElement('div');
+        label.style.cssText = `
         position: absolute;
         left: ${docLeft}px;
         top: ${labelTop}px;
@@ -193,10 +195,10 @@ export async function annotateScreenshot(
         box-shadow: 0 1px 2px rgba(0,0,0,0.25);
         white-space: nowrap;
       `;
-      label.textContent = refEntry.ref;
+        label.textContent = refEntry.ref;
 
-      const outline = document.createElement('div');
-      outline.style.cssText = `
+        const outline = document.createElement('div');
+        outline.style.cssText = `
         position: absolute;
         left: ${docLeft}px;
         top: ${docTop}px;
@@ -207,12 +209,14 @@ export async function annotateScreenshot(
         box-sizing: border-box;
       `;
 
-      container.appendChild(label);
-      container.appendChild(outline);
-    }
+        container.appendChild(label);
+        container.appendChild(outline);
+      }
 
-    document.body.appendChild(container);
-  }, refMap.entries.map(e => ({ ref: e.ref, role: e.role, name: e.name })));
+      document.body.appendChild(container);
+    },
+    refMap.entries.map((e) => ({ ref: e.ref, role: e.role, name: e.name }))
+  );
 
   await page.waitForTimeout(50);
 

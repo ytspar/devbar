@@ -10,7 +10,6 @@ import { handleQueryDOM } from './dom.js';
 import { handleExecJS } from './exec.js';
 import { handleGetLogs } from './logs.js';
 
-// biome-ignore lint/suspicious/noExplicitAny: test helper - SweetlinkResponse.data is unknown
 const d = (r: SweetlinkResponse): any => r.data;
 
 describe('handleGetLogs', () => {

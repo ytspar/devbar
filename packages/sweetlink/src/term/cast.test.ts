@@ -33,7 +33,7 @@ describe('escapeJsonForScript', () => {
   });
 
   test('escaped JSON is still valid JSON when parsed', () => {
-    const original = { msg: '</script>' + String.fromCharCode(0x2028) + 'hi' };
+    const original = { msg: `</script>${String.fromCharCode(0x2028)}hi` };
     const safe = escapeJsonForScript(JSON.stringify(original));
     const parsed = JSON.parse(safe);
     expect(parsed).toEqual(original);

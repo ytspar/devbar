@@ -582,6 +582,65 @@ test.describe('DevBar Stress Tests', () => {
   });
 });
 
+test.describe('DevBar Responsive Layout', () => {
+  test('keeps action buttons compact without clipping at medium widths', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Responsive wrapping is geometry-checked in desktop Chromium; device projects cover touch targets.'
+    );
+
+    await page.setViewportSize({ width: 993, height: 800 });
+    await setupPage(page);
+    await changePosition(page, 'bottom-center');
+
+    const layout = await page.evaluate((selector) => {
+      const root = document.querySelector(selector) as HTMLElement | null;
+      const status = root?.querySelector('.devbar-status') as HTMLElement | null;
+      const actions = root?.querySelector('.devbar-actions') as HTMLElement | null;
+      const buttons = Array.from(actions?.querySelectorAll('button') ?? []);
+      const rootRect = root?.getBoundingClientRect();
+      const statusRect = status?.getBoundingClientRect();
+      const actionsRect = actions?.getBoundingClientRect();
+      const buttonRects = buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, width: rect.width };
+      });
+
+      return {
+        viewportWidth: window.innerWidth,
+        rootLeft: rootRect?.left ?? 0,
+        rootRight: rootRect?.right ?? 0,
+        rootClientWidth: root?.clientWidth ?? 0,
+        rootScrollWidth: root?.scrollWidth ?? 0,
+        rootHeight: rootRect?.height ?? 0,
+        statusTop: statusRect?.top ?? 0,
+        statusBottom: statusRect?.bottom ?? 0,
+        actionsTop: actionsRect?.top ?? 0,
+        actionsBottom: actionsRect?.bottom ?? 0,
+        maxButtonRight: Math.max(...buttonRects.map((rect) => rect.right)),
+        minButtonLeft: Math.min(...buttonRects.map((rect) => rect.left)),
+        buttonCount: buttonRects.length,
+      };
+    }, DEVBAR_SELECTOR);
+
+    await testInfo.attach('devbar-responsive-wrap-evidence.json', {
+      body: JSON.stringify(layout, null, 2),
+      contentType: 'application/json',
+    });
+
+    expect(layout.buttonCount).toBeGreaterThanOrEqual(8);
+    expect(layout.actionsTop).toBeLessThanOrEqual(layout.statusBottom);
+    expect(layout.rootHeight).toBeLessThanOrEqual(72);
+    expect(layout.rootLeft).toBeGreaterThanOrEqual(-1);
+    expect(layout.rootRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.rootScrollWidth).toBeLessThanOrEqual(layout.rootClientWidth + 1);
+    expect(layout.minButtonLeft).toBeGreaterThanOrEqual(-1);
+    expect(layout.maxButtonRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  });
+});
+
 test.describe('DevBar Accessibility', () => {
   test('should have no axe violations and expose contrast evidence', async ({ page }, testInfo) => {
     await setupPage(page);
@@ -759,28 +818,35 @@ test.describe('DevBar Accessibility', () => {
     await page.setViewportSize(VIEWPORTS.base);
     await setupPage(page);
 
-    const controls = await page
-      .locator(`${DEVBAR_SELECTOR} button, ${DEVBAR_SELECTOR} [role="button"]`)
-      .evaluateAll((elements) =>
-        elements
-          .filter((element) => {
-            const rect = element.getBoundingClientRect();
-            const style = getComputedStyle(element);
-            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
-          })
-          .map((element) => {
-            const rect = element.getBoundingClientRect();
-            return {
-              name:
-                element.getAttribute('aria-label') ||
-                element.getAttribute('title') ||
-                element.textContent?.trim() ||
-                element.tagName.toLowerCase(),
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-            };
-          })
-      );
+    const collectControls = () =>
+      page
+        .locator(`${DEVBAR_SELECTOR} button, ${DEVBAR_SELECTOR} [role="button"]`)
+        .evaluateAll((elements) =>
+          elements
+            .filter((element) => {
+              const rect = element.getBoundingClientRect();
+              const style = getComputedStyle(element);
+              return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden';
+            })
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                name:
+                  element.getAttribute('aria-label') ||
+                  element.getAttribute('title') ||
+                  element.textContent?.trim() ||
+                  element.tagName.toLowerCase(),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              };
+            })
+        );
+
+    await expect
+      .poll(async () => (await collectControls()).length, { timeout: 5_000 })
+      .toBeGreaterThanOrEqual(4);
+
+    const controls = await collectControls();
     const tooSmall = controls.filter((control) => control.width < 24 || control.height < 24);
 
     await testInfo.attach('devbar-mobile-touch-targets.json', {
@@ -788,7 +854,6 @@ test.describe('DevBar Accessibility', () => {
       contentType: 'application/json',
     });
 
-    expect(controls.length).toBeGreaterThanOrEqual(4);
     expect(tooSmall).toEqual([]);
   });
 });

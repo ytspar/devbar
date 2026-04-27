@@ -24,6 +24,12 @@ import {
   createQuickStartSection,
   createSweetlinkSection,
 } from './landing-content.js';
+import {
+  installSimulatedSweetlinkBridge,
+  type SweetlinkDemoActionDetail,
+} from './simulated-sweetlink.js';
+
+const DEMO_TOAST_HIDE_MS = 4800;
 
 /**
  * Apply the current theme to the playground
@@ -41,8 +47,100 @@ function applyTheme(): void {
   document.body.classList.add(`theme-${effectiveTheme}`);
 }
 
+function createRealSweetlinkUrl(): string {
+  const url = new URL(window.location.href);
+  url.searchParams.set('sweetlink', 'real');
+  url.hash = '';
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function createSweetlinkDemoStatus(): HTMLElement {
+  const status = document.createElement('aside');
+  status.className = 'sweetlink-demo-status';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  status.setAttribute(
+    'aria-label',
+    'Sweetlink demo mode is active. Toolbar actions return sample artifacts only.'
+  );
+
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = 'Simulated Sweetlink';
+  const description = document.createElement('span');
+  description.textContent = 'Sample artifacts only. No local files.';
+  text.append(title, description);
+
+  const realLink = document.createElement('a');
+  realLink.href = createRealSweetlinkUrl();
+  realLink.textContent = 'Use real daemon';
+  realLink.setAttribute('aria-label', 'Reload with the real Sweetlink daemon instead of demo mode');
+
+  status.append(text, realLink);
+  return status;
+}
+
+function createSweetlinkDemoToast(): HTMLElement {
+  const toast = document.createElement('div');
+  toast.className = 'sweetlink-demo-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  return toast;
+}
+
+function renderSweetlinkDemoToast(toast: HTMLElement, detail: SweetlinkDemoActionDetail): void {
+  const eyebrow = document.createElement('span');
+  eyebrow.className = 'sweetlink-demo-toast-eyebrow';
+  eyebrow.textContent = 'Simulated action';
+
+  const title = document.createElement('strong');
+  title.textContent = detail.title;
+
+  const message = document.createElement('p');
+  message.textContent = detail.message;
+
+  toast.replaceChildren(eyebrow, title, message);
+
+  if (detail.path) {
+    const path = document.createElement('code');
+    path.textContent = detail.path;
+    toast.appendChild(path);
+  }
+}
+
+function installSweetlinkDemoFeedbackUI(): void {
+  document.body.appendChild(createSweetlinkDemoStatus());
+
+  const toast = createSweetlinkDemoToast();
+  document.body.appendChild(toast);
+
+  let hideToast: ReturnType<typeof setTimeout> | null = null;
+  window.addEventListener('sweetlink-demo-action', (event) => {
+    const detail = (event as CustomEvent<SweetlinkDemoActionDetail>).detail;
+    if (!detail) return;
+
+    renderSweetlinkDemoToast(toast, detail);
+    toast.classList.add('is-visible');
+
+    if (hideToast) clearTimeout(hideToast);
+    hideToast = setTimeout(() => {
+      toast.classList.remove('is-visible');
+      hideToast = null;
+    }, DEMO_TOAST_HIDE_MS);
+  });
+}
+
 // Apply theme initially
 applyTheme();
+
+// Public docs and the local playground cannot assume a user has a Sweetlink
+// daemon running. Simulate the bridge here only, so demo controls look alive
+// without changing package behavior for consumers.
+const simulatedSweetlink = installSimulatedSweetlinkBridge();
+if (simulatedSweetlink.active) {
+  document.documentElement.dataset.sweetlinkDemo = 'true';
+  installSweetlinkDemoFeedbackUI();
+}
 
 // Listen for theme changes via localStorage
 window.addEventListener('storage', (e) => {

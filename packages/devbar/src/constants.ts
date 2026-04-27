@@ -716,24 +716,34 @@ export const DEVBAR_STYLES = `
 [data-devbar-overlay] *::-webkit-scrollbar-thumb:hover {
   background: var(--devbar-color-primary);
 }
-/* Main row - single row by default (SM, MD, LG, XL) */
+/* Main row - dense single row by default; metrics collapse before controls wrap. */
 .devbar-main {
   flex-wrap: nowrap;
+  max-width: 100%;
+  overflow: visible;
+}
+.devbar-status {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 /* Info section - truncates if needed to fit single row */
 .devbar-info {
   white-space: nowrap;
+  min-width: 0;
 }
 .devbar-info > span {
   flex-shrink: 0;
 }
-/* Actions container - stays on same row by default */
+/* Actions container - stays on the same row until compact widths. */
 .devbar-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-basis: auto;
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  max-width: 100%;
 }
 .devbar-actions::before {
   content: "agent tools";
@@ -743,6 +753,24 @@ export const DEVBAR_STYLES = `
   text-transform: uppercase;
   white-space: nowrap;
   opacity: 0.78;
+}
+@media (max-width: 860px) {
+  .devbar-main {
+    flex-wrap: wrap;
+    row-gap: 0.375rem;
+    overflow: visible;
+  }
+  .devbar-status {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .devbar-actions {
+    flex: 1 1 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    row-gap: 0.375rem;
+    min-width: 0;
+  }
 }
 /* BASE only (< 640px): fit content, centered horizontally */
 @media (max-width: 639px) {
@@ -758,25 +786,17 @@ export const DEVBAR_STYLES = `
   }
   /* Collapsed state: JS handles positioning based on captured dot location */
   .devbar-main {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: center;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: visible;
     max-width: calc(100vw - 24px);
     padding: 0.5rem !important;
-    scroll-snap-type: x proximity;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-  .devbar-main::-webkit-scrollbar {
-    display: none;
   }
   /* Keep status row (connection dot + info) on same line */
   .devbar-status {
     flex-wrap: nowrap !important;
     justify-content: center;
-    flex-shrink: 0;
-    scroll-snap-align: start;
+    flex: 1 1 100%;
   }
   .devbar-info {
     justify-content: center;
@@ -784,15 +804,14 @@ export const DEVBAR_STYLES = `
     white-space: nowrap !important;
   }
   .devbar-actions {
-    justify-content: space-evenly;
+    justify-content: center;
     margin-top: 0;
-    flex-wrap: nowrap;
-    width: auto;
-    flex-shrink: 0;
-    scroll-snap-align: end;
+    flex-wrap: wrap;
+    width: 100%;
+    flex-shrink: 1;
   }
   .devbar-actions::before {
-    content: "swipe tools";
+    content: "agent tools";
   }
   .devbar-actions button {
     width: 32px !important;

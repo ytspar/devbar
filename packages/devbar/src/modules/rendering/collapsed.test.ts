@@ -266,7 +266,7 @@ describe('renderCollapsed', () => {
 
     const tooltipFn = vi.mocked(attachTextTooltip).mock.calls[0][2] as () => string;
     const text = tooltipFn();
-    expect(text).toContain('Sweetlink not connected');
+    expect(text).toContain('Sweetlink disconnected');
   });
 
   it('tooltip text mentions error count when errors exist', () => {

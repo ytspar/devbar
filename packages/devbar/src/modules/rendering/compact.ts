@@ -4,6 +4,7 @@
 
 import { BUTTON_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../../constants.js';
 import type { DevBarControl } from '../../types.js';
+import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';
@@ -52,7 +53,7 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
   const connIndicator = createConnectionIndicator(state);
   const connDot = connIndicator.querySelector('.devbar-conn-dot') as HTMLSpanElement;
   attachTextTooltip(state, connIndicator, () =>
-    state.sweetlinkConnected ? 'Sweetlink connected' : 'Sweetlink disconnected'
+    getSweetlinkConnectionTooltip(state.sweetlinkConnected)
   );
   connIndicator.onclick = (e) => {
     e.stopPropagation();

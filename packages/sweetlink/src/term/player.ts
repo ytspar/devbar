@@ -36,7 +36,7 @@ export async function generatePlayer(options: PlayerOptions): Promise<string> {
   let header: CastHeader;
   try {
     header = JSON.parse(lines[0]!) as CastHeader;
-  } catch (err) {
+  } catch {
     const preview = lines[0]!.slice(0, 80);
     throw new Error(
       `Not a valid asciicast v2 file: ${options.castPath} — first line is not JSON: ${preview}`

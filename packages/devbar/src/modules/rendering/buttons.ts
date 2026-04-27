@@ -6,6 +6,7 @@ import { preloadAxe } from '../../accessibility.js';
 import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
 import { resolveSaveLocation } from '../../settings.js';
 import { createSvgIcon, getButtonStyles } from '../../ui/index.js';
+import { getDemoArtifactWarning, isDemoArtifactPath, isSweetlinkDemoMode } from '../demoMode.js';
 import { activateRulerMode } from '../ruler.js';
 import {
   copyPathToClipboard,
@@ -25,10 +26,16 @@ import { closeAllModals, type DevBarState } from '../types.js';
  * filesystem path. Centralizing here keeps the four call sites in lockstep.
  */
 function addSavedTooltip(
-  h: { addSuccess: (line: string, path?: string) => void },
+  h: { addSuccess: (line: string, path?: string) => void; addWarning: (text: string) => void },
   noun: string,
   artifactPath: string
 ): void {
+  if (isDemoArtifactPath(artifactPath)) {
+    h.addSuccess(`${noun} simulated`, artifactPath);
+    h.addWarning(getDemoArtifactWarning());
+    return;
+  }
+
   const isDownloaded = artifactPath.endsWith('downloaded');
   h.addSuccess(
     isDownloaded ? `${noun} downloaded!` : `${noun} saved!`,
@@ -102,6 +109,11 @@ export function createScreenshotButton(state: DevBarState, accentColor: string):
     }
     if (state.lastScreenshot) {
       const screenshotPath = state.lastScreenshot;
+      if (isDemoArtifactPath(screenshotPath)) {
+        addSavedTooltip(h, 'Screenshot', screenshotPath);
+        return;
+      }
+
       const isDownloaded = screenshotPath.endsWith('downloaded');
 
       if (isDownloaded) {
@@ -244,7 +256,7 @@ export function createAIReviewButton(state: DevBarState): HTMLButtonElement {
       return;
     }
     if (state.lastDesignReview) {
-      h.addSuccess('Design review saved!', state.lastDesignReview);
+      addSavedTooltip(h, 'Design review', state.lastDesignReview);
       return;
     }
 
@@ -253,6 +265,9 @@ export function createAIReviewButton(state: DevBarState): HTMLButtonElement {
     h.addSectionHeader('Requirements');
     h.addShortcut('API Key', 'ANTHROPIC_API_KEY');
 
+    if (isSweetlinkDemoMode()) {
+      h.addWarning('Demo mode: no Claude request will be sent.');
+    }
     if (!state.sweetlinkConnected) {
       h.addWarning('Sweetlink not connected');
     }
@@ -305,6 +320,9 @@ export function createOutlineButton(state: DevBarState): HTMLButtonElement {
     h.addTitle('Document Outline');
     h.addDescription('View page heading structure and save as markdown.');
 
+    if (isSweetlinkDemoMode()) {
+      h.addWarning('Demo mode: save actions return example paths only.');
+    }
     if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
       h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     }
@@ -340,6 +358,9 @@ export function createSchemaButton(state: DevBarState): HTMLButtonElement {
     h.addTitle('Page Schema');
     h.addDescription('View JSON-LD, Open Graph, and other structured data.');
 
+    if (isSweetlinkDemoMode()) {
+      h.addWarning('Demo mode: save actions return example paths only.');
+    }
     if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
       h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     }
@@ -379,6 +400,9 @@ export function createA11yButton(state: DevBarState): HTMLButtonElement {
     h.addTitle('Accessibility Audit');
     h.addDescription('Run axe-core audit to check WCAG compliance.');
 
+    if (isSweetlinkDemoMode()) {
+      h.addWarning('Demo mode: save actions return example paths only.');
+    }
     if (state.options.saveLocation === 'local' && !state.sweetlinkConnected) {
       h.addWarning('Sweetlink not connected. Switch save method to Auto or Download.');
     }
@@ -476,12 +500,20 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
       h.addTitle(`Recording: ${elapsed}s`);
       h.addShortcut('Click', 'Stop recording & open viewer');
     } else if (state.lastViewerPath) {
-      h.addSuccess('Last session recorded');
+      if (isSweetlinkDemoMode()) {
+        h.addSuccess('Demo recording simulated', state.lastViewerPath);
+        h.addWarning('Demo only: no recording file was written.');
+      } else {
+        h.addSuccess('Last session recorded');
+      }
       h.addShortcut('Click', 'Start new recording');
       h.addShortcut('Shift+Click', 'Open last viewer');
     } else {
       h.addTitle('Session Recording');
       h.addShortcut('Click', 'Start recording (video + actions)');
+      if (isSweetlinkDemoMode()) {
+        h.addWarning('Demo mode: no video or action manifest will be recorded.');
+      }
     }
   });
 
@@ -571,6 +603,9 @@ export function createDemoButton(state: DevBarState): HTMLButtonElement {
     } else {
       h.addTitle('Demo Document');
       h.addShortcut('Click', 'Start demo (prompts for title)');
+      if (isSweetlinkDemoMode()) {
+        h.addWarning('Demo mode: no markdown document will be written.');
+      }
     }
   });
 

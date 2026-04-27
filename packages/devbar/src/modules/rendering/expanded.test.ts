@@ -315,6 +315,8 @@ describe('renderExpanded', () => {
 
     const statusRow = state.container!.querySelector('.devbar-status');
     expect(statusRow).toBeTruthy();
+    expect((statusRow as HTMLElement).style.flexShrink).toBe('1');
+    expect((statusRow as HTMLElement).style.minWidth).toBe('0');
     const indicator = statusRow!.querySelector('[data-testid="conn-indicator"]');
     expect(indicator).toBeTruthy();
   });

@@ -3,6 +3,7 @@
  */
 
 import { CSS_COLORS, DEVBAR_THEME, withAlpha } from '../../constants.js';
+import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 
@@ -116,7 +117,7 @@ export function renderCollapsed(state: DevBarState): void {
     state,
     wrapper,
     () =>
-      `Click to expand DevBar${state.sweetlinkConnected ? ' (Sweetlink connected)' : ' (Sweetlink not connected)'}${errorCount > 0 ? `\n${errorCount} console error${errorCount === 1 ? '' : 's'}` : ''}`,
+      `Click to expand DevBar (${getSweetlinkConnectionTooltip(state.sweetlinkConnected)})${errorCount > 0 ? `\n${errorCount} console error${errorCount === 1 ? '' : 's'}` : ''}`,
     {
       onEnter: () => {
         dot.style.opacity = '0';

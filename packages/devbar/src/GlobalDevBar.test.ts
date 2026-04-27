@@ -9,14 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Layout constants (match the actual DevBar implementation)
 const LAYOUT = {
-  METRIC_WIDTH: 95,
+  METRIC_WIDTH: 118,
   BADGE_WIDTH: 30,
-  ACTION_BUTTON_WIDTH: 30,
-  BREAKPOINT_WIDTH: 100,
+  ACTION_BUTTON_WIDTH: 32,
+  ACTION_LABEL_WIDTH: 96,
+  BREAKPOINT_WIDTH: 112,
   CONNECTION_DOT_WIDTH: 16,
   ELLIPSIS_WIDTH: 24,
   CONTAINER_PADDING: 24,
-  BUTTON_WRAP_BREAKPOINT: 640,
+  BUTTON_WRAP_BREAKPOINT: 860,
   CENTERED_MARGIN: 32,
   DEFAULT_MARGIN: 96,
   TOTAL_METRICS: 5,
@@ -32,14 +33,16 @@ function calculateMetricVisibility(
   badgeCount: number,
   showScreenshot: boolean = true
 ): { visible: string[]; hidden: string[]; availableWidth: number; maxMetrics: number } {
-  const actionButtonCount = (showScreenshot ? 1 : 0) + 5;
+  const actionButtonCount = (showScreenshot ? 1 : 0) + 9;
   const isCentered = position === 'bottom-center';
   const margins = isCentered ? LAYOUT.CENTERED_MARGIN : LAYOUT.DEFAULT_MARGIN;
   const containerWidth = windowWidth - margins;
 
-  // At small screens (<640px), action buttons wrap to second row
-  const buttonsWrap = windowWidth < LAYOUT.BUTTON_WRAP_BREAKPOINT;
-  const buttonWidth = buttonsWrap ? 0 : actionButtonCount * LAYOUT.ACTION_BUTTON_WIDTH;
+  // Compact tablet/mobile widths move action buttons to a second row.
+  const buttonsWrap = windowWidth <= LAYOUT.BUTTON_WRAP_BREAKPOINT;
+  const buttonWidth = buttonsWrap
+    ? 0
+    : actionButtonCount * LAYOUT.ACTION_BUTTON_WIDTH + LAYOUT.ACTION_LABEL_WIDTH;
 
   const fixedWidth =
     LAYOUT.CONNECTION_DOT_WIDTH +
@@ -147,18 +150,18 @@ describe('DevBar Metric Visibility Calculation', () => {
   });
 
   describe('Button wrap behavior', () => {
-    it('should not count button width at <640px (buttons wrap)', () => {
+    it('should not count button width at compact widths (buttons wrap)', () => {
       const narrow = calculateMetricVisibility(500, 'bottom-left', 0);
 
-      // At 500px buttons wrap, freeing ~180px
+      // At 500px buttons wrap, preserving status-row space for core context.
       // So narrow might actually have MORE space for metrics in the first row
       expect(narrow.availableWidth).toBeGreaterThan(0);
     });
 
-    it('should count button width at >=640px', () => {
-      const result = calculateMetricVisibility(800, 'bottom-left', 0);
+    it('should count button width at wide viewports', () => {
+      const result = calculateMetricVisibility(1280, 'bottom-left', 0);
       // Button width is included, reducing available space
-      expect(result.availableWidth).toBeLessThan(800 - 96); // Less than container width
+      expect(result.availableWidth).toBeLessThan(1280 - 96); // Less than container width
     });
   });
 
@@ -220,7 +223,7 @@ describe('DevBar Comprehensive UI Matrix', () => {
                 errorCount,
                 warnCount,
                 infoCount,
-                expectedBehavior: `${badgeCount} badges, buttons ${viewport.width < 640 ? 'wrapped' : 'inline'}`,
+                expectedBehavior: `${badgeCount} badges, buttons ${viewport.width <= LAYOUT.BUTTON_WRAP_BREAKPOINT ? 'wrapped' : 'inline'}`,
               });
             }
           }
@@ -481,11 +484,11 @@ describe('DevBar Width Calculation Regression Tests', () => {
   // Regression test cases with expected outcomes
   const regressionCases = [
     // Mobile - buttons wrap, more space for metrics
-    { width: 400, position: 'bottom-center', badges: 0, minExpected: 2 },
+    { width: 400, position: 'bottom-center', badges: 0, minExpected: 1 },
     { width: 400, position: 'bottom-center', badges: 1, minExpected: 1 },
     { width: 400, position: 'bottom-left', badges: 0, minExpected: 1 },
 
-    // Tablet - buttons inline
+    // Compact tablet - buttons wrap before they crowd out status context
     { width: 768, position: 'bottom-left', badges: 0, minExpected: 2 },
     { width: 768, position: 'bottom-center', badges: 0, minExpected: 3 },
 

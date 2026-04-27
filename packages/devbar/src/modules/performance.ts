@@ -54,11 +54,14 @@ export function getResponsiveMetricVisibility(state: DevBarState): {
   // Display order (most important first)
   const displayOrder: MetricKey[] = ['fcp', 'lcp', 'cls', 'inp', 'pageSize'];
 
-  // Approximate widths in pixels (measured from typical rendered output)
-  const METRIC_WIDTH = 95; // "FCP 1234MS |" including separator
+  // Approximate widths in pixels (measured from typical rendered output).
+  // Keep these conservative: long-running dev sessions can produce 7-digit
+  // FCP/LCP values, and the action rail includes the "agent tools" label.
+  const METRIC_WIDTH = 118; // "FCP 1234567MS |" including separator
   const BADGE_WIDTH = 30; // Each console badge
-  const ACTION_BUTTON_WIDTH = 30; // Each action button
-  const BREAKPOINT_WIDTH = 100; // "MD - 1234x5678 |" (reduced estimate)
+  const ACTION_BUTTON_WIDTH = 32; // Button plus average flex gap
+  const ACTION_LABEL_WIDTH = 96; // "agent tools" label plus gap
+  const BREAKPOINT_WIDTH = 112; // "MD - 1234x5678 |"
   const CONNECTION_DOT_WIDTH = 16; // Connection indicator
   const ELLIPSIS_WIDTH = 24; // "..." button
   const CONTAINER_PADDING = 24; // Internal padding and gaps
@@ -68,9 +71,9 @@ export function getResponsiveMetricVisibility(state: DevBarState): {
   const badgeCount =
     (errorCount > 0 ? 1 : 0) + (warningCount > 0 ? 1 : 0) + (infoCount > 0 ? 1 : 0);
 
-  // Count action buttons (screenshot, AI review, outline, schema, settings, collapse)
+  // Count action buttons (screenshot plus the always-visible assistant tools)
   const { showScreenshot, position } = state.options;
-  const actionButtonCount = (showScreenshot ? 1 : 0) + 5; // 5 always-visible buttons
+  const actionButtonCount = (showScreenshot ? 1 : 0) + 9;
 
   // Calculate available width for metrics based on position
   // Centered: 16px margin each side = 32px total
@@ -80,9 +83,13 @@ export function getResponsiveMetricVisibility(state: DevBarState): {
   const margins = isCentered ? 32 : 96;
   const containerWidth = windowWidth - margins;
 
-  // At small screens (<640px), action buttons wrap to second row and don't take horizontal space
-  const buttonsWrap = windowWidth < 640;
-  const buttonWidth = buttonsWrap ? 0 : actionButtonCount * ACTION_BUTTON_WIDTH;
+  // Preserve a dense one-row toolbar through medium desktop widths. Compact
+  // tablet/mobile widths move the action rail below the status row before it
+  // crowds out all metric context.
+  const buttonsWrap = windowWidth <= 860;
+  const buttonWidth = buttonsWrap
+    ? 0
+    : actionButtonCount * ACTION_BUTTON_WIDTH + ACTION_LABEL_WIDTH;
 
   const fixedWidth =
     CONNECTION_DOT_WIDTH +

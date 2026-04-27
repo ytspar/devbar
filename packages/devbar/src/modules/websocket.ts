@@ -107,7 +107,7 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
       }
 
       // Handle hifi screenshot response (proxied through daemon)
-      if (message.type === 'hifi-screenshot' && !message.success) {
+      if (message.type === 'hifi-screenshot') {
         state.capturing = false;
         state.render();
         return;
@@ -251,9 +251,13 @@ const handleA11ySavedCommand = createSavedHandler<SweetlinkCommand & { type: 'a1
   'a11y',
   'a11yPath'
 );
-const handleScreenshotSavedCommand = createSavedHandler<
-  SweetlinkCommand & { type: 'screenshot-saved' }
->('screenshot', 'path');
+const handleScreenshotSavedCommand = (
+  state: DevBarState,
+  command: SweetlinkCommand & { type: 'screenshot-saved' }
+): void => {
+  state.capturing = false;
+  handleNotification(state, 'screenshot', command.path, SCREENSHOT_NOTIFICATION_MS);
+};
 
 // Error handlers (created via factory)
 const handleOutlineErrorCommand = createErrorHandler<SweetlinkCommand & { type: 'outline-error' }>(

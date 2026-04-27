@@ -41,7 +41,7 @@ if (args.includes('--check')) {
     const [pkg, version] = pair.split('=');
     if (!pkg || !version) continue; // skip blank inputs
     const notes = releaseNotes[pkg];
-    if (!notes || !notes[version]) {
+    if (!notes?.[version]) {
       console.error(
         `\n  ✘ Missing release note for ${pkg} v${version}` +
           `\n    Add an entry to packages/playground/src/release-notes.json\n`

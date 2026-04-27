@@ -370,7 +370,7 @@ export class ConsoleCapture {
         href?: string;
         tagName?: string;
       };
-      if (!target || !target.tagName) return;
+      if (!target?.tagName) return;
 
       // Skip devbar's own resources to avoid feedback loops
       const url = target.src || target.href || '';

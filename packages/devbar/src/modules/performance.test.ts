@@ -221,7 +221,7 @@ describe('getResponsiveMetricVisibility', () => {
   });
 
   it('accounts for button wrapping at narrow viewports', () => {
-    // At <640px, buttons wrap to second row, freeing horizontal space
+    // At mobile widths, buttons wrap to second row, freeing horizontal space.
     Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
 
     const state = createMockState();

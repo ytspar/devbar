@@ -55,6 +55,12 @@ function createHeader(): HTMLElement {
     'Sample UI elements for demonstrating devbar and sweetlink features like screenshot capture, console log streaming, and DOM queries. These are not part of the toolbar itself.';
   header.appendChild(description);
 
+  const simulatedBridgeNote = document.createElement('p');
+  simulatedBridgeNote.className = 'demo-sim-note';
+  simulatedBridgeNote.textContent =
+    'Simulated Sweetlink is active: toolbar actions show realistic feedback and sample artifact paths, but they do not write files or call your local daemon.';
+  header.appendChild(simulatedBridgeNote);
+
   // Navigation - text inset in horizontal line
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Demo navigation');

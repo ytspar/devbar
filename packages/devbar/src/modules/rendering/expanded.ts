@@ -10,6 +10,7 @@ import {
   TAILWIND_BREAKPOINTS,
   withAlpha,
 } from '../../constants.js';
+import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { getResponsiveMetricVisibility } from '../performance.js';
 import {
   addTooltipTitle,
@@ -165,9 +166,7 @@ function createExpandedMainRow(): HTMLDivElement {
 function createExpandedConnectionIndicator(state: DevBarState): HTMLSpanElement {
   const connIndicator = createConnectionIndicator(state);
   attachTextTooltip(state, connIndicator, () =>
-    state.sweetlinkConnected
-      ? 'Sweetlink connected (click to minimize)'
-      : 'Sweetlink disconnected (click to minimize)'
+    getSweetlinkConnectionTooltip(state.sweetlinkConnected, 'click to minimize')
   );
   connIndicator.onclick = (e) => {
     e.stopPropagation();
@@ -427,7 +426,8 @@ function createStatusRow(
     alignItems: 'center',
     gap: '0.5rem',
     flexWrap: 'nowrap',
-    flexShrink: '0',
+    flexShrink: '1',
+    minWidth: '0',
   });
   statusRow.appendChild(connIndicator);
 

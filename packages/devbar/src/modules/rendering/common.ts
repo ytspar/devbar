@@ -87,15 +87,25 @@ export function createControlElement(control: DevBarControl, accentColor: string
   const isInteractive = !!control.onClick;
 
   const el = document.createElement(isInteractive ? 'button' : 'span');
+  el.className = isInteractive
+    ? 'devbar-custom-control'
+    : 'devbar-custom-control devbar-custom-badge';
   if (isInteractive) (el as HTMLButtonElement).type = 'button';
 
   Object.assign(el.style, {
     padding: '4px 10px',
+    boxSizing: 'border-box',
+    minWidth: '0',
+    maxWidth: 'min(16rem, 100%)',
     backgroundColor: isActive ? withAlpha(color, 20) : 'transparent',
     border: `1px solid ${isActive ? color : withAlpha(color, 38)}`,
     borderRadius: '6px',
     color: isActive ? color : withAlpha(color, 60),
     fontSize: '0.625rem',
+    lineHeight: '1.2',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
     cursor: isInteractive ? (isDisabled ? 'not-allowed' : 'pointer') : 'default',
     opacity: isDisabled ? '0.5' : '1',
     transition: isInteractive ? 'all 150ms' : 'none',

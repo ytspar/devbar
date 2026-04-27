@@ -496,15 +496,23 @@ function createCustomControlsRow(
   if (customControls.length === 0) return null;
 
   const customRow = document.createElement('div');
+  customRow.className = 'devbar-custom-controls';
   Object.assign(customRow.style, {
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
+    alignContent: 'flex-start',
+    justifyContent: 'flex-start',
     gap: '0.5rem',
     padding: '0 0.75rem 0.5rem 0.75rem',
     borderTop: `1px solid ${withAlpha(accentColor, 19)}`,
     marginTop: '0',
     paddingTop: '0.5rem',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: '0',
+    overflow: 'visible',
+    boxSizing: 'border-box',
     fontFamily: FONT_MONO,
     fontSize: '0.6875rem',
   });
@@ -527,11 +535,18 @@ function createCustomControlsRow(
   // Render each group with a small header label
   for (const [groupName, controls] of groups) {
     const groupLabel = document.createElement('span');
+    groupLabel.className = 'devbar-custom-group-label';
     Object.assign(groupLabel.style, {
       color: withAlpha(accentColor, 50),
       fontSize: '0.5625rem',
       textTransform: 'uppercase',
       letterSpacing: '0.05em',
+      flex: '0 1 auto',
+      minWidth: '0',
+      maxWidth: '100%',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
       marginLeft:
         ungrouped.length > 0 || [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
     });
@@ -569,6 +584,11 @@ export function renderExpanded(
 
   const isCentered = position === 'bottom-center';
   const wrapper = state.container;
+  if (customControls.length > 0) {
+    wrapper.dataset.devbarCustomControls = 'true';
+  } else {
+    delete wrapper.dataset.devbarCustomControls;
+  }
 
   // 1. Position and style the wrapper
   const posStyle = computeExpandedPosition(state, position, isCentered);

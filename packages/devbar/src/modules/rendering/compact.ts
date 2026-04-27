@@ -27,6 +27,11 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
   const posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
 
   const wrapper = state.container;
+  if (customControls.length > 0) {
+    wrapper.dataset.devbarCustomControls = 'true';
+  } else {
+    delete wrapper.dataset.devbarCustomControls;
+  }
 
   state.resetPositionStyles(wrapper);
 
@@ -43,8 +48,12 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
     WebkitBackdropFilter: 'blur(8px)',
     padding: '6px 10px',
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: '8px',
+    boxSizing: 'border-box',
+    maxWidth: position === 'bottom-center' ? 'calc(100vw - 32px)' : 'calc(100vw - 96px)',
+    minWidth: '0',
     fontFamily: FONT_MONO,
     fontSize: '0.6875rem',
   });

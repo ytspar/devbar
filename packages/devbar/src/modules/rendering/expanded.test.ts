@@ -595,8 +595,21 @@ describe('renderExpanded', () => {
 
     // Main row + custom controls row
     expect(state.container!.children.length).toBe(2);
+    expect(state.container!.dataset.devbarCustomControls).toBe('true');
     const customRow = state.container!.children[1] as HTMLElement;
+    expect(customRow.className).toBe('devbar-custom-controls');
+    expect(customRow.style.width).toBe('100%');
+    expect(customRow.style.maxWidth).toBe('100%');
+    expect(customRow.style.overflow).toBe('visible');
     expect(customRow.textContent).toContain('Test Button');
+  });
+
+  it('removes custom-control layout marker when controls are absent', () => {
+    const state = createMockState();
+    state.container!.dataset.devbarCustomControls = 'true';
+    renderExpanded(state, []);
+
+    expect(state.container!.dataset.devbarCustomControls).toBeUndefined();
   });
 
   it('custom control button calls onClick handler', () => {
@@ -607,6 +620,9 @@ describe('renderExpanded', () => {
     const customRow = state.container!.children[1] as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
     expect(btn).toBeTruthy();
+    expect(btn.className).toBe('devbar-custom-control');
+    expect(btn.style.maxWidth).toBe('min(16rem, 100%)');
+    expect(btn.style.textOverflow).toBe('ellipsis');
     btn.click();
 
     expect(onClick).toHaveBeenCalled();
@@ -658,6 +674,16 @@ describe('renderExpanded', () => {
     const customRow = state.container!.children[1] as HTMLElement;
     const buttons = customRow.querySelectorAll('button');
     expect(buttons.length).toBe(3);
+  });
+
+  it('renders grouped custom controls with responsive group labels', () => {
+    const state = createMockState();
+    renderExpanded(state, [{ id: 'btn1', label: 'First', group: 'Cards', onClick: vi.fn() }]);
+
+    const customRow = state.container!.children[1] as HTMLElement;
+    const groupLabel = customRow.querySelector('.devbar-custom-group-label') as HTMLElement;
+    expect(groupLabel).toBeTruthy();
+    expect(groupLabel.textContent).toBe('Cards');
   });
 
   // ---- Size overrides ----------------------------------------------------

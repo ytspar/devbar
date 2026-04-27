@@ -754,6 +754,36 @@ export const DEVBAR_STYLES = `
   white-space: nowrap;
   opacity: 0.78;
 }
+[data-devbar-custom-controls="true"] .devbar-main {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+[data-devbar-custom-controls="true"] .devbar-status {
+  flex: 1 1 min(34rem, 100%);
+}
+[data-devbar-custom-controls="true"] .devbar-actions {
+  flex: 1 1 min(28rem, 100%);
+  flex-wrap: wrap;
+  min-width: 0;
+  row-gap: 0.375rem;
+}
+.devbar-custom-controls {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.devbar-custom-control {
+  max-width: min(16rem, 100%);
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.devbar-custom-group-label {
+  box-sizing: border-box;
+}
 @media (max-width: 860px) {
   .devbar-main {
     flex-wrap: wrap;
@@ -772,6 +802,9 @@ export const DEVBAR_STYLES = `
     column-gap: 0.5rem;
     row-gap: 0.375rem;
     min-width: 0;
+  }
+  .devbar-custom-controls {
+    justify-content: center !important;
   }
 }
 /* BASE only (< 640px): fit content, centered horizontally */
@@ -840,6 +873,21 @@ export const DEVBAR_STYLES = `
   .devbar-actions button svg {
     width: 16px;
     height: 16px;
+  }
+  .devbar-custom-controls {
+    justify-content: center !important;
+    gap: 0.375rem !important;
+    padding: 0.5rem !important;
+  }
+  .devbar-custom-control {
+    min-height: 44px !important;
+    max-width: 100% !important;
+    padding: 0.5rem 0.625rem !important;
+  }
+  .devbar-custom-group-label {
+    flex-basis: 100% !important;
+    margin-left: 0 !important;
+    text-align: center;
   }
   .devbar-settings-grid {
     grid-template-columns: 1fr !important;

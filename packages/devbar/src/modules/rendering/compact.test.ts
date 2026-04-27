@@ -140,8 +140,21 @@ describe('renderCompact', () => {
     const state = createMockState();
     renderCompact(state);
     expect(state.container!.style.display).toBe('flex');
+    expect(state.container!.style.flexWrap).toBe('wrap');
     expect(state.container!.style.alignItems).toBe('center');
     expect(state.container!.style.gap).toBe('8px');
+  });
+
+  it('constrains compact width so plugin controls can wrap inside the viewport', () => {
+    const state = createMockState();
+    renderCompact(state, [{ id: 'plugin', label: 'Plugin Action', onClick: vi.fn() }]);
+
+    const plugin = state.container!.querySelector('.devbar-custom-control') as HTMLElement;
+    expect(state.container!.dataset.devbarCustomControls).toBe('true');
+    expect(state.container!.style.boxSizing).toBe('border-box');
+    expect(state.container!.style.maxWidth).toBe('calc(100vw - 96px)');
+    expect(plugin).toBeTruthy();
+    expect(plugin.style.maxWidth).toBe('min(16rem, 100%)');
   });
 
   it('applies padding of 6px 10px', () => {

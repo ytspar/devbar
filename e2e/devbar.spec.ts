@@ -35,6 +35,14 @@ const RESPONSIVE_AUDIT_VIEWPORTS = [
   { name: 'reported-993', width: 993, height: 800 },
 ] as const;
 
+const CUSTOM_PLUGIN_VIEWPORTS = [
+  { name: 'phone-320', width: 320, height: 700 },
+  { name: 'iphone-390', width: 390, height: 844 },
+  { name: 'small-tablet-640', width: 640, height: 900 },
+  { name: 'reported-plugin-836', width: 836, height: 900 },
+  { name: 'reported-993', width: 993, height: 800 },
+] as const;
+
 const MOBILE_TOUCH_TARGET_PX = 44;
 
 // DevBar positions
@@ -247,6 +255,51 @@ async function setupPage(page: Page): Promise<void> {
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await waitForDevBar(page);
+}
+
+async function installCustomPluginControls(page: Page): Promise<void> {
+  const devbarModuleUrl = `/@fs${path
+    .resolve(process.cwd(), 'packages/devbar/src/index.ts')
+    .replace(/\\/g, '/')}`;
+
+  await page.addScriptTag({
+    type: 'module',
+    content: `
+      import { GlobalDevBar } from ${JSON.stringify(devbarModuleUrl)};
+
+      GlobalDevBar.clearControls();
+
+      const controls = [
+        { id: 'show-card-ids', label: 'Show Card IDs', group: 'Cards' },
+        { id: 'enable-drag', label: 'Enable Drag', group: 'Cards' },
+        { id: 'edit-card-sizes', label: 'Edit Card Sizes', group: 'Cards' },
+        { id: 'hide-cards', label: 'Hide Cards', group: 'Cards' },
+        { id: 'save-layout', label: 'Save Layout', group: 'Cards', disabled: true },
+        {
+          id: 'diagnostics-long',
+          label: 'Very Long Diagnostics Plugin Control',
+          group: 'Diagnostics',
+          variant: 'info'
+        },
+      ];
+
+      for (const control of controls) {
+        GlobalDevBar.registerControl({
+          ...control,
+          onClick: control.disabled
+            ? undefined
+            : () => {
+                window.__devbarPluginActions = [
+                  ...(window.__devbarPluginActions ?? []),
+                  control.id,
+                ];
+              },
+        });
+      }
+    `,
+  });
+
+  await page.waitForFunction(() => document.querySelectorAll('.devbar-custom-control').length >= 6);
 }
 
 // Button label mapping for log trigger actions
@@ -738,6 +791,156 @@ test.describe('DevBar Responsive Layout', () => {
     }
 
     await testInfo.attach('devbar-responsive-matrix-evidence.json', {
+      body: JSON.stringify(evidence, null, 2),
+      contentType: 'application/json',
+    });
+  });
+
+  test('keeps custom plugin controls inside the toolbar across responsive widths', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Custom plugin overflow evidence is captured once in desktop Chromium.'
+    );
+
+    const evidence: unknown[] = [];
+
+    for (const viewport of CUSTOM_PLUGIN_VIEWPORTS) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await setupPage(page);
+      await installCustomPluginControls(page);
+      await page.waitForTimeout(250);
+
+      const screenshot = await page.screenshot({ animations: 'disabled' });
+      await testInfo.attach(`devbar-custom-plugins-${viewport.name}.png`, {
+        body: screenshot,
+        contentType: 'image/png',
+      });
+
+      const layout = await page.evaluate((selector) => {
+        const root = document.querySelector(selector) as HTMLElement | null;
+        const customRow = root?.querySelector('.devbar-custom-controls') as HTMLElement | null;
+        const main = root?.querySelector('.devbar-main') as HTMLElement | null;
+        const controls = Array.from(
+          root?.querySelectorAll<HTMLElement>('.devbar-custom-control') ?? []
+        );
+        const customItems = Array.from(customRow?.children ?? []) as HTMLElement[];
+        const actionButtons = Array.from(
+          root?.querySelectorAll<HTMLElement>('.devbar-actions button') ?? []
+        );
+
+        const rootRect = root?.getBoundingClientRect();
+        const customRect = customRow?.getBoundingClientRect();
+        const mainRect = main?.getBoundingClientRect();
+        const controlRects = controls.map((control) => {
+          const rect = control.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+            text: control.textContent ?? '',
+          };
+        });
+        const customItemRects = customItems.map((item) => {
+          const rect = item.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            centerY: rect.top + rect.height / 2,
+            width: rect.width,
+            height: rect.height,
+          };
+        });
+        const actionRects = actionButtons.map((button) => {
+          const rect = button.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top };
+        });
+
+        const lineGroups: Array<{ centerY: number; rects: typeof customItemRects }> = [];
+        for (const rect of customItemRects.sort((a, b) => a.centerY - b.centerY)) {
+          const group = lineGroups.find(
+            (candidate) => Math.abs(candidate.centerY - rect.centerY) <= 12
+          );
+          if (group) {
+            group.rects.push(rect);
+            group.centerY =
+              group.rects.reduce((sum, item) => sum + item.centerY, 0) / group.rects.length;
+          } else {
+            lineGroups.push({ centerY: rect.centerY, rects: [rect] });
+          }
+        }
+
+        const customLines = lineGroups.map((group) => {
+          const lineRects = group.rects;
+          const minLeft = Math.min(...lineRects.map((rect) => rect.left));
+          const maxRight = Math.max(...lineRects.map((rect) => rect.right));
+          const leftGap = minLeft - (customRect?.left ?? 0);
+          const rightGap = (customRect?.right ?? 0) - maxRight;
+          return {
+            centerY: group.centerY,
+            leftGap,
+            rightGap,
+            gapDelta: Math.abs(leftGap - rightGap),
+            width: maxRight - minLeft,
+          };
+        });
+
+        return {
+          viewportWidth: window.innerWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          bodyScrollWidth: document.body.scrollWidth,
+          rootLeft: rootRect?.left ?? 0,
+          rootRight: rootRect?.right ?? 0,
+          rootHeight: rootRect?.height ?? 0,
+          rootClientWidth: root?.clientWidth ?? 0,
+          rootScrollWidth: root?.scrollWidth ?? 0,
+          mainWidth: mainRect?.width ?? 0,
+          customWidth: customRect?.width ?? 0,
+          customClientWidth: customRow?.clientWidth ?? 0,
+          customScrollWidth: customRow?.scrollWidth ?? 0,
+          controlCount: controlRects.length,
+          actionCount: actionRects.length,
+          minControlLeft: Math.min(...controlRects.map((rect) => rect.left)),
+          maxControlRight: Math.max(...controlRects.map((rect) => rect.right)),
+          minActionLeft: Math.min(...actionRects.map((rect) => rect.left)),
+          maxActionRight: Math.max(...actionRects.map((rect) => rect.right)),
+          minControlWidth: Math.min(...controlRects.map((rect) => rect.width)),
+          maxControlWidth: Math.max(...controlRects.map((rect) => rect.width)),
+          customLines,
+        };
+      }, DEVBAR_SELECTOR);
+
+      evidence.push({ viewport, layout });
+
+      expect(layout.controlCount).toBeGreaterThanOrEqual(6);
+      expect(layout.actionCount).toBeGreaterThanOrEqual(8);
+      expect(layout.documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.bodyScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.rootLeft).toBeGreaterThanOrEqual(-1);
+      expect(layout.rootRight).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.rootScrollWidth).toBeLessThanOrEqual(layout.rootClientWidth + 1);
+      expect(layout.customScrollWidth).toBeLessThanOrEqual(layout.customClientWidth + 1);
+      expect(layout.customWidth).toBeLessThanOrEqual(layout.rootClientWidth + 1);
+      expect(layout.mainWidth).toBeLessThanOrEqual(layout.rootClientWidth + 1);
+      expect(layout.minActionLeft).toBeGreaterThanOrEqual(layout.rootLeft - 1);
+      expect(layout.maxActionRight).toBeLessThanOrEqual(layout.rootRight + 1);
+      expect(layout.minControlLeft).toBeGreaterThanOrEqual(layout.rootLeft - 1);
+      expect(layout.maxControlRight).toBeLessThanOrEqual(layout.rootRight + 1);
+      expect(layout.minControlWidth).toBeGreaterThan(0);
+      expect(layout.maxControlWidth).toBeLessThanOrEqual(Math.min(256, layout.customWidth) + 1);
+
+      if (viewport.width <= 860) {
+        for (const line of layout.customLines) {
+          expect(line.gapDelta).toBeLessThanOrEqual(44);
+        }
+      }
+    }
+
+    await testInfo.attach('devbar-custom-plugin-overflow-evidence.json', {
       body: JSON.stringify(evidence, null, 2),
       contentType: 'application/json',
     });

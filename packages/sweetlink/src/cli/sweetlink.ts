@@ -2369,15 +2369,21 @@ const COMMAND_HELP: Record<string, string> = {
       --label <text>              Embedded in filename
       --device <name|udid>        Pick a specific simulator/emulator (default: first booted)
       --time-limit <sec>          Android only — caps screen recording (max 180)
+      --app <name>                Group artifacts under .sweetlink/<app>/<YYYYMMDD>/<run>/sim/
+      --run <id>                  Override the auto-generated run id
+      --no-overlays               Android only — skip tap-event capture and ffmpeg overlay
       --ignore-exit               Don't propagate the recorded command's exit code
 
     Requirements:
       iOS:     Xcode + a booted Simulator (Simulator.app)
       Android: Android Platform Tools (\`adb\`) + a running emulator
+               Tap-indicator overlays additionally need \`ffmpeg\` on PATH;
+               without it, taps are still captured to a sidecar .taps.json.
 
     Examples:
       pnpm sweetlink sim ios "fastlane scan" --device "iPhone 15"
-      pnpm sweetlink sim android "./gradlew connectedAndroidTest"`,
+      pnpm sweetlink sim android "./gradlew connectedAndroidTest"
+      pnpm sweetlink sim android "appium run" --no-overlays`,
 
   term: `  term <command...>
     Record a shell command's stdout/stderr into asciicast v2 + a self-contained
@@ -2556,7 +2562,7 @@ if (!commandType || commandType === '--help' || commandType === '-h') {
       process.exit(0);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
+      process.stdout.write(`${JSON.stringify({ ok: false, error: msg })}\n`);
       process.exit(1);
     }
   }
@@ -2613,11 +2619,11 @@ async function runBatchFromStdin(): Promise<void> {
 
   const allOk = results.every((r) => r.ok);
   process.stdout.write(
-    JSON.stringify({
+    `${JSON.stringify({
       ok: allOk,
       duration: Date.now() - startTime,
       captures: results,
-    }) + '\n'
+    })}\n`
   );
   if (!allOk) process.exit(1);
 }
@@ -3629,6 +3635,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           exitCode: number;
           durationSec: number;
           recordingClosed: boolean;
+          tapCount?: number;
+          tapsJsonPath?: string;
+          overlaysApplied?: boolean;
         };
         if (platform === 'ios') {
           const { recordIosSimulator } = await import('../simulator/ios.js');
@@ -3641,6 +3650,7 @@ async function handleStatusCommand(): Promise<StatusData> {
             output,
             device,
             timeLimit: tl ? parseInt(tl, 10) : undefined,
+            overlays: !hasFlag('--no-overlays'),
           });
         }
 
@@ -3650,9 +3660,14 @@ async function handleStatusCommand(): Promise<StatusData> {
         } catch {
           /* file may not exist if recordingClosed is false */
         }
+        const tapSuffix =
+          (recResult.tapCount ?? 0) > 0
+            ? ` · ${recResult.tapCount} taps${recResult.overlaysApplied ? ' (overlaid)' : ' (sidecar only — install ffmpeg for overlays)'}`
+            : '';
         console.log(
           `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
             `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
+            tapSuffix +
             (recResult.recordingClosed
               ? ''
               : ' (recording was force-killed; mp4 may be incomplete)')
@@ -3664,6 +3679,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           durationSec: recResult.durationSec,
           exitCode: recResult.exitCode,
           recordingClosed: recResult.recordingClosed,
+          tapCount: recResult.tapCount,
+          tapsJsonPath: recResult.tapsJsonPath,
+          overlaysApplied: recResult.overlaysApplied,
         };
         if (recResult.exitCode !== 0 && !hasFlag('--ignore-exit')) {
           process.exit(recResult.exitCode);

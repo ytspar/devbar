@@ -757,17 +757,19 @@ export const DEVBAR_STYLES = `
 @media (max-width: 860px) {
   .devbar-main {
     flex-wrap: wrap;
-    row-gap: 0.375rem;
+    row-gap: 0.5rem;
     overflow: visible;
   }
   .devbar-status {
     flex: 1 1 100%;
     max-width: 100%;
+    justify-content: center;
   }
   .devbar-actions {
     flex: 1 1 100%;
     justify-content: center;
     flex-wrap: wrap;
+    column-gap: 0.5rem;
     row-gap: 0.375rem;
     min-width: 0;
   }
@@ -790,34 +792,54 @@ export const DEVBAR_STYLES = `
     justify-content: center;
     overflow: visible;
     max-width: calc(100vw - 24px);
-    padding: 0.5rem !important;
+    gap: 0.45rem !important;
+    padding: 0.5rem 0.625rem !important;
   }
   /* Keep status row (connection dot + info) on same line */
   .devbar-status {
     flex-wrap: nowrap !important;
     justify-content: center;
     flex: 1 1 100%;
+    gap: 0.375rem !important;
   }
   .devbar-info {
     justify-content: center;
     flex-wrap: nowrap;
+    gap: 0.375rem !important;
+    max-width: 100%;
+    overflow: hidden;
     white-space: nowrap !important;
   }
   .devbar-actions {
+    display: grid;
+    grid-template-columns: repeat(5, 44px);
     justify-content: center;
+    justify-items: center;
+    align-items: center;
+    column-gap: 0.375rem;
+    row-gap: 0.375rem;
     margin-top: 0;
-    flex-wrap: wrap;
-    width: 100%;
+    flex-wrap: nowrap;
+    width: auto;
     flex-shrink: 1;
   }
   .devbar-actions::before {
     content: "agent tools";
+    grid-column: 1 / -1;
+    justify-self: center;
+    margin-bottom: -0.125rem;
+    font-size: 0.5rem;
+    line-height: 1;
   }
   .devbar-actions button {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  .devbar-actions button svg {
+    width: 16px;
+    height: 16px;
   }
   .devbar-settings-grid {
     grid-template-columns: 1fr !important;

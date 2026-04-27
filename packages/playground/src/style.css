@@ -883,6 +883,12 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
     padding: 1rem 1rem 4rem;
   }
 
+  .sweetlink-demo-toast {
+    right: calc(0.75rem + env(safe-area-inset-right, 0px));
+    bottom: calc(env(safe-area-inset-bottom) + 10.5rem);
+    width: min(22rem, calc(100vw - 1.5rem));
+  }
+
   .demo-header {
     padding: 1rem 0;
   }
@@ -1326,7 +1332,7 @@ body.theme-light {
 
 .packages-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   gap: 1.5rem;
 }
 
@@ -1854,10 +1860,22 @@ body::after {
 
   .theme-toggle {
     top: calc(1.25rem + env(safe-area-inset-top, 0px));
-    right: auto;
-    left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    right: calc(0.75rem + env(safe-area-inset-right, 0px));
+    left: auto;
     padding: 0.5rem 0.625rem;
     font-size: 0.6875rem;
+  }
+
+  .sweetlink-demo-status {
+    top: calc(1.25rem + env(safe-area-inset-top, 0px));
+    left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    max-width: calc(100vw - 7rem);
+    padding: 0.5rem 0.625rem;
+  }
+
+  .sweetlink-demo-status span,
+  .sweetlink-demo-status a {
+    display: none;
   }
 
   .assistant-loop {

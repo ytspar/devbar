@@ -50,6 +50,26 @@ const staleRefPage = `<!DOCTYPE html>
   </body>
 </html>`;
 
+const preSessionNoisePage = `<!DOCTYPE html>
+<html>
+  <body style="font-family:sans-serif;padding:24px">
+    <h1>Pre-session noise</h1>
+    <script>console.error('pre-session-noise: should not appear in active inspect evidence');</script>
+  </body>
+</html>`;
+
+const sessionNoisePage = `<!DOCTYPE html>
+<html>
+  <body style="font-family:sans-serif;padding:24px">
+    <button aria-label="Emit session warning">Emit session warning</button>
+    <script>
+      document.querySelector('button').addEventListener('click', () => {
+        console.warn('session-noise: should appear in active inspect evidence');
+      });
+    </script>
+  </body>
+</html>`;
+
 test.describe.configure({ mode: 'serial', timeout: 60_000 });
 
 test('agent context bundle captures screenshot, refs, console, and network state', async () => {
@@ -168,6 +188,40 @@ test('daemon and CLI JSON errors retain failure screenshot context', async () =>
     expect(parsed.ok).toBe(false);
     expect(parsed.error).toContain(ref);
     expect(parsed.data?.failureScreenshot).toContain('.png');
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+test('inspect evidence is scoped to the active recording session', async () => {
+  const fx = await makeFixture(preSessionNoisePage);
+  try {
+    await daemonReq(fx.daemon, 'screenshot');
+
+    fx.setHtml(sessionNoisePage);
+    await daemonReq(fx.daemon, 'record-start', { label: 'inspect scoped evidence' });
+    const snap = (await daemonReq(fx.daemon, 'snapshot', { interactive: true })) as {
+      refs: Ref[];
+    };
+    const warningRef = snap.refs.find((ref) => ref.name === 'Emit session warning')!.ref;
+    await daemonReq(fx.daemon, 'click-ref', { ref: warningRef });
+
+    const context = await collectAgentContext(fx, 'recording scoped inspect', {
+      expectedOutcome: 'Inspect evidence only includes events from this recording session.',
+      actionTranscript: [
+        { action: 'click', target: warningRef, result: 'session warning emitted' },
+      ],
+      last: 500,
+    });
+
+    expect(context.console?.formatted).toContain(
+      'session-noise: should appear in active inspect evidence'
+    );
+    expect(context.console?.formatted).not.toContain(
+      'pre-session-noise: should not appear in active inspect evidence'
+    );
+
+    await daemonReq(fx.daemon, 'record-stop');
   } finally {
     await fx.cleanup();
   }

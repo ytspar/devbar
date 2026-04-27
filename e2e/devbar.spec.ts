@@ -24,6 +24,19 @@ const VIEWPORTS = {
   '2xl': { width: 1536, height: 900 },
 };
 
+const RESPONSIVE_AUDIT_VIEWPORTS = [
+  { name: 'phone-320', width: 320, height: 700 },
+  { name: 'iphone-se-375', width: 375, height: 667 },
+  { name: 'iphone-390', width: 390, height: 844 },
+  { name: 'large-phone-430', width: 430, height: 932 },
+  { name: 'small-tablet-640', width: 640, height: 900 },
+  { name: 'tablet-768', width: 768, height: 1024 },
+  { name: 'wrap-edge-860', width: 860, height: 900 },
+  { name: 'reported-993', width: 993, height: 800 },
+] as const;
+
+const MOBILE_TOUCH_TARGET_PX = 44;
+
 // DevBar positions
 const POSITIONS = [
   'bottom-left',
@@ -639,6 +652,96 @@ test.describe('DevBar Responsive Layout', () => {
     expect(layout.minButtonLeft).toBeGreaterThanOrEqual(-1);
     expect(layout.maxButtonRight).toBeLessThanOrEqual(layout.viewportWidth + 1);
   });
+
+  test('captures responsive evidence without overflow or unbalanced toolbar spacing', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Responsive screenshot matrix is captured once in desktop Chromium.'
+    );
+
+    const evidence: unknown[] = [];
+
+    for (const viewport of RESPONSIVE_AUDIT_VIEWPORTS) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await setupPage(page);
+      await page.waitForTimeout(250);
+
+      const screenshot = await page.screenshot({ animations: 'disabled' });
+      await testInfo.attach(`devbar-responsive-${viewport.name}.png`, {
+        body: screenshot,
+        contentType: 'image/png',
+      });
+
+      const layout = await page.evaluate((selector) => {
+        const root = document.querySelector(selector) as HTMLElement | null;
+        const status = root?.querySelector('.devbar-status') as HTMLElement | null;
+        const actions = root?.querySelector('.devbar-actions') as HTMLElement | null;
+        const buttons = Array.from(actions?.querySelectorAll('button') ?? []);
+        const rootRect = root?.getBoundingClientRect();
+        const statusRect = status?.getBoundingClientRect();
+        const actionsRect = actions?.getBoundingClientRect();
+        const buttonRects = buttons.map((button) => {
+          const rect = button.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            width: rect.width,
+            height: rect.height,
+          };
+        });
+        const rows = new Set(buttonRects.map((rect) => Math.round(rect.top))).size;
+
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          bodyScrollWidth: document.body.scrollWidth,
+          rootLeft: rootRect?.left ?? 0,
+          rootRight: rootRect?.right ?? 0,
+          rootHeight: rootRect?.height ?? 0,
+          rootClientWidth: root?.clientWidth ?? 0,
+          rootScrollWidth: root?.scrollWidth ?? 0,
+          statusHeight: statusRect?.height ?? 0,
+          actionsHeight: actionsRect?.height ?? 0,
+          actionButtonCount: buttonRects.length,
+          actionRows: rows,
+          minButtonWidth: Math.min(...buttonRects.map((rect) => rect.width)),
+          minButtonHeight: Math.min(...buttonRects.map((rect) => rect.height)),
+          minButtonLeft: Math.min(...buttonRects.map((rect) => rect.left)),
+          maxButtonRight: Math.max(...buttonRects.map((rect) => rect.right)),
+        };
+      }, DEVBAR_SELECTOR);
+
+      evidence.push({ viewport, layout });
+
+      expect(layout.documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.bodyScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.rootLeft).toBeGreaterThanOrEqual(-1);
+      expect(layout.rootRight).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.rootScrollWidth).toBeLessThanOrEqual(layout.rootClientWidth + 1);
+      expect(layout.minButtonLeft).toBeGreaterThanOrEqual(-1);
+      expect(layout.maxButtonRight).toBeLessThanOrEqual(viewport.width + 1);
+
+      if (viewport.width < 640) {
+        expect(layout.actionRows).toBeLessThanOrEqual(2);
+        expect(layout.rootHeight).toBeLessThanOrEqual(150);
+        expect(layout.minButtonWidth).toBeGreaterThanOrEqual(MOBILE_TOUCH_TARGET_PX);
+        expect(layout.minButtonHeight).toBeGreaterThanOrEqual(MOBILE_TOUCH_TARGET_PX);
+      } else if (viewport.width <= 860) {
+        expect(layout.rootHeight).toBeLessThanOrEqual(84);
+      } else {
+        expect(layout.rootHeight).toBeLessThanOrEqual(50);
+      }
+    }
+
+    await testInfo.attach('devbar-responsive-matrix-evidence.json', {
+      body: JSON.stringify(evidence, null, 2),
+      contentType: 'application/json',
+    });
+  });
 });
 
 test.describe('DevBar Accessibility', () => {
@@ -847,10 +950,12 @@ test.describe('DevBar Accessibility', () => {
       .toBeGreaterThanOrEqual(4);
 
     const controls = await collectControls();
-    const tooSmall = controls.filter((control) => control.width < 24 || control.height < 24);
+    const tooSmall = controls.filter(
+      (control) => control.width < MOBILE_TOUCH_TARGET_PX || control.height < MOBILE_TOUCH_TARGET_PX
+    );
 
     await testInfo.attach('devbar-mobile-touch-targets.json', {
-      body: JSON.stringify({ controls, tooSmall }, null, 2),
+      body: JSON.stringify({ target: MOBILE_TOUCH_TARGET_PX, controls, tooSmall }, null, 2),
       contentType: 'application/json',
     });
 

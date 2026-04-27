@@ -642,8 +642,13 @@ async function handleInspect(
   const refMap = await buildRefMap(page, { interactive: true });
   const snapshotText = formatRefMap(refMap);
   const screenshotBuffer = await page.screenshot({ fullPage: true });
-  const consoleEntries = consoleBuffer.toArray().slice(-last);
-  const networkEntries = networkBuffer.toArray().slice(-last);
+  const eventCursors = getRecordingEventCursors();
+  const consoleEntries = (
+    eventCursors ? consoleBuffer.since(eventCursors.consoleStartCursor) : consoleBuffer.toArray()
+  ).slice(-last);
+  const networkEntries = (
+    eventCursors ? networkBuffer.since(eventCursors.networkStartCursor) : networkBuffer.toArray()
+  ).slice(-last);
   const consoleText = formatConsoleEntries(consoleEntries);
   const networkText = formatNetworkEntries(networkEntries);
   const a11y = includeA11y ? await runInspectA11y(page) : undefined;

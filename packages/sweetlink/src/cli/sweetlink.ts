@@ -2301,6 +2301,45 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink click @e3
       pnpm sweetlink record stop`,
 
+  sim: `  sim <ios|android> <command...>
+    Record iOS Simulator or Android Emulator screen while running a command.
+    Wraps \`xcrun simctl io booted recordVideo\` (iOS) or
+    \`adb shell screenrecord\` (Android), writing an .mp4 of what was on
+    screen during your XCUITest / Espresso / fastlane / appium run.
+
+    Options:
+      --output <path>             .mp4 path (default: .sweetlink/sim/<label>-<stamp>.mp4)
+      --label <text>              Embedded in filename
+      --device <name|udid>        Pick a specific simulator/emulator (default: first booted)
+      --time-limit <sec>          Android only — caps screen recording (max 180)
+      --ignore-exit               Don't propagate the recorded command's exit code
+
+    Requirements:
+      iOS:     Xcode + a booted Simulator (Simulator.app)
+      Android: Android Platform Tools (\`adb\`) + a running emulator
+
+    Examples:
+      pnpm sweetlink sim ios "fastlane scan" --device "iPhone 15"
+      pnpm sweetlink sim android "./gradlew connectedAndroidTest"`,
+
+  term: `  term <command...>
+    Record a shell command's stdout/stderr into asciicast v2 + a self-contained
+    HTML player. Captures real timing; the player has play/pause, 0.1×–4×
+    speed, seek bar, and ANSI colour rendering.
+
+    Options:
+      --output <path>             .cast file path (default: .sweetlink/term/<label>-<stamp>.cast)
+      --label <text>              Label embedded in the .cast title + filename
+      --shell <path>              Shell to invoke the command in (default: /bin/sh)
+      --cols <n>                  Reported terminal width (default: 120)
+      --rows <n>                  Reported terminal height (default: 30)
+      --ignore-exit               Don't propagate the recorded command's exit code
+
+    Examples:
+      pnpm sweetlink term "pytest -v" --label api-tests
+      pnpm sweetlink term "go test ./..." --label go-tests
+      pnpm sweetlink term "make build" --output .sweetlink/term/build.cast`,
+
   sessions: `  sessions [list|open]
     List or open all recorded sessions in this project.
 
@@ -2487,6 +2526,8 @@ if (hasFlag('--output-schema')) {
     'fill',
     'console',
     'record',
+    'term',
+    'sim',
     'sessions',
     'proof',
     'report',
@@ -3177,6 +3218,139 @@ async function handleStatusCommand(): Promise<StatusData> {
           const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
           process.stdout.write(summaryContent);
           result = { mode: 'stdout', session: reportSessions[0] };
+        }
+        break;
+      }
+
+      case 'sim': {
+        // Record iOS Simulator or Android Emulator screen while running a command.
+        // Example: sweetlink sim ios "fastlane scan" --device "iPhone 15"
+        const platform = args[1];
+        if (platform !== 'ios' && platform !== 'android') {
+          console.error('[Sweetlink] Usage: sweetlink sim <ios|android> "<command>" [--output path] [--device <name>]');
+          process.exit(1);
+        }
+        const flagsWithValues = new Set(['--output', '--label', '--device', '--time-limit']);
+        const positional: string[] = [];
+        for (let i = 2; i < args.length; i++) {
+          const a = args[i]!;
+          if (a.startsWith('--')) {
+            if (flagsWithValues.has(a)) i++;
+            continue;
+          }
+          positional.push(a);
+        }
+        const command = positional.join(' ').trim();
+        if (!command) {
+          console.error(`[Sweetlink] Error: sim ${platform} requires a command. Example: sweetlink sim ${platform} "fastlane scan"`);
+          process.exit(1);
+        }
+
+        const label = getArg('--label');
+        const labelSlug = label
+          ? label.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)
+          : `sim-${platform}`;
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const defaultDir = path.join(findProjectRoot(), '.sweetlink', 'sim');
+        const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.mp4`);
+        ensureDir(output);
+        const device = getArg('--device');
+
+        console.log(`[Sweetlink] Recording ${platform} simulator: ${command}`);
+
+        let recResult;
+        if (platform === 'ios') {
+          const { recordIosSimulator } = await import('../simulator/ios.js');
+          recResult = await recordIosSimulator({ command, output, device });
+        } else {
+          const { recordAndroidEmulator } = await import('../simulator/android.js');
+          const tl = getArg('--time-limit');
+          recResult = await recordAndroidEmulator({
+            command, output, device,
+            timeLimit: tl ? parseInt(tl, 10) : undefined,
+          });
+        }
+
+        let sizeKb = '?';
+        try {
+          sizeKb = String(Math.round(fs.statSync(output).size / 1024));
+        } catch { /* file may not exist if recordingClosed is false */ }
+        console.log(
+          `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
+          `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
+          (recResult.recordingClosed ? '' : ' (recording was force-killed; mp4 may be incomplete)')
+        );
+
+        result = {
+          path: output,
+          device: recResult.device,
+          durationSec: recResult.durationSec,
+          exitCode: recResult.exitCode,
+          recordingClosed: recResult.recordingClosed,
+        };
+        if (recResult.exitCode !== 0 && !hasFlag('--ignore-exit')) {
+          process.exit(recResult.exitCode);
+        }
+        break;
+      }
+
+      case 'term': {
+        // Record a shell command's stdout/stderr into asciicast v2 + HTML player.
+        // Example: sweetlink term "pytest -v" --label api-tests
+        const flagsWithValues = new Set(['--output', '--label', '--shell', '--cols', '--rows']);
+        const positional: string[] = [];
+        for (let i = 1; i < args.length; i++) {
+          const a = args[i]!;
+          if (a.startsWith('--')) {
+            if (flagsWithValues.has(a)) i++;
+            continue;
+          }
+          positional.push(a);
+        }
+        const command = positional.join(' ').trim();
+        if (!command) {
+          console.error('[Sweetlink] Error: term requires a command. Example: sweetlink term "pytest tests/"');
+          process.exit(1);
+        }
+
+        const label = getArg('--label');
+        const labelSlug = label
+          ? label.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)
+          : 'term';
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const defaultDir = path.join(findProjectRoot(), '.sweetlink', 'term');
+        const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.cast`);
+        ensureDir(output);
+
+        console.log(`[Sweetlink] Recording terminal: ${command}`);
+        const { captureTerminal } = await import('../term/recorder.js');
+        const { generatePlayer } = await import('../term/player.js');
+        const cap = await captureTerminal({
+          command,
+          output,
+          label,
+          shell: getArg('--shell'),
+          cols: getArg('--cols') ? parseInt(getArg('--cols')!, 10) : undefined,
+          rows: getArg('--rows') ? parseInt(getArg('--rows')!, 10) : undefined,
+        });
+        const playerPath = await generatePlayer({ castPath: output });
+        console.log(
+          `[Sweetlink] ✓ ${getRelativePath(output)} · ${cap.durationSec.toFixed(1)}s · ` +
+          `${cap.events} events · ${(cap.bytes / 1024).toFixed(0)}KB · exit=${cap.exitCode}`
+        );
+        console.log(`[Sweetlink] ▶ ${getRelativePath(playerPath)}`);
+        result = {
+          castPath: output,
+          playerPath,
+          durationSec: cap.durationSec,
+          bytes: cap.bytes,
+          events: cap.events,
+          exitCode: cap.exitCode,
+        };
+        // Propagate the recorded command's exit code by default so CI fails
+        // when the wrapped tests fail.
+        if (cap.exitCode !== 0 && !hasFlag('--ignore-exit')) {
+          process.exit(cap.exitCode);
         }
         break;
       }

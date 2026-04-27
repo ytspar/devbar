@@ -11,19 +11,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { WebSocket } from 'ws';
 import { detectCDP, getNetworkRequestsViaCDP } from '../cdp.js';
+import {
+  DaemonRequestError,
+  daemonRequest,
+  ensureDaemon,
+  getDaemonStatus,
+  stopDaemon,
+} from '../daemon/client.js';
+import { uploadEvidence } from '../daemon/evidence.js';
+import { extractPort } from '../daemon/stateFile.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
-import { daemonRequest, ensureDaemon, getDaemonStatus, stopDaemon } from '../daemon/client.js';
-import { extractPort } from '../daemon/stateFile.js';
-import { uploadEvidence } from '../daemon/evidence.js';
 import type {
   A11yData,
   CleanupData,
   ClickData,
   DaemonStatusData,
   ExecData,
+  InspectData,
   LogsData,
   NetworkData,
   OutlineData,
@@ -149,7 +156,9 @@ function reportScreenshotSuccess(
   let sizeKb = '';
   try {
     sizeKb = ` · ${Math.round(fs.statSync(outputPath).size / 1024)}KB`;
-  } catch { /* file may have been moved or removed */ }
+  } catch {
+    /* file may have been moved or removed */
+  }
   const selPart = selector ? ` · ${selector}` : '';
   if (process.env.SWEETLINK_VERBOSE === '1') {
     console.log(`[Sweetlink] ✓ Screenshot saved to: ${getRelativePath(outputPath)}`);
@@ -231,9 +240,7 @@ async function discoverServer(target: string): Promise<string> {
     }
   }
 
-  const results = (await Promise.all(probes)).filter(
-    (r): r is ServerIdentity => r !== null
-  );
+  const results = (await Promise.all(probes)).filter((r): r is ServerIdentity => r !== null);
 
   if (results.length === 0) {
     throw new Error('No Sweetlink servers found. Is a dev server running?');
@@ -243,9 +250,7 @@ async function discoverServer(target: string): Promise<string> {
 
   // Exact match on branch or app name
   const exact = results.find(
-    (r) =>
-      r.gitBranch?.toLowerCase() === lowerTarget ||
-      r.appName?.toLowerCase() === lowerTarget
+    (r) => r.gitBranch?.toLowerCase() === lowerTarget || r.appName?.toLowerCase() === lowerTarget
   );
   if (exact) return `ws://localhost:${exact.port}`;
 
@@ -261,9 +266,7 @@ async function discoverServer(target: string): Promise<string> {
   const available = results
     .map((r) => `  port ${r.port}: branch=${r.gitBranch ?? '?'} app=${r.appName ?? '?'}`)
     .join('\n');
-  throw new Error(
-    `No server matching "${target}" found.\nAvailable servers:\n${available}`
-  );
+  throw new Error(`No server matching "${target}" found.\nAvailable servers:\n${available}`);
 }
 
 /**
@@ -624,37 +627,38 @@ async function screenshot(options: {
       theme: (options as { theme?: string }).theme,
     });
     const data = resp.data as {
-      screenshot: string; width: number; height: number;
-      matchCount?: number; pageHeight?: number; viewportHeight?: number;
+      screenshot: string;
+      width: number;
+      height: number;
+      matchCount?: number;
+      pageHeight?: number;
+      viewportHeight?: number;
     };
     const outputPath = options.output || getDefaultScreenshotPath();
     ensureDir(outputPath);
     fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
 
-    reportScreenshotSuccess(
-      outputPath,
-      data.width,
-      data.height,
-      'Daemon (hifi)',
-      options.selector
-    );
+    reportScreenshotSuccess(outputPath, data.width, data.height, 'Daemon (hifi)', options.selector);
 
     // UX: warn about silent .first() when multiple elements match.
     if (options.selector && data.matchCount && data.matchCount > 1) {
       console.warn(
         `[Sweetlink] ⚠ Selector '${options.selector}' matched ${data.matchCount} elements; captured the first. ` +
-        `Use --index N (with click) or a more specific selector to pick another.`
+          `Use --index N (with click) or a more specific selector to pick another.`
       );
     }
     // UX: hint at --full-page when content extends below the viewport.
     if (
-      !options.selector && !options.fullPage &&
-      data.pageHeight && data.viewportHeight && data.pageHeight > data.viewportHeight + 4
+      !options.selector &&
+      !options.fullPage &&
+      data.pageHeight &&
+      data.viewportHeight &&
+      data.pageHeight > data.viewportHeight + 4
     ) {
       const overflow = data.pageHeight - data.viewportHeight;
       console.log(
         `[Sweetlink] ℹ Page extends ${overflow}px below the viewport. ` +
-        `Use --full-page to capture all of it.`
+          `Use --full-page to capture all of it.`
       );
     }
 
@@ -1951,6 +1955,34 @@ async function getVitals(options: { format?: 'text' | 'json' }): Promise<VitalsD
   }
 }
 
+function printInspectSummary(data: InspectData): void {
+  console.log('\n[Sweetlink] Agent Inspect');
+  console.log(`  URL: ${data.url}`);
+  console.log(`  Title: ${data.title || '(untitled)'}`);
+  console.log(
+    `  Viewport: ${data.viewport.width}x${data.viewport.height}` +
+      (data.viewport.deviceScaleFactor ? ` @${data.viewport.deviceScaleFactor}x` : '')
+  );
+  console.log(`  Artifacts: ${getRelativePath(data.artifacts.dir)}`);
+  console.log(
+    `  Refs: ${data.counts.refs} | Console: ${data.counts.consoleErrors} errors, ${data.counts.consoleWarnings} warnings | Network: ${data.counts.networkFailures} failures`
+  );
+  if (data.counts.a11yViolations !== undefined) {
+    console.log(
+      `  A11y: ${data.counts.a11yViolations} violations, ${data.counts.a11yIncomplete ?? 0} incomplete`
+    );
+  }
+  if (data.nextActions.length > 0) {
+    console.log('\n  Suggested next actions:');
+    for (const action of data.nextActions) {
+      console.log(`    - ${action}`);
+    }
+  }
+  console.log(`\n  Summary: ${getRelativePath(data.artifacts.summaryMarkdown)}`);
+  console.log(`  JSON:    ${getRelativePath(data.artifacts.contextJson)}`);
+  console.log(`  PNG:     ${getRelativePath(data.artifacts.screenshotPng)}`);
+}
+
 // Per-command help text, keyed by canonical command name
 const COMMAND_HELP: Record<string, string> = {
   screenshot: `  screenshot [options]
@@ -1999,6 +2031,31 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink screenshot --force-cdp --width 375 --height 667       # Playwright at iPhone SE
       pnpm sweetlink screenshot --hifi                                     # Pixel-perfect via daemon
       pnpm sweetlink screenshot --responsive                               # 3 breakpoints via daemon`,
+
+  inspect: `  inspect [options] (alias: context)
+    Capture one LLM-ready frontend context bundle from the daemon.
+
+    Includes:
+      - Full-page screenshot artifact
+      - Interactive @e refs and accessibility snapshot
+      - Console and network deltas from daemon buffers
+      - Axe accessibility summary when axe-core is available
+      - Page timing/viewport metadata and suggested next actions
+
+    Options:
+      --url <url>                 Target URL (default: http://localhost:3000)
+      --last <number>             Console/network entries to include (default: 50)
+      --label <text>              Scenario label for artifact directory
+      --expected <text>           Expected outcome to embed in the bundle
+      --action <text>             Action transcript item (repeatable)
+      --no-a11y                   Skip axe accessibility audit
+      --format <type>             Output format: text (default), json
+      --output <path>             Also write the context JSON to this path
+
+    Examples:
+      pnpm sweetlink inspect --url http://localhost:5173
+      pnpm sweetlink context --label "checkout empty state" --expected "CTA is visible"
+      pnpm sweetlink inspect --format json --output .tmp/inspect.json`,
 
   query: `  query --selector <css-selector> [options]
     Query DOM elements and return data
@@ -2330,6 +2387,8 @@ const COMMAND_HELP: Record<string, string> = {
     Options:
       --output <path>             .cast file path (default: .sweetlink/term/<label>-<stamp>.cast)
       --label <text>              Label embedded in the .cast title + filename
+      --app <name>                Group artifacts under .sweetlink/<app>/<YYYYMMDD>/<run>/term/
+      --run <id>                  Override the auto-generated run id (HHMM-SS or $SWEETLINK_RUN)
       --shell <path>              Shell to invoke the command in (default: /bin/sh)
       --cols <n>                  Reported terminal width (default: 120)
       --rows <n>                  Reported terminal height (default: 30)
@@ -2337,7 +2396,7 @@ const COMMAND_HELP: Record<string, string> = {
 
     Examples:
       pnpm sweetlink term "pytest -v" --label api-tests
-      pnpm sweetlink term "go test ./..." --label go-tests
+      pnpm sweetlink term "go test ./..." --app my-app --label go-tests
       pnpm sweetlink term "make build" --output .sweetlink/term/build.cast`,
 
   sessions: `  sessions [list|open]
@@ -2401,6 +2460,7 @@ const COMMAND_HELP: Record<string, string> = {
 const COMMAND_ALIASES: Record<string, string> = {
   measure: 'ruler',
   accessibility: 'a11y',
+  context: 'inspect',
 };
 
 const GLOBAL_HELP = `
@@ -2444,9 +2504,12 @@ Commands:`);
     // Each block looks like:
     //   "  command [args]\n    First-line description.\n..."
     // We pick the first non-empty line after the signature.
-    const lines = help.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = help
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     const desc = lines[1] ?? '';
-    const summary = desc.length > 70 ? desc.slice(0, 67) + '…' : desc;
+    const summary = desc.length > 70 ? `${desc.slice(0, 67)}…` : desc;
     console.log(`  ${name.padEnd(14)} ${summary}`);
   }
 
@@ -2476,12 +2539,177 @@ function showCommandHelp(command: string): void {
 
 // CLI argument parsing
 const args = process.argv.slice(2);
-// Skip global flags to find the actual command
-const commandType = args.find((a) => !a.startsWith('--')) || args[0];
+// Skip global flags to find the actual command. Falling back to args[0]
+// would surface flags like `--json` as the command — we want undefined
+// in that case so the no-command paths (help / batch mode) can fire.
+const commandType = args.find((a) => !a.startsWith('--'));
 
 if (!commandType || commandType === '--help' || commandType === '-h') {
+  // `sweetlink --json` with stdin → multi-capture batch mode.
+  // Reads { action: "capture", captures: [...] } from stdin and runs
+  // each entry, aggregating results into a single JSON envelope on stdout.
+  if (args.includes('--json') && !process.stdin.isTTY) {
+    // Top-level await keeps the rest of the dispatch from running while
+    // the batch is in flight; we exit before fallthrough either way.
+    try {
+      await runBatchFromStdin();
+      process.exit(0);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stdout.write(JSON.stringify({ ok: false, error: msg }) + '\n');
+      process.exit(1);
+    }
+  }
   showHelp();
   process.exit(0);
+}
+
+async function runBatchFromStdin(): Promise<void> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  const raw = Buffer.concat(chunks).toString('utf-8').trim();
+  if (!raw) {
+    throw new Error(
+      'No input on stdin. Pipe a JSON document with {"action":"capture","captures":[...]}.'
+    );
+  }
+  let body: { action?: string; captures?: Array<Record<string, unknown>> };
+  try {
+    body = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`Could not parse stdin as JSON: ${e instanceof Error ? e.message : e}`);
+  }
+  if (body.action !== 'capture' || !Array.isArray(body.captures)) {
+    throw new Error('Expected { "action": "capture", "captures": [...] }.');
+  }
+
+  const startTime = Date.now();
+  const results: Array<{
+    ok: boolean;
+    mode?: string;
+    label?: string;
+    data?: unknown;
+    error?: string;
+    duration?: number;
+  }> = [];
+
+  for (const cap of body.captures) {
+    const t0 = Date.now();
+    const mode = cap.mode as string;
+    const label = cap.label as string | undefined;
+    try {
+      const data = await runOneBatchCapture(cap);
+      results.push({ ok: true, mode, label, data, duration: Date.now() - t0 });
+    } catch (err) {
+      results.push({
+        ok: false,
+        mode,
+        label,
+        error: err instanceof Error ? err.message : String(err),
+        duration: Date.now() - t0,
+      });
+    }
+  }
+
+  const allOk = results.every((r) => r.ok);
+  process.stdout.write(
+    JSON.stringify({
+      ok: allOk,
+      duration: Date.now() - startTime,
+      captures: results,
+    }) + '\n'
+  );
+  if (!allOk) process.exit(1);
+}
+
+async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown> {
+  const mode = cap.mode as string;
+  if (!mode) throw new Error('Capture entry missing required "mode" field.');
+
+  if (mode === 'term') {
+    const command = cap.command as string;
+    if (!command) throw new Error('term capture missing "command".');
+    const label = (cap.label as string | undefined) ?? 'batch';
+    const labelSlug = label
+      .replace(/[^a-z0-9]/gi, '-')
+      .toLowerCase()
+      .slice(0, 40);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const output =
+      (cap.output as string | undefined) ??
+      path.join(findProjectRoot(), '.sweetlink', 'term', `${labelSlug}-${stamp}.cast`);
+    ensureDir(output);
+    const { captureTerminal } = await import('../term/recorder.js');
+    const { generatePlayer } = await import('../term/player.js');
+    const result = await captureTerminal({
+      command,
+      output,
+      label,
+      shell: cap.shell as string | undefined,
+      cols: typeof cap.cols === 'number' ? cap.cols : undefined,
+      rows: typeof cap.rows === 'number' ? cap.rows : undefined,
+    });
+    const playerPath = await generatePlayer({ castPath: output });
+    return {
+      castPath: output,
+      playerPath,
+      durationSec: result.durationSec,
+      exitCode: result.exitCode,
+      events: result.events,
+    };
+  }
+
+  if (mode === 'sim-ios' || mode === 'sim-android') {
+    const command = cap.command as string;
+    if (!command) throw new Error(`${mode} capture missing "command".`);
+    const label = (cap.label as string | undefined) ?? 'batch';
+    const labelSlug = label
+      .replace(/[^a-z0-9]/gi, '-')
+      .toLowerCase()
+      .slice(0, 40);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const output =
+      (cap.output as string | undefined) ??
+      path.join(findProjectRoot(), '.sweetlink', 'sim', `${labelSlug}-${stamp}.mp4`);
+    ensureDir(output);
+    const device = cap.device as string | undefined;
+    if (mode === 'sim-ios') {
+      const { recordIosSimulator } = await import('../simulator/ios.js');
+      return recordIosSimulator({ command, output, device });
+    }
+    const { recordAndroidEmulator } = await import('../simulator/android.js');
+    return recordAndroidEmulator({
+      command,
+      output,
+      device,
+      timeLimit: typeof cap.timeLimit === 'number' ? cap.timeLimit : undefined,
+    });
+  }
+
+  if (mode === 'screenshot') {
+    const targetUrl = (cap.url as string | undefined) ?? 'http://localhost:3000';
+    const projRoot = findProjectRoot();
+    const state = await ensureDaemon(projRoot, targetUrl);
+    const resp = await daemonRequest(state, 'screenshot', {
+      selector: cap.selector,
+      fullPage: cap.fullPage,
+      viewport: cap.viewport,
+      padding: cap.padding,
+      theme: cap.theme,
+    });
+    const data = resp.data as { screenshot: string; width: number; height: number };
+    if (cap.output) {
+      const outputPath = cap.output as string;
+      ensureDir(outputPath);
+      fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
+      return { path: outputPath, width: data.width, height: data.height };
+    }
+    return { width: data.width, height: data.height, base64Length: data.screenshot.length };
+  }
+
+  throw new Error(
+    `Unknown capture mode: ${mode}. Allowed: term, sim-ios, sim-android, screenshot.`
+  );
 }
 
 // Helper function to get argument value
@@ -2495,8 +2723,9 @@ function hasFlag(flag: string): boolean {
 }
 
 // Per-command --help: `pnpm sweetlink screenshot --help`
+// Past the early-exit at the top of dispatch, commandType is non-null.
 if (hasFlag('--help') || hasFlag('-h')) {
-  showCommandHelp(commandType);
+  showCommandHelp(commandType!);
   process.exit(0);
 }
 
@@ -2505,6 +2734,8 @@ if (hasFlag('--output-schema')) {
   // If commandType is a known command, print just that schema; otherwise print all
   const knownCommands = [
     'screenshot',
+    'inspect',
+    'context',
     'query',
     'logs',
     'exec',
@@ -2533,12 +2764,14 @@ if (hasFlag('--output-schema')) {
     'report',
     'demo',
   ];
-  const schemaCommand = knownCommands.includes(commandType)
+  const schemaCommand = knownCommands.includes(commandType!)
     ? commandType === 'measure'
       ? 'ruler'
       : commandType === 'accessibility'
         ? 'a11y'
-        : commandType
+        : commandType === 'context'
+          ? 'inspect'
+          : commandType
     : undefined;
   printOutputSchema(schemaCommand);
   process.exit(0);
@@ -2579,6 +2812,26 @@ function setupJsonMode(
   }) as typeof process.exit;
 
   return { origExit, getLastError: () => lastErrorMsg };
+}
+
+function getErrorData(error: unknown): Record<string, unknown> | null {
+  if (error instanceof DaemonRequestError) {
+    return {
+      action: error.action,
+      status: error.status,
+      ...(error.data ? error.data : {}),
+    };
+  }
+  return null;
+}
+
+function printErrorContext(error: unknown): void {
+  if (!(error instanceof DaemonRequestError) || !error.data) return;
+
+  const failureScreenshot = error.data.failureScreenshot;
+  if (typeof failureScreenshot === 'string') {
+    console.error(`[Sweetlink] Failure screenshot: ${failureScreenshot}`);
+  }
 }
 
 /**
@@ -2634,9 +2887,14 @@ async function handleStatusCommand(): Promise<StatusData> {
 (async () => {
   const startTime = Date.now();
 
-  // Resolve --app flag: discover the matching Sweetlink server by branch/app name
+  // Resolve --app flag: for WS-bridge commands, this discovers the matching
+  // Sweetlink server by branch/app name. For commands that produce artifacts
+  // (term/sim), --app is a *namespace* used in the artifact directory layout
+  // (.sweetlink/<app>/<YYYYMMDD>/<run>/...) — those handlers read --app
+  // themselves, so we skip discovery here.
   const appTarget = getArg('--app');
-  if (appTarget) {
+  const isArtifactCommand = commandType === 'term' || commandType === 'sim';
+  if (appTarget && !isArtifactCommand) {
     try {
       resolvedWsUrl = await discoverServer(appTarget);
       console.log(`[Sweetlink] Targeting server: ${resolvedWsUrl}`);
@@ -2648,7 +2906,7 @@ async function handleStatusCommand(): Promise<StatusData> {
 
   let origExit = process.exit;
   if (jsonMode) {
-    const jsonSetup = setupJsonMode(commandType, startTime);
+    const jsonSetup = setupJsonMode(commandType!, startTime);
     origExit = jsonSetup.origExit;
   }
 
@@ -2679,6 +2937,40 @@ async function handleStatusCommand(): Promise<StatusData> {
             : undefined,
         });
         break;
+
+      case 'inspect':
+      case 'context': {
+        const projRoot = findProjectRoot();
+        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+        const state = await ensureDaemon(projRoot, targetUrl);
+        const actionTranscript: Array<{ action: string; target?: string; result?: string }> = [];
+        args.forEach((arg, index) => {
+          if (arg !== '--action') return;
+          const value = args[index + 1];
+          if (!value) return;
+          actionTranscript.push({ action: value });
+        });
+        const resp = await daemonRequest(state, 'inspect', {
+          last: getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined,
+          label: getArg('--label'),
+          expectedOutcome: getArg('--expected'),
+          actionTranscript,
+          includeA11y: !hasFlag('--no-a11y'),
+        });
+        const data = resp.data as unknown as InspectData;
+        const output = getArg('--output');
+        if (output) {
+          ensureDir(output);
+          fs.writeFileSync(output, JSON.stringify(data, null, 2), 'utf-8');
+        }
+        if (getArg('--format') === 'json') {
+          console.log(JSON.stringify(data, null, 2));
+        } else {
+          printInspectSummary(data);
+        }
+        result = data;
+        break;
+      }
 
       case 'query': {
         const selector = getArg('--selector');
@@ -2770,7 +3062,9 @@ async function handleStatusCommand(): Promise<StatusData> {
                 index: clickIndex,
               });
               const data = resp.data as { clicked?: string; found?: number; index?: number };
-              console.log(`[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`);
+              console.log(
+                `[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`
+              );
               result = {
                 clicked: data.clicked ?? 'unknown',
                 found: data.found ?? 1,
@@ -2779,7 +3073,9 @@ async function handleStatusCommand(): Promise<StatusData> {
               break;
             }
           }
-        } catch { /* fall through to WS path */ }
+        } catch {
+          /* fall through to WS path */
+        }
 
         result = await click({
           selector: clickTarget,
@@ -2912,9 +3208,16 @@ async function handleStatusCommand(): Promise<StatusData> {
           errors: errorsOnly,
           last: lastN,
         });
-        const data = resp.data as { formatted: string; total: number; errorCount: number; warningCount: number };
+        const data = resp.data as {
+          formatted: string;
+          total: number;
+          errorCount: number;
+          warningCount: number;
+        };
         console.log(data.formatted);
-        console.log(`\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`);
+        console.log(
+          `\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`
+        );
         result = data;
         break;
       }
@@ -2927,12 +3230,15 @@ async function handleStatusCommand(): Promise<StatusData> {
         }
         const sessionDirArg = getArg('--session') ?? '.sweetlink';
         // Find latest session manifest
-        const sessionFiles = fs.readdirSync(sessionDirArg)
+        const sessionFiles = fs
+          .readdirSync(sessionDirArg)
           .filter((f: string) => f.startsWith('session-'))
           .sort()
           .reverse();
         if (sessionFiles.length === 0) {
-          console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+          console.error(
+            '[Sweetlink] No session found. Run `record start` and `record stop` first.'
+          );
           process.exit(1);
         }
         const latestSession = path.join(sessionDirArg, sessionFiles[0]!);
@@ -2952,7 +3258,10 @@ async function handleStatusCommand(): Promise<StatusData> {
           console.log(`[Sweetlink] Evidence posted: ${commentUrl}`);
           result = { commentUrl };
         } catch (error) {
-          console.error('[Sweetlink] Failed to upload evidence:', error instanceof Error ? error.message : error);
+          console.error(
+            '[Sweetlink] Failed to upload evidence:',
+            error instanceof Error ? error.message : error
+          );
           process.exit(1);
         }
         break;
@@ -2977,15 +3286,20 @@ async function handleStatusCommand(): Promise<StatusData> {
           const data = resp.data as { sessionId: string; label?: string };
           console.log(
             `[Sweetlink] Recording started: ${data.sessionId}` +
-            (data.label ? ` (${data.label})` : '')
+              (data.label ? ` (${data.label})` : '')
           );
           result = data;
         } else if (subcommand === 'stop') {
           const resp = await daemonRequest(state, 'record-stop');
-          const data = resp.data as { manifest: { sessionId: string; duration: number; commands: unknown[]; video?: string }; viewerPath?: string };
+          const data = resp.data as {
+            manifest: { sessionId: string; duration: number; commands: unknown[]; video?: string };
+            viewerPath?: string;
+          };
           const m = data.manifest;
           console.log(`[Sweetlink] Recording stopped: ${m.sessionId}`);
-          console.log(`  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ' | Video: ' + m.video : ''}`);
+          console.log(
+            `  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ` | Video: ${m.video}` : ''}`
+          );
 
           // Auto-open the viewer (cross-platform; --no-open to suppress)
           if (data.viewerPath && !hasFlag('--no-open')) {
@@ -2993,12 +3307,15 @@ async function handleStatusCommand(): Promise<StatusData> {
             const { execFile } = await import('child_process');
             // `start` on Windows is a cmd builtin, not an exe — must invoke via cmd.
             const cmd =
-              process.platform === 'darwin' ? 'open'
-              : process.platform === 'win32' ? 'cmd'
-              : 'xdg-open';
+              process.platform === 'darwin'
+                ? 'open'
+                : process.platform === 'win32'
+                  ? 'cmd'
+                  : 'xdg-open';
             const args =
-              process.platform === 'win32' ? ['/c', 'start', '', data.viewerPath]
-              : [data.viewerPath];
+              process.platform === 'win32'
+                ? ['/c', 'start', '', data.viewerPath]
+                : [data.viewerPath];
             execFile(cmd, args, (err) => {
               if (err) console.error('  Could not open viewer:', err.message);
             });
@@ -3029,7 +3346,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           }
           const script = positional.join(' ').trim();
           if (!script) {
-            console.error('[Sweetlink] Error: record exec requires a script. Example: `record exec "click @e2; fill @e3 hello"`');
+            console.error(
+              '[Sweetlink] Error: record exec requires a script. Example: `record exec "click @e2; fill @e3 hello"`'
+            );
             process.exit(1);
           }
           const label = getArg('--label');
@@ -3037,7 +3356,10 @@ async function handleStatusCommand(): Promise<StatusData> {
           const startData = startResp.data as { sessionId: string };
           console.log(`[Sweetlink] Recording: ${startData.sessionId}${label ? ` (${label})` : ''}`);
 
-          const steps = script.split(';').map((s) => s.trim()).filter(Boolean);
+          const steps = script
+            .split(';')
+            .map((s) => s.trim())
+            .filter(Boolean);
           // Snapshot once up-front so refs resolve.
           await daemonRequest(state, 'snapshot', { interactive: true });
 
@@ -3072,16 +3394,21 @@ async function handleStatusCommand(): Promise<StatusData> {
                 throw new Error(`Unknown verb '${verb}'. Allowed: click, fill, press, sleep.`);
               }
             } catch (err) {
-              console.error(`  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`);
+              console.error(
+                `  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`
+              );
               // Continue to record-stop so the partial recording is preserved.
             }
           }
 
           const stopResp = await daemonRequest(state, 'record-stop');
-          const stopData = stopResp.data as { manifest: { sessionId: string; commands: unknown[]; duration: number; video?: string }; viewerPath?: string };
+          const stopData = stopResp.data as {
+            manifest: { sessionId: string; commands: unknown[]; duration: number; video?: string };
+            viewerPath?: string;
+          };
           console.log(
             `[Sweetlink] Done: ${stopData.manifest.commands.length} actions in ` +
-            `${stopData.manifest.duration.toFixed(1)}s${stopData.viewerPath ? ` · ${stopData.viewerPath}` : ''}`
+              `${stopData.manifest.duration.toFixed(1)}s${stopData.viewerPath ? ` · ${stopData.viewerPath}` : ''}`
           );
           result = stopData;
         } else if (subcommand === 'pause') {
@@ -3091,13 +3418,22 @@ async function handleStatusCommand(): Promise<StatusData> {
         } else if (subcommand === 'resume') {
           const resp = await daemonRequest(state, 'record-resume');
           const d = resp.data as { pausedDurationMs: number };
-          console.log(`[Sweetlink] Recording resumed. Paused for ${(d.pausedDurationMs / 1000).toFixed(1)}s.`);
+          console.log(
+            `[Sweetlink] Recording resumed. Paused for ${(d.pausedDurationMs / 1000).toFixed(1)}s.`
+          );
           result = resp.data;
         } else {
           const resp = await daemonRequest(state, 'record-status');
-          const data = resp.data as { recording: boolean; sessionId: string | null; duration: number | null; actionCount: number };
+          const data = resp.data as {
+            recording: boolean;
+            sessionId: string | null;
+            duration: number | null;
+            actionCount: number;
+          };
           if (data.recording) {
-            console.log(`[Sweetlink] Recording in progress: ${data.sessionId} (${Math.round(data.duration ?? 0)}s, ${data.actionCount} actions)`);
+            console.log(
+              `[Sweetlink] Recording in progress: ${data.sessionId} (${Math.round(data.duration ?? 0)}s, ${data.actionCount} actions)`
+            );
           } else {
             console.log('[Sweetlink] No recording in progress.');
           }
@@ -3113,12 +3449,15 @@ async function handleStatusCommand(): Promise<StatusData> {
           console.error(`[Sweetlink] Session directory not found: ${sessionDirArg}`);
           process.exit(1);
         }
-        const reportSessions = fs.readdirSync(sessionDirArg)
+        const reportSessions = fs
+          .readdirSync(sessionDirArg)
           .filter((f: string) => f.startsWith('session-'))
           .sort()
           .reverse();
         if (reportSessions.length === 0) {
-          console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+          console.error(
+            '[Sweetlink] No session found. Run `record start` and `record stop` first.'
+          );
           process.exit(1);
         }
         const reportSessionDir = path.join(sessionDirArg, reportSessions[0]!);
@@ -3138,7 +3477,10 @@ async function handleStatusCommand(): Promise<StatusData> {
             execFileSync(clipCmd, clipArgs, { input: summaryContent });
             console.log('[Sweetlink] SUMMARY.md copied to clipboard.');
           } catch (err) {
-            console.error(`[Sweetlink] Failed to copy to clipboard (${clipCmd}):`, err instanceof Error ? err.message : err);
+            console.error(
+              `[Sweetlink] Failed to copy to clipboard (${clipCmd}):`,
+              err instanceof Error ? err.message : err
+            );
             process.exit(1);
           }
           result = { mode: 'clipboard', session: reportSessions[0] };
@@ -3187,7 +3529,10 @@ async function handleStatusCommand(): Promise<StatusData> {
           }
           const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
           const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : '';
-          const payload: { summary: string; manifest: object; viewerHtml?: string } = { summary, manifest };
+          const payload: { summary: string; manifest: object; viewerHtml?: string } = {
+            summary,
+            manifest,
+          };
           // Include viewer HTML for Slack/Discord webhooks
           if (/slack|discord/i.test(webhookUrl)) {
             const viewerPath = path.join(reportSessionDir, 'viewer.html');
@@ -3227,10 +3572,19 @@ async function handleStatusCommand(): Promise<StatusData> {
         // Example: sweetlink sim ios "fastlane scan" --device "iPhone 15"
         const platform = args[1];
         if (platform !== 'ios' && platform !== 'android') {
-          console.error('[Sweetlink] Usage: sweetlink sim <ios|android> "<command>" [--output path] [--device <name>]');
+          console.error(
+            '[Sweetlink] Usage: sweetlink sim <ios|android> "<command>" [--output path] [--device <name>]'
+          );
           process.exit(1);
         }
-        const flagsWithValues = new Set(['--output', '--label', '--device', '--time-limit']);
+        const flagsWithValues = new Set([
+          '--output',
+          '--label',
+          '--device',
+          '--time-limit',
+          '--app',
+          '--run',
+        ]);
         const positional: string[] = [];
         for (let i = 2; i < args.length; i++) {
           const a = args[i]!;
@@ -3242,23 +3596,40 @@ async function handleStatusCommand(): Promise<StatusData> {
         }
         const command = positional.join(' ').trim();
         if (!command) {
-          console.error(`[Sweetlink] Error: sim ${platform} requires a command. Example: sweetlink sim ${platform} "fastlane scan"`);
+          console.error(
+            `[Sweetlink] Error: sim ${platform} requires a command. Example: sweetlink sim ${platform} "fastlane scan"`
+          );
           process.exit(1);
         }
 
         const label = getArg('--label');
         const labelSlug = label
-          ? label.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)
+          ? label
+              .replace(/[^a-z0-9]/gi, '-')
+              .toLowerCase()
+              .slice(0, 40)
           : `sim-${platform}`;
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const defaultDir = path.join(findProjectRoot(), '.sweetlink', 'sim');
+        const { runSlot: simRunSlot } = await import('../runs.js');
+        const defaultDir = simRunSlot({
+          baseDir: findProjectRoot(),
+          app: getArg('--app'),
+          run: getArg('--run'),
+          kind: 'sim',
+        });
         const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.mp4`);
         ensureDir(output);
         const device = getArg('--device');
 
         console.log(`[Sweetlink] Recording ${platform} simulator: ${command}`);
 
-        let recResult;
+        let recResult: {
+          output: string;
+          device: string;
+          exitCode: number;
+          durationSec: number;
+          recordingClosed: boolean;
+        };
         if (platform === 'ios') {
           const { recordIosSimulator } = await import('../simulator/ios.js');
           recResult = await recordIosSimulator({ command, output, device });
@@ -3266,7 +3637,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           const { recordAndroidEmulator } = await import('../simulator/android.js');
           const tl = getArg('--time-limit');
           recResult = await recordAndroidEmulator({
-            command, output, device,
+            command,
+            output,
+            device,
             timeLimit: tl ? parseInt(tl, 10) : undefined,
           });
         }
@@ -3274,11 +3647,15 @@ async function handleStatusCommand(): Promise<StatusData> {
         let sizeKb = '?';
         try {
           sizeKb = String(Math.round(fs.statSync(output).size / 1024));
-        } catch { /* file may not exist if recordingClosed is false */ }
+        } catch {
+          /* file may not exist if recordingClosed is false */
+        }
         console.log(
           `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
-          `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
-          (recResult.recordingClosed ? '' : ' (recording was force-killed; mp4 may be incomplete)')
+            `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
+            (recResult.recordingClosed
+              ? ''
+              : ' (recording was force-killed; mp4 may be incomplete)')
         );
 
         result = {
@@ -3296,8 +3673,16 @@ async function handleStatusCommand(): Promise<StatusData> {
 
       case 'term': {
         // Record a shell command's stdout/stderr into asciicast v2 + HTML player.
-        // Example: sweetlink term "pytest -v" --label api-tests
-        const flagsWithValues = new Set(['--output', '--label', '--shell', '--cols', '--rows']);
+        // Example: sweetlink term "pytest -v" --label api-tests --app my-app
+        const flagsWithValues = new Set([
+          '--output',
+          '--label',
+          '--shell',
+          '--cols',
+          '--rows',
+          '--app',
+          '--run',
+        ]);
         const positional: string[] = [];
         for (let i = 1; i < args.length; i++) {
           const a = args[i]!;
@@ -3309,16 +3694,27 @@ async function handleStatusCommand(): Promise<StatusData> {
         }
         const command = positional.join(' ').trim();
         if (!command) {
-          console.error('[Sweetlink] Error: term requires a command. Example: sweetlink term "pytest tests/"');
+          console.error(
+            '[Sweetlink] Error: term requires a command. Example: sweetlink term "pytest tests/"'
+          );
           process.exit(1);
         }
 
         const label = getArg('--label');
         const labelSlug = label
-          ? label.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)
+          ? label
+              .replace(/[^a-z0-9]/gi, '-')
+              .toLowerCase()
+              .slice(0, 40)
           : 'term';
         const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const defaultDir = path.join(findProjectRoot(), '.sweetlink', 'term');
+        const { runSlot } = await import('../runs.js');
+        const defaultDir = runSlot({
+          baseDir: findProjectRoot(),
+          app: getArg('--app'),
+          run: getArg('--run'),
+          kind: 'term',
+        });
         const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.cast`);
         ensureDir(output);
 
@@ -3336,7 +3732,7 @@ async function handleStatusCommand(): Promise<StatusData> {
         const playerPath = await generatePlayer({ castPath: output });
         console.log(
           `[Sweetlink] ✓ ${getRelativePath(output)} · ${cap.durationSec.toFixed(1)}s · ` +
-          `${cap.events} events · ${(cap.bytes / 1024).toFixed(0)}KB · exit=${cap.exitCode}`
+            `${cap.events} events · ${(cap.bytes / 1024).toFixed(0)}KB · exit=${cap.exitCode}`
         );
         console.log(`[Sweetlink] ▶ ${getRelativePath(playerPath)}`);
         result = {
@@ -3363,9 +3759,16 @@ async function handleStatusCommand(): Promise<StatusData> {
         const resp = await daemonRequest(state, 'sessions-list');
         const data = resp.data as {
           sessions: Array<{
-            sessionId: string; label?: string; url?: string; startedAt?: string;
-            duration?: number; actionCount: number; errors?: { console: number; network: number; server: number };
-            hasVideo: boolean; hasViewer: boolean; manifestPath: string;
+            sessionId: string;
+            label?: string;
+            url?: string;
+            startedAt?: string;
+            duration?: number;
+            actionCount: number;
+            errors?: { console: number; network: number; server: number };
+            hasVideo: boolean;
+            hasViewer: boolean;
+            manifestPath: string;
           }>;
           indexPath?: string;
         };
@@ -3379,7 +3782,9 @@ async function handleStatusCommand(): Promise<StatusData> {
               const errBadge = errTotal > 0 ? ` · ${errTotal} err` : '';
               const labelTxt = s.label ? ` [${s.label}]` : '';
               const dur = s.duration ? `${s.duration.toFixed(1)}s` : '—';
-              console.log(`  ${s.sessionId}${labelTxt} · ${dur} · ${s.actionCount} actions${errBadge}`);
+              console.log(
+                `  ${s.sessionId}${labelTxt} · ${dur} · ${s.actionCount} actions${errBadge}`
+              );
             }
             if (data.indexPath) console.log(`\n  Index: ${data.indexPath}`);
           }
@@ -3391,7 +3796,8 @@ async function handleStatusCommand(): Promise<StatusData> {
             console.error('[Sweetlink] Usage: sessions diff <session-A> <session-B>');
             process.exit(1);
           }
-          const findSession = (id: string) => data.sessions.find((s) => s.sessionId === id || s.sessionId.endsWith(id));
+          const findSession = (id: string) =>
+            data.sessions.find((s) => s.sessionId === id || s.sessionId.endsWith(id));
           const a = findSession(aId);
           const b = findSession(bId);
           if (!a || !b) {
@@ -3400,9 +3806,15 @@ async function handleStatusCommand(): Promise<StatusData> {
           }
           const aManifest = JSON.parse(fs.readFileSync(a.manifestPath, 'utf-8'));
           const bManifest = JSON.parse(fs.readFileSync(b.manifestPath, 'utf-8'));
-          const aActions = aManifest.commands.map((c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`);
-          const bActions = bManifest.commands.map((c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`);
-          console.log(`\n${a.sessionId}${a.label ? ` "${a.label}"` : ''}  vs  ${b.sessionId}${b.label ? ` "${b.label}"` : ''}\n`);
+          const aActions = aManifest.commands.map(
+            (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
+          );
+          const bActions = bManifest.commands.map(
+            (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
+          );
+          console.log(
+            `\n${a.sessionId}${a.label ? ` "${a.label}"` : ''}  vs  ${b.sessionId}${b.label ? ` "${b.label}"` : ''}\n`
+          );
           console.log(`Duration: ${a.duration?.toFixed(1)}s  vs  ${b.duration?.toFixed(1)}s`);
           console.log(`Actions:  ${a.actionCount}  vs  ${b.actionCount}`);
           const aErr = a.errors ? a.errors.console + a.errors.network + a.errors.server : 0;
@@ -3425,8 +3837,20 @@ async function handleStatusCommand(): Promise<StatusData> {
             console.log('\nAction sequences are identical.');
           }
           result = {
-            a: { id: a.sessionId, label: a.label, duration: a.duration, actions: a.actionCount, errors: aErr },
-            b: { id: b.sessionId, label: b.label, duration: b.duration, actions: b.actionCount, errors: bErr },
+            a: {
+              id: a.sessionId,
+              label: a.label,
+              duration: a.duration,
+              actions: a.actionCount,
+              errors: aErr,
+            },
+            b: {
+              id: b.sessionId,
+              label: b.label,
+              duration: b.duration,
+              actions: b.actionCount,
+              errors: bErr,
+            },
             added,
             removed,
           };
@@ -3435,12 +3859,13 @@ async function handleStatusCommand(): Promise<StatusData> {
           if (data.indexPath) {
             const { execFile } = await import('child_process');
             const cmd =
-              process.platform === 'darwin' ? 'open'
-              : process.platform === 'win32' ? 'cmd'
-              : 'xdg-open';
-            const cmdArgs = process.platform === 'win32'
-              ? ['/c', 'start', '', data.indexPath]
-              : [data.indexPath];
+              process.platform === 'darwin'
+                ? 'open'
+                : process.platform === 'win32'
+                  ? 'cmd'
+                  : 'xdg-open';
+            const cmdArgs =
+              process.platform === 'win32' ? ['/c', 'start', '', data.indexPath] : [data.indexPath];
             execFile(cmd, cmdArgs, () => {});
             console.log(`[Sweetlink] Opened ${data.indexPath}`);
           }
@@ -3463,14 +3888,20 @@ async function handleStatusCommand(): Promise<StatusData> {
 
         if (sub === 'init') {
           const title = args[2];
-          if (!title) { console.error('[Sweetlink] Error: demo init requires a title'); process.exit(1); }
+          if (!title) {
+            console.error('[Sweetlink] Error: demo init requires a title');
+            process.exit(1);
+          }
           const demoState = await demoMod.initDemo(title, demoDir, { url: getArg('--url') });
           await demoMod.writeDemo(demoState);
           console.log(`[Sweetlink] Demo initialized: ${demoState.filePath}`);
           result = { filePath: demoState.filePath };
         } else if (sub === 'note') {
           const text = args.slice(2).join(' ');
-          if (!text) { console.error('[Sweetlink] Error: demo note requires text'); process.exit(1); }
+          if (!text) {
+            console.error('[Sweetlink] Error: demo note requires text');
+            process.exit(1);
+          }
           const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
           const updated = demoMod.addNote(state, text);
           await demoMod.writeDemo(updated);
@@ -3478,7 +3909,10 @@ async function handleStatusCommand(): Promise<StatusData> {
           result = { sections: updated.sections.length };
         } else if (sub === 'exec') {
           const cmd = args.slice(2).join(' ');
-          if (!cmd) { console.error('[Sweetlink] Error: demo exec requires a command'); process.exit(1); }
+          if (!cmd) {
+            console.error('[Sweetlink] Error: demo exec requires a command');
+            process.exit(1);
+          }
           const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
           const updated = await demoMod.addExec(state, cmd, []);
           await demoMod.writeDemo(updated);
@@ -3492,7 +3926,11 @@ async function handleStatusCommand(): Promise<StatusData> {
           const resp = await daemonRequest(daemonState, 'screenshot', {});
           const data = resp.data as { screenshot: string };
           const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = await demoMod.addScreenshot(state, Buffer.from(data.screenshot, 'base64'), caption);
+          const updated = await demoMod.addScreenshot(
+            state,
+            Buffer.from(data.screenshot, 'base64'),
+            caption
+          );
           await demoMod.writeDemo(updated);
           console.log(`[Sweetlink] Screenshot added: ${caption}`);
           result = { sections: updated.sections.length };
@@ -3518,7 +3956,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           if (verifyResult.passed) {
             console.log('[Sweetlink] Demo verified: all outputs match');
           } else {
-            console.log(`[Sweetlink] Demo verification FAILED: ${verifyResult.failures.length} mismatch(es)`);
+            console.log(
+              `[Sweetlink] Demo verification FAILED: ${verifyResult.failures.length} mismatch(es)`
+            );
             for (const f of verifyResult.failures) {
               console.log(`  Section ${f.index}: ${f.command}`);
               console.log(`    Expected: ${f.expected.substring(0, 80)}...`);
@@ -3533,10 +3973,14 @@ async function handleStatusCommand(): Promise<StatusData> {
             console.log(`[Sweetlink] Demo: "${state.title}" (${state.sections.length} sections)`);
             console.log(`  File: ${state.filePath}`);
             for (const s of state.sections) {
-              const preview = s.type === 'note' ? s.content.substring(0, 60) :
-                s.type === 'exec' ? `$ ${s.command}` :
-                s.type === 'screenshot' ? `[image] ${s.screenshotFile}` :
-                '[snapshot]';
+              const preview =
+                s.type === 'note'
+                  ? s.content.substring(0, 60)
+                  : s.type === 'exec'
+                    ? `$ ${s.command}`
+                    : s.type === 'screenshot'
+                      ? `[image] ${s.screenshotFile}`
+                      : '[snapshot]';
               console.log(`  ${s.type.padEnd(12)} ${preview}`);
             }
             result = state;
@@ -3605,7 +4049,9 @@ async function handleStatusCommand(): Promise<StatusData> {
           console.log(`[Sweetlink] Filled ${fillTarget} with "${fillValue}"`);
           result = { clicked: fillTarget, found: 1, index: 0 } satisfies ClickData;
         } else {
-          console.error('[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.');
+          console.error(
+            '[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.'
+          );
           process.exit(1);
         }
         break;
@@ -3663,8 +4109,10 @@ async function handleStatusCommand(): Promise<StatusData> {
       const msg = error instanceof Error ? error.message : String(error);
       emitJson({
         ok: false,
-        command: commandType,
-        data: null,
+        // commandType is non-undefined here: the early-exit at the top of
+        // CLI dispatch handles the bare `--json` (batch mode) case.
+        command: commandType!,
+        data: getErrorData(error),
         error: msg,
         duration: Date.now() - startTime,
       });
@@ -3674,6 +4122,7 @@ async function handleStatusCommand(): Promise<StatusData> {
     // to end users and clutters the output. Set SWEETLINK_DEBUG=1 to see it.
     if (error instanceof Error) {
       console.error(`[Sweetlink] ${error.message}`);
+      printErrorContext(error);
       if (process.env.SWEETLINK_DEBUG === '1' && error.stack) {
         console.error(error.stack);
       }

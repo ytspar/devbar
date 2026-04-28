@@ -42,6 +42,8 @@ const { mockLocator, mockPage, mockContext, mockBrowser, mockChromium } = vi.hoi
   const context = {
     pages: vi.fn(() => [page]),
     newPage: vi.fn().mockResolvedValue(page),
+    off: vi.fn(),
+    on: vi.fn(),
   };
 
   const browser = {
@@ -80,6 +82,8 @@ vi.mock('fs', () => ({
 import * as fs from 'fs';
 import {
   getBrowser,
+  installAutoHideDevbarScreenshots,
+  installAutoHideDevbarScreenshotsForContext,
   screenshotViaPlaywright,
   withHiddenDevbarForScreenshot,
 } from './playwright.js';
@@ -127,6 +131,8 @@ describe('getBrowser', () => {
 
     mockContext.pages.mockReturnValue([mockPage]);
     mockContext.newPage.mockResolvedValue(mockPage);
+    mockContext.off.mockReturnValue(mockContext);
+    mockContext.on.mockReturnValue(mockContext);
 
     mockBrowser.contexts.mockReturnValue([mockContext]);
     mockBrowser.newContext.mockResolvedValue(mockContext);
@@ -343,6 +349,57 @@ describe('screenshotViaPlaywright', () => {
 
     expect(mockPage.evaluate).toHaveBeenCalledTimes(2);
     expect(capture).toHaveBeenCalledTimes(1);
+  });
+
+  it('can auto-hide devbar for every page.screenshot call until cleanup', async () => {
+    const originalScreenshot = mockPage.screenshot;
+    const cleanup = installAutoHideDevbarScreenshots(mockPage as any);
+
+    await expect(mockPage.screenshot({ path: '/tmp/auto.png' })).resolves.toEqual(
+      Buffer.from('full-png')
+    );
+
+    expect(mockPage.evaluate).toHaveBeenCalledTimes(2);
+    expect(originalScreenshot).toHaveBeenCalledWith({ path: '/tmp/auto.png' });
+
+    cleanup();
+    expect(mockPage.screenshot).toBe(originalScreenshot);
+  });
+
+  it('keeps auto-hide page screenshot patches installed until all cleanups run', () => {
+    const originalScreenshot = mockPage.screenshot;
+    const firstCleanup = installAutoHideDevbarScreenshots(mockPage as any);
+    const wrappedScreenshot = mockPage.screenshot;
+    const secondCleanup = installAutoHideDevbarScreenshots(mockPage as any);
+
+    expect(mockPage.screenshot).toBe(wrappedScreenshot);
+
+    firstCleanup();
+    expect(mockPage.screenshot).toBe(wrappedScreenshot);
+
+    secondCleanup();
+    expect(mockPage.screenshot).toBe(originalScreenshot);
+  });
+
+  it('can auto-hide screenshots for existing and future context pages', async () => {
+    const newPage = {
+      ...mockPage,
+      evaluate: vi.fn().mockResolvedValue(true),
+      screenshot: vi.fn().mockResolvedValue(Buffer.from('new-page-png')),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const cleanup = installAutoHideDevbarScreenshotsForContext(mockContext as any);
+
+    expect(mockContext.on).toHaveBeenCalledWith('page', expect.any(Function));
+    const onPage = mockContext.on.mock.calls[0]![1] as (page: typeof newPage) => void;
+    onPage(newPage);
+
+    await expect(newPage.screenshot()).resolves.toEqual(Buffer.from('new-page-png'));
+    expect(newPage.evaluate).toHaveBeenCalledTimes(2);
+
+    cleanup();
+    expect(mockContext.off).toHaveBeenCalledWith('page', onPage);
   });
 
   // ========================================================================

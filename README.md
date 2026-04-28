@@ -181,6 +181,16 @@ pnpm sweetlink click --selector "button.submit"
 pnpm sweetlink refresh
 ```
 
+Playwright suites can opt into automatic hiding for user screenshots:
+
+```ts
+import { installAutoHideDevbarScreenshots } from '@ytspar/sweetlink/playwright';
+
+const cleanup = installAutoHideDevbarScreenshots(page);
+await page.screenshot({ path: 'app-without-devbar.png' });
+cleanup();
+```
+
 ## Agent Protocol
 
 Use Sweetlink as an inspect-act-verify loop instead of isolated screenshots:

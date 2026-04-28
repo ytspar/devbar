@@ -1132,6 +1132,200 @@ export function createSweetlinkSection(): HTMLElement {
   return section;
 }
 
+interface PluginDemoItem {
+  id: string;
+  name: string;
+  eyebrow: string;
+  description: string;
+  control: string;
+  group: string;
+  evidence: string;
+}
+
+const PLUGIN_DEMOS: PluginDemoItem[] = [
+  {
+    id: 'consent',
+    name: 'Consent Debug',
+    eyebrow: 'Cloudflare Zaraz',
+    description:
+      'Waits for `window.zaraz`, then adds a Consent control for mocking regions, showing the banner, accepting, rejecting, clearing cookies, and reading live status.',
+    control: 'Consent',
+    group: 'Privacy',
+    evidence: 'geo=EU(DE) · zaraz purposes=marketing:true · cf_consent=granted',
+  },
+  {
+    id: 'branch',
+    name: 'Git Branch',
+    eyebrow: 'Sweetlink server-info',
+    description:
+      'Turns daemon server-info into a branch badge so screenshots and inspect bundles show exactly which local checkout produced the evidence.',
+    control: '\uE0A0 main',
+    group: 'Build',
+    evidence: 'branch=main · app=devbar.dev demo · source=server-info',
+  },
+  {
+    id: 'version',
+    name: 'App Version',
+    eyebrow: 'Release metadata',
+    description:
+      'Pins the running app version into the toolbar, making regression screenshots easier to connect to a package, commit, or deploy.',
+    control: 'v1.10.7',
+    group: 'Release',
+    evidence: 'version=1.10.7 · channel=stable · package=@ytspar/devbar',
+  },
+];
+
+function setActivePluginDemo(section: HTMLElement, activeId: string): void {
+  const active = PLUGIN_DEMOS.find((plugin) => plugin.id === activeId) ?? PLUGIN_DEMOS[0]!;
+
+  section.querySelectorAll<HTMLButtonElement>('.plugin-demo-card').forEach((button) => {
+    const isActive = button.dataset.pluginId === active.id;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
+  });
+
+  const control = section.querySelector<HTMLElement>('[data-plugin-demo-control]');
+  if (control) control.textContent = active.control;
+
+  const group = section.querySelector<HTMLElement>('[data-plugin-demo-group]');
+  if (group) group.textContent = active.group;
+
+  const title = section.querySelector<HTMLElement>('[data-plugin-demo-title]');
+  if (title) title.textContent = active.name;
+
+  const eyebrow = section.querySelector<HTMLElement>('[data-plugin-demo-eyebrow]');
+  if (eyebrow) eyebrow.textContent = active.eyebrow;
+
+  const body = section.querySelector<HTMLElement>('[data-plugin-demo-body]');
+  if (body) body.textContent = active.description;
+
+  const evidence = section.querySelector<HTMLElement>('[data-plugin-demo-evidence]');
+  if (evidence) evidence.textContent = active.evidence;
+}
+
+/**
+ * Create the plugins section - official and app-specific toolbar extensions.
+ */
+export function createPluginsSection(): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'landing-plugins';
+
+  section.appendChild(createTextElement('h2', 'section-heading', 'plugin surface'));
+
+  const intro = createTextElement(
+    'p',
+    'plugins-summary',
+    'Plugins turn app-specific debug state into first-class devbar controls, so an agent can see feature flags, consent state, branch, version, or internal tools in every screenshot and inspect bundle.'
+  );
+  section.appendChild(intro);
+
+  const shell = document.createElement('div');
+  shell.className = 'plugins-demo-shell';
+
+  const registry = document.createElement('div');
+  registry.className = 'plugins-registry';
+  registry.setAttribute('aria-label', 'Plugin examples');
+
+  for (const plugin of PLUGIN_DEMOS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'plugin-demo-card';
+    button.dataset.pluginId = plugin.id;
+    button.setAttribute('aria-pressed', 'false');
+
+    button.appendChild(createTextElement('span', 'plugin-demo-card-eyebrow', plugin.eyebrow));
+    button.appendChild(createTextElement('strong', 'plugin-demo-card-title', plugin.name));
+    button.appendChild(
+      createTextElement(
+        'span',
+        'plugin-demo-card-copy',
+        `${plugin.group} control: ${plugin.control}`
+      )
+    );
+
+    button.addEventListener('click', () => setActivePluginDemo(section, plugin.id));
+    registry.appendChild(button);
+  }
+
+  const preview = document.createElement('div');
+  preview.className = 'plugin-preview';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'plugin-toolbar-demo';
+  toolbar.setAttribute('aria-label', 'Plugin toolbar preview');
+
+  const toolbarStatus = document.createElement('div');
+  toolbarStatus.className = 'plugin-toolbar-status';
+  for (const item of ['MD - 993x800', 'FCP 68ms', 'LCP 72ms', '...']) {
+    toolbarStatus.appendChild(createTextElement('span', '', item));
+  }
+
+  const toolbarActions = document.createElement('div');
+  toolbarActions.className = 'plugin-toolbar-actions';
+  for (const label of ['refs', 'a11y', 'schema', 'record']) {
+    toolbarActions.appendChild(createTextElement('span', '', label));
+  }
+
+  const toolbarPlugins = document.createElement('div');
+  toolbarPlugins.className = 'plugin-toolbar-controls';
+  toolbarPlugins.appendChild(createTextElement('span', 'plugin-toolbar-label', 'Privacy'));
+  toolbarPlugins.lastElementChild?.setAttribute('data-plugin-demo-group', '');
+  const activeControl = createTextElement('span', 'plugin-toolbar-control is-live', 'Consent');
+  activeControl.setAttribute('data-plugin-demo-control', '');
+  toolbarPlugins.appendChild(activeControl);
+  toolbarPlugins.appendChild(createTextElement('span', 'plugin-toolbar-control', '\uE0A0 main'));
+  toolbarPlugins.appendChild(createTextElement('span', 'plugin-toolbar-control', 'v1.10.7'));
+
+  toolbar.append(toolbarStatus, toolbarActions, toolbarPlugins);
+
+  const detail = document.createElement('div');
+  detail.className = 'plugin-detail';
+  detail.appendChild(createTextElement('span', 'plugin-detail-eyebrow', 'Cloudflare Zaraz'));
+  detail.lastElementChild?.setAttribute('data-plugin-demo-eyebrow', '');
+  detail.appendChild(createTextElement('h3', 'plugin-detail-title', 'Consent Debug'));
+  detail.lastElementChild?.setAttribute('data-plugin-demo-title', '');
+  detail.appendChild(
+    createTextElement(
+      'p',
+      'plugin-detail-body',
+      'Waits for `window.zaraz`, then adds a Consent control for mocking regions, showing the banner, accepting, rejecting, clearing cookies, and reading live status.'
+    )
+  );
+  detail.lastElementChild?.setAttribute('data-plugin-demo-body', '');
+
+  const evidence = createTextElement(
+    'code',
+    'plugin-evidence-line',
+    'geo=EU(DE) · zaraz purposes=marketing:true · cf_consent=granted'
+  );
+  evidence.setAttribute('data-plugin-demo-evidence', '');
+  detail.appendChild(evidence);
+
+  preview.append(toolbar, detail);
+  shell.append(registry, preview);
+  section.appendChild(shell);
+
+  section.appendChild(
+    highlightCode(
+      `import { consentDebugPlugin } from '@ytspar/devbar/plugins/consent-debug'
+
+const cleanup = consentDebugPlugin({
+  cookies: ['cf_consent', 'zaraz-consent'],
+  events: { showBanner: 'showConsentBanner' },
+})
+
+// later, during teardown or HMR
+cleanup()`,
+      'typescript',
+      'Zaraz consent-debug plugin example'
+    )
+  );
+
+  setActivePluginDemo(section, 'consent');
+
+  return section;
+}
+
 /**
  * Create the packages overview section
  */

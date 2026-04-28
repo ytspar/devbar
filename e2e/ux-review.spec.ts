@@ -2,6 +2,12 @@ import { expect, type Page, type TestInfo, test } from '@playwright/test';
 import * as fs from 'fs';
 
 const DEVBAR_SELECTOR = '[data-devbar="true"][role="toolbar"][aria-label="DevBar"]';
+const MOBILE_LAYOUT_VIEWPORTS = [
+  { name: 'phone-320', width: 320, height: 700 },
+  { name: 'iphone-se-375', width: 375, height: 667 },
+  { name: 'iphone-390', width: 390, height: 844 },
+  { name: 'large-phone-430', width: 430, height: 932 },
+] as const;
 
 interface UxScreenshot {
   name: string;
@@ -88,6 +94,98 @@ test.describe('UX screenshot capture', () => {
     await attachScreenshotManifest(testInfo, screenshots);
 
     expect(screenshots.every((screenshot) => fs.existsSync(screenshot.path))).toBe(true);
+  });
+
+  test('keeps mobile landing controls and package cards inside the viewport', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'Mobile layout regression evidence is captured once in Chromium to avoid duplicate screenshots.'
+    );
+
+    const screenshots: UxScreenshot[] = [];
+    const evidence: unknown[] = [];
+
+    for (const viewport of MOBILE_LAYOUT_VIEWPORTS) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await setupPlayground(page);
+      await page.waitForTimeout(250);
+
+      screenshots.push(
+        await captureUxScreenshot(page, testInfo, `mobile-layout-${viewport.name}-top`, {
+          note: 'Top-of-page mobile state, verifying fixed simulated-mode and theme controls do not collide.',
+        })
+      );
+
+      await page.locator('.landing-packages').scrollIntoViewIfNeeded();
+      await page.waitForTimeout(150);
+      screenshots.push(
+        await captureUxScreenshot(page, testInfo, `mobile-layout-${viewport.name}-packages`, {
+          note: 'Mobile package section, verifying package cards do not force horizontal document overflow.',
+        })
+      );
+
+      const layout = await page.evaluate(() => {
+        const toRect = (element: Element | null) => {
+          const rect = element?.getBoundingClientRect();
+          return rect
+            ? {
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+                width: rect.width,
+                height: rect.height,
+              }
+            : null;
+        };
+
+        const themeRect = toRect(document.querySelector('.theme-toggle'));
+        const statusRect = toRect(document.querySelector('.sweetlink-demo-status'));
+        const packageRects = Array.from(document.querySelectorAll('.package-card'))
+          .map(toRect)
+          .filter((rect): rect is NonNullable<typeof rect> => rect !== null);
+        const fixedControlsOverlap =
+          themeRect !== null &&
+          statusRect !== null &&
+          themeRect.left < statusRect.right &&
+          themeRect.right > statusRect.left &&
+          themeRect.top < statusRect.bottom &&
+          themeRect.bottom > statusRect.top;
+
+        return {
+          viewportWidth: window.innerWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          bodyScrollWidth: document.body.scrollWidth,
+          fixedControlsOverlap,
+          packageCount: packageRects.length,
+          maxPackageRight: Math.max(...packageRects.map((rect) => rect.right)),
+          minPackageLeft: Math.min(...packageRects.map((rect) => rect.left)),
+          packagesGridRect: toRect(document.querySelector('.packages-grid')),
+          statusRect,
+          themeRect,
+        };
+      });
+
+      evidence.push({ viewport, layout });
+
+      expect(layout.documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.bodyScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+      expect(layout.fixedControlsOverlap).toBe(false);
+      expect(layout.themeRect?.width ?? 0).toBeGreaterThanOrEqual(44);
+      expect(layout.themeRect?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(layout.statusRect?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(layout.packageCount).toBeGreaterThanOrEqual(2);
+      expect(layout.minPackageLeft).toBeGreaterThanOrEqual(-1);
+      expect(layout.maxPackageRight).toBeLessThanOrEqual(viewport.width + 1);
+    }
+
+    await attachScreenshotManifest(testInfo, screenshots);
+    await testInfo.attach('mobile-layout-evidence.json', {
+      body: JSON.stringify(evidence, null, 2),
+      contentType: 'application/json',
+    });
   });
 
   test('captures desktop interaction states for UX review', async ({ page }, testInfo) => {

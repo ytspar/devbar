@@ -36,11 +36,17 @@ const OPERATION_TIMEOUT_MS = process.env.SWEETLINK_OPERATION_TIMEOUT
 
 // Lazy-load playwright types - the actual import is dynamic
 type Browser = import('playwright').Browser;
+type BrowserContext = import('playwright').BrowserContext;
 type Page = import('playwright').Page;
 type Chromium = typeof import('playwright').chromium;
+type PageScreenshot = Page['screenshot'];
 
 // Cache the playwright module once loaded
 let playwrightModule: { chromium: Chromium } | null = null;
+const autoHideScreenshotPatches = new WeakMap<
+  Page,
+  { installCount: number; original: PageScreenshot }
+>();
 
 /**
  * Dynamically load playwright module
@@ -178,6 +184,75 @@ export async function withHiddenDevbarForScreenshot<T>(
   } finally {
     await cleanup();
   }
+}
+
+/**
+ * Patch a Playwright page so every `page.screenshot()` call temporarily hides
+ * DevBar chrome. This cannot intercept OS/browser screenshots, but it covers
+ * the common Playwright test path without changing each call site.
+ *
+ * @returns Cleanup function that restores the original screenshot method.
+ */
+export function installAutoHideDevbarScreenshots(page: Page): () => void {
+  const existing = autoHideScreenshotPatches.get(page);
+  if (existing) {
+    existing.installCount += 1;
+    let cleaned = false;
+    return () => {
+      if (cleaned) return;
+      cleaned = true;
+      existing.installCount -= 1;
+      if (existing.installCount <= 0) {
+        page.screenshot = existing.original;
+        autoHideScreenshotPatches.delete(page);
+      }
+    };
+  }
+
+  const original = page.screenshot;
+  autoHideScreenshotPatches.set(page, { installCount: 1, original });
+
+  page.screenshot = ((options?: Parameters<PageScreenshot>[0]) =>
+    withHiddenDevbarForScreenshot(page, () => original.call(page, options))) as PageScreenshot;
+
+  let cleaned = false;
+  return () => {
+    if (cleaned) return;
+    cleaned = true;
+    const patch = autoHideScreenshotPatches.get(page);
+    if (!patch) return;
+    patch.installCount -= 1;
+    if (patch.installCount <= 0) {
+      page.screenshot = patch.original;
+      autoHideScreenshotPatches.delete(page);
+    }
+  };
+}
+
+/**
+ * Patch all existing pages in a BrowserContext and any future pages emitted by
+ * the context. Useful as a Playwright fixture installed once per test.
+ */
+export function installAutoHideDevbarScreenshotsForContext(context: BrowserContext): () => void {
+  const cleanups = new Set<() => void>();
+
+  const patchPage = (page: Page): void => {
+    cleanups.add(installAutoHideDevbarScreenshots(page));
+  };
+
+  for (const page of context.pages()) {
+    patchPage(page);
+  }
+
+  context.on('page', patchPage);
+
+  return () => {
+    context.off('page', patchPage);
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
+    cleanups.clear();
+  };
 }
 
 /**

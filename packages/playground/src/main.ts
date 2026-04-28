@@ -21,6 +21,7 @@ import {
   createFeaturesSection,
   createLandingHero,
   createPackagesSection,
+  createPluginsSection,
   createQuickStartSection,
   createSweetlinkSection,
 } from './landing-content.js';
@@ -169,6 +170,7 @@ if (app) {
   app.appendChild(createLandingHero());
   app.appendChild(createFeaturesSection());
   app.appendChild(createSweetlinkSection());
+  app.appendChild(createPluginsSection());
   app.appendChild(createPackagesSection());
   app.appendChild(createQuickStartSection());
 
@@ -270,9 +272,13 @@ function getCurrentThemeMode(): ThemeMode {
 function updateThemeToggle(): void {
   const mode = getCurrentThemeMode();
   const config = (themeConfig[mode] ?? themeConfig.system)!;
+  const label = document.createElement('span');
+  label.className = 'theme-toggle-label';
+  label.textContent = config.label;
+
   themeToggle.textContent = '';
   themeToggle.appendChild(config.icon());
-  themeToggle.appendChild(document.createTextNode(` ${config.label}`));
+  themeToggle.appendChild(label);
 }
 updateThemeToggle();
 

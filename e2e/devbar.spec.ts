@@ -302,6 +302,36 @@ async function installCustomPluginControls(page: Page): Promise<void> {
   await page.waitForFunction(() => document.querySelectorAll('.devbar-custom-control').length >= 6);
 }
 
+async function forceLongDevBarMetrics(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const instance = (
+      window as unknown as {
+        __YTSPAR_DEVBAR_INSTANCE__?: {
+          perfStats: unknown;
+          breakpointInfo: unknown;
+          render: () => void;
+        };
+      }
+    ).__YTSPAR_DEVBAR_INSTANCE__;
+
+    if (!instance) return;
+
+    instance.perfStats = {
+      fcp: '26554416ms',
+      lcp: '26554432ms',
+      cls: '0.000',
+      inp: '760ms',
+      totalSize: '1.6 MB',
+    };
+    instance.breakpointInfo = {
+      tailwindBreakpoint: window.innerWidth >= 768 ? 'md' : 'base',
+      dimensions: `${window.innerWidth}x${window.innerHeight}`,
+    };
+    instance.render();
+  });
+  await page.waitForTimeout(50);
+}
+
 // Button label mapping for log trigger actions
 const LOG_BUTTON_LABELS = {
   info: 'Log Info',
@@ -780,7 +810,7 @@ test.describe('DevBar Responsive Layout', () => {
 
       if (viewport.width < 640) {
         expect(layout.actionRows).toBeLessThanOrEqual(2);
-        expect(layout.rootHeight).toBeLessThanOrEqual(150);
+        expect(layout.rootHeight).toBeLessThanOrEqual(132);
         expect(layout.minButtonWidth).toBeGreaterThanOrEqual(MOBILE_TOUCH_TARGET_PX);
         expect(layout.minButtonHeight).toBeGreaterThanOrEqual(MOBILE_TOUCH_TARGET_PX);
       } else if (viewport.width <= 860) {
@@ -810,7 +840,9 @@ test.describe('DevBar Responsive Layout', () => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await setupPage(page);
       await installCustomPluginControls(page);
+      await forceLongDevBarMetrics(page);
       await page.waitForTimeout(250);
+      await forceLongDevBarMetrics(page);
 
       const screenshot = await page.screenshot({ animations: 'disabled' });
       await testInfo.attach(`devbar-custom-plugins-${viewport.name}.png`, {
@@ -822,6 +854,7 @@ test.describe('DevBar Responsive Layout', () => {
         const root = document.querySelector(selector) as HTMLElement | null;
         const customRow = root?.querySelector('.devbar-custom-controls') as HTMLElement | null;
         const main = root?.querySelector('.devbar-main') as HTMLElement | null;
+        const status = root?.querySelector('.devbar-status') as HTMLElement | null;
         const controls = Array.from(
           root?.querySelectorAll<HTMLElement>('.devbar-custom-control') ?? []
         );
@@ -899,6 +932,7 @@ test.describe('DevBar Responsive Layout', () => {
           rootClientWidth: root?.clientWidth ?? 0,
           rootScrollWidth: root?.scrollWidth ?? 0,
           mainWidth: mainRect?.width ?? 0,
+          statusText: status?.textContent ?? '',
           customWidth: customRect?.width ?? 0,
           customClientWidth: customRow?.clientWidth ?? 0,
           customScrollWidth: customRow?.scrollWidth ?? 0,
@@ -918,6 +952,9 @@ test.describe('DevBar Responsive Layout', () => {
 
       expect(layout.controlCount).toBeGreaterThanOrEqual(6);
       expect(layout.actionCount).toBeGreaterThanOrEqual(8);
+      if (viewport.width >= 768) {
+        expect(layout.statusText).toContain('26554416');
+      }
       expect(layout.documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
       expect(layout.bodyScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
       expect(layout.rootLeft).toBeGreaterThanOrEqual(-1);

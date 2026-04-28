@@ -267,6 +267,8 @@ JavaScript and Playwright callers can use the same behavior:
 
 ```ts
 import {
+  installAutoHideDevbarScreenshots,
+  installAutoHideDevbarScreenshotsForContext,
   screenshotViaPlaywright,
   withHiddenDevbarForScreenshot,
 } from '@ytspar/sweetlink/playwright';
@@ -280,6 +282,32 @@ await screenshotViaPlaywright({
 await withHiddenDevbarForScreenshot(page, () =>
   page.screenshot({ path: 'app-without-devbar.png', fullPage: true })
 );
+
+// Patch one page so every page.screenshot() hides DevBar automatically.
+const cleanupPageScreenshots = installAutoHideDevbarScreenshots(page);
+await page.screenshot({ path: 'app-without-devbar.png', fullPage: true });
+cleanupPageScreenshots();
+
+// Or patch every current/future page in a Playwright context.
+const cleanupContextScreenshots = installAutoHideDevbarScreenshotsForContext(context);
+```
+
+Playwright fixture example:
+
+```ts
+import { test as base } from '@playwright/test';
+import { installAutoHideDevbarScreenshots } from '@ytspar/sweetlink/playwright';
+
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    const cleanup = installAutoHideDevbarScreenshots(page);
+    try {
+      await use(page);
+    } finally {
+      cleanup();
+    }
+  },
+});
 ```
 
 Browser-side capture code can use the shared preparation helper:

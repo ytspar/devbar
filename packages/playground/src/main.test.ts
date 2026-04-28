@@ -29,6 +29,7 @@ vi.mock('./landing-content.js', () => ({
   createFeaturesSection: vi.fn(() => document.createElement('section')),
   createLandingHero: vi.fn(() => document.createElement('section')),
   createPackagesSection: vi.fn(() => document.createElement('section')),
+  createPluginsSection: vi.fn(() => document.createElement('section')),
   createQuickStartSection: vi.fn(() => document.createElement('section')),
   createSweetlinkSection: vi.fn(() => document.createElement('section')),
 }));

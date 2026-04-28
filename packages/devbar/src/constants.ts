@@ -730,6 +730,8 @@ export const DEVBAR_STYLES = `
 .devbar-info {
   white-space: nowrap;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden !important;
 }
 .devbar-info > span {
   flex-shrink: 0;
@@ -743,6 +745,7 @@ export const DEVBAR_STYLES = `
   flex-shrink: 0;
   flex-wrap: nowrap;
   justify-content: flex-end;
+  min-width: 0;
   max-width: 100%;
 }
 .devbar-actions::before {
@@ -756,15 +759,19 @@ export const DEVBAR_STYLES = `
 }
 [data-devbar-custom-controls="true"] .devbar-main {
   flex-wrap: wrap;
+  align-items: flex-start;
   overflow: visible;
 }
 [data-devbar-custom-controls="true"] .devbar-status {
   flex: 1 1 min(34rem, 100%);
+  max-width: 100%;
+  overflow: hidden;
 }
 [data-devbar-custom-controls="true"] .devbar-actions {
   flex: 1 1 min(28rem, 100%);
   flex-wrap: wrap;
   min-width: 0;
+  max-width: 100%;
   row-gap: 0.375rem;
 }
 .devbar-custom-controls {
@@ -783,6 +790,20 @@ export const DEVBAR_STYLES = `
 }
 .devbar-custom-group-label {
   box-sizing: border-box;
+}
+@media (max-width: 1120px) {
+  [data-devbar-custom-controls="true"] .devbar-main {
+    flex-wrap: wrap !important;
+    row-gap: 0.5rem;
+  }
+  [data-devbar-custom-controls="true"] .devbar-status,
+  [data-devbar-custom-controls="true"] .devbar-actions {
+    flex: 1 1 100% !important;
+  }
+  [data-devbar-custom-controls="true"] .devbar-actions {
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+  }
 }
 @media (max-width: 860px) {
   .devbar-main {
@@ -825,8 +846,8 @@ export const DEVBAR_STYLES = `
     justify-content: center;
     overflow: visible;
     max-width: calc(100vw - 24px);
-    gap: 0.45rem !important;
-    padding: 0.5rem 0.625rem !important;
+    gap: 0.375rem !important;
+    padding: 0.375rem 0.5rem !important;
   }
   /* Keep status row (connection dot + info) on same line */
   .devbar-status {
@@ -850,19 +871,15 @@ export const DEVBAR_STYLES = `
     justify-items: center;
     align-items: center;
     column-gap: 0.375rem;
-    row-gap: 0.375rem;
+    row-gap: 0.25rem;
     margin-top: 0;
     flex-wrap: nowrap;
     width: auto;
     flex-shrink: 1;
   }
   .devbar-actions::before {
-    content: "agent tools";
-    grid-column: 1 / -1;
-    justify-self: center;
-    margin-bottom: -0.125rem;
-    font-size: 0.5rem;
-    line-height: 1;
+    content: none;
+    display: none;
   }
   .devbar-actions button {
     width: 44px !important;

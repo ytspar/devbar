@@ -86,9 +86,17 @@ describe('sweetlink-dev CLI', () => {
   beforeEach(() => {
     originalEnv = {
       SWEETLINK_WS_PORT: process.env.SWEETLINK_WS_PORT,
+      SWEETLINK_APP_PORT: process.env.SWEETLINK_APP_PORT,
+      SWEETLINK_APP_URL: process.env.SWEETLINK_APP_URL,
+      PORTLESS_URL: process.env.PORTLESS_URL,
       PORT: process.env.PORT,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     };
+    delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    delete process.env.PORTLESS_URL;
+    delete process.env.PORT;
     vi.clearAllMocks();
   });
 
@@ -134,6 +142,9 @@ describe('sweetlink-dev CLI', () => {
 
   it('passes appPort from PORT environment variable', async () => {
     delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    delete process.env.PORTLESS_URL;
     process.env.PORT = '3000';
     await loadModule();
 
@@ -144,6 +155,70 @@ describe('sweetlink-dev CLI', () => {
 
   it('passes undefined appPort when PORT is not set', async () => {
     delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    delete process.env.PORTLESS_URL;
+    delete process.env.PORT;
+    await loadModule();
+
+    expect(mockInitSweetlink).toHaveBeenCalledWith(expect.objectContaining({ appPort: undefined }));
+  });
+
+  it('prefers SWEETLINK_APP_PORT over URL-derived app ports', async () => {
+    delete process.env.SWEETLINK_WS_PORT;
+    process.env.SWEETLINK_APP_PORT = '3001';
+    process.env.SWEETLINK_APP_URL = 'http://security1000.localhost:1355';
+    process.env.PORTLESS_URL = 'http://security1000.localhost:1356';
+    process.env.PORT = '3000';
+    await loadModule();
+
+    expect(mockInitSweetlink).toHaveBeenCalledWith(expect.objectContaining({ appPort: 3001 }));
+  });
+
+  it('derives appPort from SWEETLINK_APP_URL', async () => {
+    delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    process.env.SWEETLINK_APP_URL = 'http://security1000.localhost:1355';
+    delete process.env.PORTLESS_URL;
+    process.env.PORT = '4910';
+    await loadModule();
+
+    expect(mockInitSweetlink).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 7578, appPort: 1355 })
+    );
+  });
+
+  it('derives appPort from PORTLESS_URL', async () => {
+    delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    process.env.PORTLESS_URL = 'http://security1000.localhost:1355';
+    process.env.PORT = '4910';
+    await loadModule();
+
+    expect(mockInitSweetlink).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 7578, appPort: 1355 })
+    );
+  });
+
+  it('derives the WebSocket port from non-default app ports', async () => {
+    delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    delete process.env.PORTLESS_URL;
+    process.env.PORT = '5173';
+    await loadModule();
+
+    expect(mockInitSweetlink).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 11396, appPort: 5173 })
+    );
+  });
+
+  it('ignores external SWEETLINK_APP_URL values for appPort derivation', async () => {
+    delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    process.env.SWEETLINK_APP_URL = 'https://security1000.com';
+    delete process.env.PORTLESS_URL;
     delete process.env.PORT;
     await loadModule();
 
@@ -225,6 +300,9 @@ describe('sweetlink-dev CLI', () => {
 
   it('parses PORT as an integer', async () => {
     delete process.env.SWEETLINK_WS_PORT;
+    delete process.env.SWEETLINK_APP_PORT;
+    delete process.env.SWEETLINK_APP_URL;
+    delete process.env.PORTLESS_URL;
     process.env.PORT = '5173';
     await loadModule();
 

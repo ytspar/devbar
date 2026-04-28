@@ -22,6 +22,100 @@ export const MAX_PORT_RETRIES = 10;
 export const PORT_RETRY_DELAY_MS = 100;
 
 // ============================================================================
+// Local Development URL Helpers
+// ============================================================================
+
+export interface SweetlinkLocationLike {
+  protocol: string;
+  port: string;
+}
+
+export function parsePortNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 65535 ? parsed : null;
+}
+
+export function getDefaultPortForProtocol(protocol: string): number | null {
+  if (protocol === 'http:') {
+    return 80;
+  }
+  if (protocol === 'https:') {
+    return 443;
+  }
+  return null;
+}
+
+export function resolveAppPortFromLocation(location: SweetlinkLocationLike): number {
+  return parsePortNumber(location.port) ?? getDefaultPortForProtocol(location.protocol) ?? 0;
+}
+
+export function resolveSweetlinkWsPortForAppPort(appPort: number | null | undefined): number {
+  const parsedAppPort = parsePortNumber(appPort);
+  return parsedAppPort ? parsedAppPort + WS_PORT_OFFSET : DEFAULT_WS_PORT;
+}
+
+export function resolveSweetlinkWsPortFromLocation(location: SweetlinkLocationLike): number {
+  return resolveSweetlinkWsPortForAppPort(resolveAppPortFromLocation(location));
+}
+
+export function isLocalDevelopmentHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.$/, '');
+  return (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '::1' ||
+    normalized === '[::1]' ||
+    normalized.endsWith('.localhost')
+  );
+}
+
+export function parseLocalDevelopmentUrl(value: string | null | undefined): URL | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    return isLocalDevelopmentHostname(url.hostname) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isLocalDevelopmentOrigin(origin: string | null | undefined): boolean {
+  const url = parseLocalDevelopmentUrl(origin);
+  return Boolean(
+    url && url.pathname === '/' && !url.search && !url.hash && !url.username && !url.password
+  );
+}
+
+export function resolveAppPortFromLocalUrl(value: string | null | undefined): number | null {
+  const url = parseLocalDevelopmentUrl(value);
+  if (!url) {
+    return null;
+  }
+  return parsePortNumber(url.port) ?? getDefaultPortForProtocol(url.protocol);
+}
+
+export function localOriginMatchesAppPort(
+  origin: string | null | undefined,
+  appPort: number | null | undefined
+): boolean {
+  const parsedAppPort = parsePortNumber(appPort);
+  const originAppPort = isLocalDevelopmentOrigin(origin)
+    ? resolveAppPortFromLocalUrl(origin)
+    : null;
+  return parsedAppPort !== null && originAppPort === parsedAppPort;
+}
+
+// ============================================================================
 // Console Log Types
 // ============================================================================
 

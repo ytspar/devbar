@@ -7,8 +7,11 @@
  * Run alongside the Remix dev server.
  *
  * Environment variables:
- * - SWEETLINK_WS_PORT: WebSocket server port (default: 9223)
- * - PORT: Associated app port for origin validation (optional)
+ * - SWEETLINK_WS_PORT: WebSocket server port (default: appPort + 6223, or 9223)
+ * - SWEETLINK_APP_PORT: Associated app port for origin validation (optional)
+ * - SWEETLINK_APP_URL: Associated local app URL for origin validation (optional)
+ * - PORTLESS_URL: Associated Portless app URL for origin validation (optional)
+ * - PORT: Associated app port fallback for origin validation (optional)
  * - ANTHROPIC_API_KEY: Required for AI design review feature
  */
 
@@ -19,9 +22,20 @@ import { join } from 'path';
 config({ path: join(process.cwd(), '.env') });
 
 import { closeSweetlink, initSweetlink } from '../server.js';
+import {
+  parsePortNumber,
+  resolveAppPortFromLocalUrl,
+  resolveSweetlinkWsPortForAppPort,
+} from '../types.js';
 
-const port = parseInt(process.env.SWEETLINK_WS_PORT || '9223', 10);
-const appPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+const appPort =
+  parsePortNumber(process.env.SWEETLINK_APP_PORT) ??
+  resolveAppPortFromLocalUrl(process.env.SWEETLINK_APP_URL) ??
+  resolveAppPortFromLocalUrl(process.env.PORTLESS_URL) ??
+  parsePortNumber(process.env.PORT) ??
+  undefined;
+const port =
+  parsePortNumber(process.env.SWEETLINK_WS_PORT) ?? resolveSweetlinkWsPortForAppPort(appPort);
 
 console.log('[Sweetlink] Starting development server...');
 console.log(`[Sweetlink] Project directory: ${process.cwd()}`);

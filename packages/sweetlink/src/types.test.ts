@@ -6,15 +6,25 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_WS_PORT,
   getErrorMessage,
   isConsoleLog,
   isDesignReviewScreenshotData,
   isHmrScreenshotData,
+  isLocalDevelopmentHostname,
+  isLocalDevelopmentOrigin,
   isSaveOutlineData,
   isSaveSchemaData,
   isSaveScreenshotData,
   isSaveSettingsData,
   isSweetlinkCommand,
+  localOriginMatchesAppPort,
+  parsePortNumber,
+  resolveAppPortFromLocalUrl,
+  resolveAppPortFromLocation,
+  resolveSweetlinkWsPortForAppPort,
+  resolveSweetlinkWsPortFromLocation,
+  WS_PORT_OFFSET,
 } from './types.js';
 
 describe('Type Guards', () => {
@@ -189,5 +199,68 @@ describe('Error Utilities', () => {
       expect(getErrorMessage(123)).toBe('Unknown error');
       expect(getErrorMessage({ message: 'not an Error' })).toBe('Unknown error');
     });
+  });
+});
+
+describe('Local Development URL Helpers', () => {
+  it('parses valid port numbers only', () => {
+    expect(parsePortNumber('3000')).toBe(3000);
+    expect(parsePortNumber(5173)).toBe(5173);
+    expect(parsePortNumber('3000abc')).toBeNull();
+    expect(parsePortNumber('0')).toBeNull();
+    expect(parsePortNumber('65536')).toBeNull();
+    expect(parsePortNumber(undefined)).toBeNull();
+  });
+
+  it('recognizes localhost, loopback, and subdomain localhost hostnames', () => {
+    expect(isLocalDevelopmentHostname('localhost')).toBe(true);
+    expect(isLocalDevelopmentHostname('127.0.0.1')).toBe(true);
+    expect(isLocalDevelopmentHostname('[::1]')).toBe(true);
+    expect(isLocalDevelopmentHostname('security1000.localhost')).toBe(true);
+    expect(isLocalDevelopmentHostname('example.com')).toBe(false);
+    expect(isLocalDevelopmentHostname('localhost.example.com')).toBe(false);
+  });
+
+  it('resolves explicit and default app ports from browser locations', () => {
+    expect(resolveAppPortFromLocation({ protocol: 'http:', port: '3000' })).toBe(3000);
+    expect(resolveAppPortFromLocation({ protocol: 'http:', port: '' })).toBe(80);
+    expect(resolveAppPortFromLocation({ protocol: 'https:', port: '' })).toBe(443);
+    expect(resolveAppPortFromLocation({ protocol: 'file:', port: '' })).toBe(0);
+  });
+
+  it('keeps the existing app-port-plus-offset websocket port rule', () => {
+    expect(resolveSweetlinkWsPortForAppPort(3000)).toBe(3000 + WS_PORT_OFFSET);
+    expect(resolveSweetlinkWsPortForAppPort(null)).toBe(DEFAULT_WS_PORT);
+    expect(resolveSweetlinkWsPortFromLocation({ protocol: 'http:', port: '1355' })).toBe(
+      1355 + WS_PORT_OFFSET
+    );
+  });
+
+  it('accepts Portless-style local origins and rejects external origins', () => {
+    expect(isLocalDevelopmentOrigin('http://security1000.localhost:1355')).toBe(true);
+    expect(isLocalDevelopmentOrigin('https://security1000.localhost')).toBe(true);
+    expect(isLocalDevelopmentOrigin('http://localhost:3000')).toBe(true);
+    expect(isLocalDevelopmentOrigin('http://127.0.0.1:3000')).toBe(true);
+    expect(isLocalDevelopmentOrigin('http://[::1]:3000')).toBe(true);
+    expect(isLocalDevelopmentOrigin('https://security1000.com')).toBe(false);
+    expect(isLocalDevelopmentOrigin('javascript:alert(1)')).toBe(false);
+    expect(isLocalDevelopmentOrigin('data:text/html,hi')).toBe(false);
+    expect(isLocalDevelopmentOrigin('//localhost:3000')).toBe(false);
+    expect(isLocalDevelopmentOrigin('http://localhost:3000/path')).toBe(false);
+    expect(isLocalDevelopmentOrigin('http://user:pass@localhost:3000')).toBe(false);
+  });
+
+  it('resolves app ports from local URLs for CLI env support', () => {
+    expect(resolveAppPortFromLocalUrl('http://security1000.localhost:1355')).toBe(1355);
+    expect(resolveAppPortFromLocalUrl('https://security1000.localhost')).toBe(443);
+    expect(resolveAppPortFromLocalUrl('http://localhost')).toBe(80);
+    expect(resolveAppPortFromLocalUrl('https://security1000.com')).toBeNull();
+  });
+
+  it('matches local origins by resolved app port', () => {
+    expect(localOriginMatchesAppPort('http://security1000.localhost:1355', 1355)).toBe(true);
+    expect(localOriginMatchesAppPort('https://security1000.localhost', 443)).toBe(true);
+    expect(localOriginMatchesAppPort('http://localhost:3000', 5173)).toBe(false);
+    expect(localOriginMatchesAppPort('https://security1000.com', 443)).toBe(false);
   });
 });

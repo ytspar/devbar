@@ -28,12 +28,14 @@ import type {
 import {
   getErrorMessage,
   isDesignReviewScreenshotData,
+  isLocalDevelopmentOrigin,
   isSaveA11yData,
   isSaveConsoleLogsData,
   isSaveOutlineData,
   isSaveSchemaData,
   isSaveScreenshotData,
   isSaveSettingsData,
+  localOriginMatchesAppPort,
 } from '../types.js';
 
 // Import constants
@@ -1056,30 +1058,22 @@ function setupServerHandlers(server: WebSocketServer): void {
     const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
     const origin = req.headers.origin;
 
-    // Validate origin - only accept localhost connections
+    // Validate origin - only accept local development origins
     if (!origin) {
       console.warn(
         `[Sweetlink] Connection from ${clientId} has no Origin header (non-browser client)`
       );
     }
     if (origin) {
-      const isLocalhost =
-        origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-
-      if (!isLocalhost) {
-        console.log(`[Sweetlink] Rejecting non-localhost connection from ${origin}`);
-        ws.close(4001, 'Only localhost connections allowed');
+      if (!isLocalDevelopmentOrigin(origin)) {
+        console.log(`[Sweetlink] Rejecting non-local development connection from ${origin}`);
+        ws.close(4001, 'Only local development origins allowed');
         return;
       }
 
       // If appPort is configured, enforce strict port matching for security
-      if (associatedAppPort) {
-        const expectedOrigins = [
-          `http://localhost:${associatedAppPort}`,
-          `http://127.0.0.1:${associatedAppPort}`,
-        ];
-        const isExpectedOrigin = expectedOrigins.some((expected) => origin.startsWith(expected));
-        if (!isExpectedOrigin) {
+      if (associatedAppPort !== null) {
+        if (!localOriginMatchesAppPort(origin, associatedAppPort)) {
           console.warn(
             `[Sweetlink] Connection from unexpected port: ${origin} (expected port: ${associatedAppPort})`
           );

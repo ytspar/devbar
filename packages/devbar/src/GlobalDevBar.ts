@@ -18,13 +18,16 @@
 
 import { ConsoleCapture, type LogChangeListener } from '@ytspar/sweetlink/browser/consoleCapture';
 import {
+  resolveAppPortFromLocation,
+  resolveSweetlinkWsPortFromLocation,
+} from '@ytspar/sweetlink/types';
+import {
   CSS_COLORS,
   DEVBAR_STYLES,
   getThemeColors,
   MAX_RECONNECT_ATTEMPTS,
   PALETTE,
   WS_PORT,
-  WS_PORT_OFFSET,
 } from './constants.js';
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
 import { setupKeyboardShortcuts } from './modules/keyboard.js';
@@ -235,12 +238,10 @@ export class GlobalDevBar {
     // Initialize settings manager
     this.settingsManager = getSettingsManager();
 
-    // Calculate app port from URL for multi-instance support
+    // Calculate app and WS ports from the browser URL for multi-instance support
     if (typeof window !== 'undefined') {
-      this.currentAppPort =
-        parseInt(window.location.port, 10) || (window.location.protocol === 'https:' ? 443 : 80);
-      // Calculate expected WS port (appPort + port offset) like SweetlinkBridge does
-      this.baseWsPort = this.currentAppPort > 0 ? this.currentAppPort + WS_PORT_OFFSET : WS_PORT;
+      this.currentAppPort = resolveAppPortFromLocation(window.location);
+      this.baseWsPort = resolveSweetlinkWsPortFromLocation(window.location);
     } else {
       this.currentAppPort = 0;
       this.baseWsPort = WS_PORT;

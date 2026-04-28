@@ -430,6 +430,26 @@ describe('Sweetlink server module', () => {
       expect(ws.close).not.toHaveBeenCalled();
     });
 
+    it('allows connections from Portless-style *.localhost origins', async () => {
+      await initDefault({ appPort: 1355 });
+      const ws = makeClientSocket();
+      const req = makeRequest('http://security1000.localhost:1355');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    it('allows HTTPS localhost origins using the default app port', async () => {
+      await initDefault({ appPort: 443 });
+      const ws = makeClientSocket();
+      const req = makeRequest('https://security1000.localhost');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
     it('rejects connections from non-localhost origins', async () => {
       await initDefault();
       const ws = makeClientSocket();
@@ -437,7 +457,7 @@ describe('Sweetlink server module', () => {
 
       mockWssInstance.emit('connection', ws, req);
 
-      expect(ws.close).toHaveBeenCalledWith(4001, 'Only localhost connections allowed');
+      expect(ws.close).toHaveBeenCalledWith(4001, 'Only local development origins allowed');
     });
 
     it('rejects connections from https external origins', async () => {
@@ -447,7 +467,17 @@ describe('Sweetlink server module', () => {
 
       mockWssInstance.emit('connection', ws, req);
 
-      expect(ws.close).toHaveBeenCalledWith(4001, 'Only localhost connections allowed');
+      expect(ws.close).toHaveBeenCalledWith(4001, 'Only local development origins allowed');
+    });
+
+    it('rejects localhost-looking origins with a path', async () => {
+      await initDefault();
+      const ws = makeClientSocket();
+      const req = makeRequest('http://localhost:3000/path');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).toHaveBeenCalledWith(4001, 'Only local development origins allowed');
     });
 
     it('allows connections with no origin header (non-browser clients like CLI)', async () => {
@@ -480,6 +510,18 @@ describe('Sweetlink server module', () => {
       await initDefault({ appPort: 3000 });
       const ws = makeClientSocket();
       const req = makeRequest('http://localhost:3000');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
+      consoleSpy.mockRestore();
+    });
+
+    it('does not warn about port mismatch when a Portless origin appPort matches', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await initDefault({ appPort: 1355 });
+      const ws = makeClientSocket();
+      const req = makeRequest('http://security1000.localhost:1355');
 
       mockWssInstance.emit('connection', ws, req);
 

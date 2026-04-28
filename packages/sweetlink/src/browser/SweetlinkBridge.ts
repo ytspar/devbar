@@ -38,7 +38,8 @@ import {
   DEFAULT_WS_PORT,
   MAX_PORT_RETRIES,
   PORT_RETRY_DELAY_MS,
-  WS_PORT_OFFSET as SWEETLINK_PORT_OFFSET,
+  resolveAppPortFromLocation,
+  resolveSweetlinkWsPortFromLocation,
 } from '../types.js';
 
 /** HMR settings */
@@ -109,14 +110,9 @@ export class SweetlinkBridge {
       return;
     }
 
-    // Calculate app port from URL
-    this.currentAppPort =
-      parseInt(window.location.port, 10) || (window.location.protocol === 'https:' ? 443 : 80);
-
-    // Calculate expected WS port (appPort + port offset)
-    this.basePort =
-      config.basePort ??
-      (this.currentAppPort > 0 ? this.currentAppPort + SWEETLINK_PORT_OFFSET : DEFAULT_WS_PORT);
+    // Calculate expected app and WS ports from the browser URL.
+    this.basePort = config.basePort ?? resolveSweetlinkWsPortFromLocation(window.location);
+    this.currentAppPort = resolveAppPortFromLocation(window.location);
 
     this.maxPortRetries = config.maxPortRetries ?? MAX_PORT_RETRIES;
     this.hmrScreenshots = config.hmrScreenshots ?? false;

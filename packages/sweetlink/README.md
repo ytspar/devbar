@@ -227,6 +227,10 @@ pnpm sweetlink screenshot
 # Element screenshot
 pnpm sweetlink screenshot --selector ".company-card"
 
+# Capture app UI without DevBar chrome
+pnpm sweetlink screenshot --hide-devbar
+pnpm sweetlink screenshot --hifi --hide-devbar
+
 # Full page with custom output
 pnpm sweetlink screenshot --full-page --output page.png
 
@@ -247,6 +251,48 @@ pnpm sweetlink screenshot --no-wait
 # Force specific method
 pnpm sweetlink screenshot --force-cdp   # Playwright/CDP
 pnpm sweetlink screenshot --force-ws    # WebSocket/html2canvas
+```
+
+### Hide DevBar for screenshots
+
+Use `--hide-devbar` when the toolbar should not appear in captured evidence. The flag works with the default WebSocket/html2canvas path, Playwright/CDP fallback, `--hifi`, and `--responsive`.
+
+```bash
+pnpm sweetlink screenshot --hide-devbar --output app.png
+pnpm sweetlink screenshot --hifi --hide-devbar --full-page
+pnpm sweetlink screenshot --responsive --hide-devbar
+```
+
+JavaScript and Playwright callers can use the same behavior:
+
+```ts
+import {
+  screenshotViaPlaywright,
+  withHiddenDevbarForScreenshot,
+} from '@ytspar/sweetlink/playwright';
+
+await screenshotViaPlaywright({
+  url: 'http://localhost:5173',
+  output: 'app.png',
+  hideDevbar: true,
+});
+
+await withHiddenDevbarForScreenshot(page, () =>
+  page.screenshot({ path: 'app-without-devbar.png', fullPage: true })
+);
+```
+
+Browser-side capture code can use the shared preparation helper:
+
+```ts
+import { prepareForCapture } from '@ytspar/sweetlink/browser/screenshotUtils';
+
+const cleanup = prepareForCapture({ hideDevbar: true });
+try {
+  // Run html2canvas or another DOM-based capture here.
+} finally {
+  cleanup();
+}
 ```
 
 ### DOM Queries

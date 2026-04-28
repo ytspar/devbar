@@ -583,6 +583,7 @@ async function takePlaywrightScreenshot(
     fullPage?: boolean;
     viewport?: string;
     hover?: boolean;
+    hideDevbar?: boolean;
     url?: string;
   },
   method: string
@@ -595,6 +596,7 @@ async function takePlaywrightScreenshot(
     fullPage: options.fullPage,
     viewport: options.viewport,
     hover: options.hover,
+    hideDevbar: options.hideDevbar,
     url: options.url,
   });
   reportScreenshotSuccess(outputPath, result.width, result.height, method, options.selector);
@@ -604,6 +606,7 @@ async function takePlaywrightScreenshot(
     height: result.height,
     method,
     selector: options.selector,
+    ...(options.hideDevbar ? { devbarHidden: true } : {}),
   };
 }
 
@@ -620,6 +623,7 @@ async function screenshot(options: {
   width?: number;
   height?: number;
   hover?: boolean;
+  hideDevbar?: boolean;
   /** Pixels of extra context around a --selector capture. */
   padding?: number;
   /** Force the page's color scheme. */
@@ -664,6 +668,7 @@ async function screenshot(options: {
     if (options.responsive) {
       const resp = await daemonRequest(daemonState, 'screenshot-responsive', {
         fullPage: options.fullPage,
+        hideDevbar: options.hideDevbar,
       });
       const data = resp.data as {
         screenshots: Array<{ width: number; height: number; screenshot: string; label: string }>;
@@ -686,6 +691,7 @@ async function screenshot(options: {
         width: first.width,
         height: first.height,
         method: 'Daemon (responsive)',
+        ...(options.hideDevbar ? { devbarHidden: true } : {}),
       };
     }
 
@@ -696,6 +702,7 @@ async function screenshot(options: {
       viewport: options.viewport,
       padding: (options as { padding?: number }).padding,
       theme: (options as { theme?: string }).theme,
+      hideDevbar: options.hideDevbar,
     });
     const data = resp.data as {
       screenshot: string;
@@ -739,6 +746,7 @@ async function screenshot(options: {
       height: data.height,
       method: 'Daemon (hifi)',
       selector: options.selector,
+      ...(options.hideDevbar ? { devbarHidden: true } : {}),
     };
   }
 
@@ -769,6 +777,7 @@ async function screenshot(options: {
     fullPage: options.fullPage,
     viewport: options.viewport,
     hover: options.hover,
+    hideDevbar: options.hideDevbar,
     url: options.url,
   };
 
@@ -815,6 +824,7 @@ async function screenshot(options: {
   const command: SweetlinkCommand = {
     type: 'screenshot',
     selector: options.selector,
+    hideDevbar: options.hideDevbar || undefined,
     options: {
       fullPage: options.fullPage,
       a11y: options.a11y,
@@ -867,6 +877,7 @@ async function screenshot(options: {
       height: data.height as number,
       method: 'WebSocket (html2canvas)',
       selector: data.selector as string | undefined,
+      ...(options.hideDevbar ? { devbarHidden: true } : {}),
     };
   } catch (error) {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
@@ -2082,6 +2093,7 @@ const COMMAND_HELP: Record<string, string> = {
       --selector <css-selector>   CSS selector of element to screenshot
       --output <path>             Output file path (default: screenshot-<timestamp>.png)
       --full-page                 Capture full scrollable page (default: viewport only)
+      --hide-devbar               Temporarily hide DevBar chrome from the screenshot
       --width <pixels>            Viewport width for Playwright (e.g., 768 for tablet, 375 for mobile)
       --height <pixels>           Viewport height for Playwright (default: width * 1.5)
       --viewport <preset|WxH>     Viewport preset for Playwright (mobile, tablet, desktop) or WIDTHxHEIGHT
@@ -2102,6 +2114,7 @@ const COMMAND_HELP: Record<string, string> = {
       pnpm sweetlink screenshot                                            # Viewport screenshot (small)
       pnpm sweetlink screenshot --url "http://localhost:3000/company/foo"  # Navigate then capture
       pnpm sweetlink screenshot --selector ".company-card"                 # Element screenshot
+      pnpm sweetlink screenshot --hide-devbar                              # Capture app without DevBar chrome
       pnpm sweetlink screenshot --full-page                                # Full scrollable page
       pnpm sweetlink screenshot --force-cdp --viewport tablet              # Playwright at 768x1024
       pnpm sweetlink screenshot --force-cdp --width 375 --height 667       # Playwright at iPhone SE
@@ -3042,6 +3055,7 @@ async function handleStatusCommand(): Promise<StatusData> {
           width: getArg('--width') ? parseInt(getArg('--width')!, 10) : undefined,
           height: getArg('--height') ? parseInt(getArg('--height')!, 10) : undefined,
           hover: hasFlag('--hover'),
+          hideDevbar: hasFlag('--hide-devbar'),
           padding: getArg('--padding') ? parseInt(getArg('--padding')!, 10) : undefined,
           theme: getArg('--theme') as 'light' | 'dark' | 'no-preference' | undefined,
           url: getArg('--url'),

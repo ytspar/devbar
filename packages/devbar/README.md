@@ -218,6 +218,13 @@ The devbar automatically connects to the Sweetlink WebSocket server (port 9223) 
 - AI-powered design review via Claude
 - Document outline and schema export
 
+For screenshot evidence where the toolbar should not appear, use Sweetlink's capture flag:
+
+```bash
+pnpm sweetlink screenshot --hide-devbar
+pnpm sweetlink screenshot --hifi --hide-devbar
+```
+
 When Sweetlink is not running, the devbar still functions but file-saving features are disabled.
 
 ## Early Console Capture

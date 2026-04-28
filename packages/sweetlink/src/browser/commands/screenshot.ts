@@ -53,12 +53,19 @@ export async function handleScreenshot(command: ScreenshotCommand): Promise<Swee
 
     const { default: html2canvas } = await import('html2canvas-pro');
 
-    const canvas = await html2canvas(element as HTMLElement, {
-      ...BASE_CAPTURE_OPTIONS,
-      width: window.innerWidth,
-      windowWidth: window.innerWidth,
-      ...command.options,
-    });
+    const cleanup = command.hideDevbar ? prepareForCapture({ hideDevbar: true }) : null;
+    let canvas: HTMLCanvasElement;
+    try {
+      if (cleanup) await delay(50);
+      canvas = await html2canvas(element as HTMLElement, {
+        ...BASE_CAPTURE_OPTIONS,
+        width: window.innerWidth,
+        windowWidth: window.innerWidth,
+        ...command.options,
+      });
+    } finally {
+      cleanup?.();
+    }
 
     // Crop to viewport when not in full-page mode for small file sizes.
     // html2canvas always renders the full element height, so we crop after capture.
@@ -135,7 +142,7 @@ export async function handleRequestScreenshot(
     const quality = command.quality || DEFAULT_SCREENSHOT_QUALITY;
 
     // Prepare page for capture (hide tooltips, blur active element)
-    const cleanup = prepareForCapture();
+    const cleanup = prepareForCapture({ hideDevbar: command.hideDevbar });
     await delay(50);
 
     let originalCanvas: HTMLCanvasElement;

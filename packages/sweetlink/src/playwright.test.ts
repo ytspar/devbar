@@ -33,6 +33,7 @@ const { mockLocator, mockPage, mockContext, mockBrowser, mockChromium } = vi.hoi
     url: vi.fn(() => 'http://localhost:3000'),
     setViewportSize: vi.fn().mockResolvedValue(undefined),
     viewportSize: vi.fn(() => ({ width: 1512, height: 982 })),
+    evaluate: vi.fn().mockResolvedValue(true),
     locator: vi.fn(() => locator),
     screenshot: vi.fn().mockResolvedValue(Buffer.from('full-png')),
     waitForTimeout: vi.fn().mockResolvedValue(undefined),
@@ -77,7 +78,11 @@ vi.mock('fs', () => ({
 // ---------------------------------------------------------------------------
 
 import * as fs from 'fs';
-import { getBrowser, screenshotViaPlaywright } from './playwright.js';
+import {
+  getBrowser,
+  screenshotViaPlaywright,
+  withHiddenDevbarForScreenshot,
+} from './playwright.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -115,6 +120,7 @@ describe('getBrowser', () => {
     mockPage.url.mockReturnValue('http://localhost:3000');
     mockPage.setViewportSize.mockResolvedValue(undefined);
     mockPage.viewportSize.mockReturnValue({ width: 1512, height: 982 });
+    mockPage.evaluate.mockResolvedValue(true);
     mockPage.locator.mockReturnValue(mockLocator);
     mockPage.screenshot.mockResolvedValue(Buffer.from('full-png'));
     mockPage.waitForTimeout.mockResolvedValue(undefined);
@@ -263,6 +269,7 @@ describe('screenshotViaPlaywright', () => {
     mockPage.url.mockReturnValue('http://localhost:3000');
     mockPage.setViewportSize.mockResolvedValue(undefined);
     mockPage.viewportSize.mockReturnValue({ width: 1512, height: 982 });
+    mockPage.evaluate.mockResolvedValue(true);
     mockPage.locator.mockReturnValue(mockLocator);
     mockPage.screenshot.mockResolvedValue(Buffer.from('full-png'));
     mockPage.waitForTimeout.mockResolvedValue(undefined);
@@ -310,12 +317,32 @@ describe('screenshotViaPlaywright', () => {
       );
     });
 
+    it('hides devbar around Playwright screenshots when requested', async () => {
+      await screenshotViaPlaywright({ hideDevbar: true });
+
+      expect(mockPage.evaluate).toHaveBeenCalledTimes(2);
+      expect(mockPage.evaluate.mock.calls[0][1]).toMatchObject({
+        styleId: 'sweetlink-hide-devbar-for-screenshot',
+      });
+      expect(mockPage.waitForTimeout).toHaveBeenCalledWith(50);
+      expect(mockPage.screenshot).toHaveBeenCalled();
+    });
+
     it('returns zero dimensions when viewportSize returns null', async () => {
       mockPage.viewportSize.mockReturnValue(null);
       const result = await screenshotViaPlaywright({});
       expect(result.width).toBe(0);
       expect(result.height).toBe(0);
     });
+  });
+
+  it('wraps arbitrary Playwright captures with hidden devbar chrome', async () => {
+    const capture = vi.fn().mockResolvedValue('captured');
+
+    await expect(withHiddenDevbarForScreenshot(mockPage as any, capture)).resolves.toBe('captured');
+
+    expect(mockPage.evaluate).toHaveBeenCalledTimes(2);
+    expect(capture).toHaveBeenCalledTimes(1);
   });
 
   // ========================================================================

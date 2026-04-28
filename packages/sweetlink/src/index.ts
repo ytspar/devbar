@@ -26,6 +26,8 @@ export {
   delay,
   extractBase64FromDataUrl,
   getMediaTypeFromDataUrl,
+  hideDevbarForCapture,
+  type PrepareForCaptureOptions,
   prepareForCapture,
   type ScaleCanvasOptions,
   scaleCanvas,

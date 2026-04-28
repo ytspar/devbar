@@ -50,6 +50,7 @@ export interface ConsoleLog {
 export interface ScreenshotCommand {
   type: 'screenshot';
   selector?: string;
+  hideDevbar?: boolean;
   options?: Record<string, unknown>;
 }
 
@@ -138,6 +139,7 @@ export interface RequestScreenshotCommand {
   type: 'request-screenshot';
   requestId?: string;
   selector?: string;
+  hideDevbar?: boolean;
   format?: 'jpeg' | 'png';
   quality?: number;
   scale?: number;

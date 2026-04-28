@@ -21,6 +21,15 @@ const NETWORK_IDLE_TIMEOUT_MS = 10000;
 const NETWORK_IDLE_TIME_MS = 500;
 const SELECTOR_TIMEOUT_MS = 5000;
 const HOVER_TRANSITION_DELAY_MS = 300;
+const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
+const HIDE_DEVBAR_CSS = `
+[data-devbar],
+[data-devbar-overlay],
+[data-devbar-tooltip] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+`;
 const NETWORK_REQUEST_COLLECT_DELAY_MS = 2000;
 
 /**
@@ -96,6 +105,7 @@ export async function screenshotViaCDP(options: {
   waitForNetwork?: boolean;
   viewport?: string;
   hover?: boolean;
+  hideDevbar?: boolean;
 }): Promise<{ buffer: Buffer; width: number; height: number }> {
   const browser = await getCDPBrowser();
 
@@ -172,9 +182,34 @@ export async function screenshotViaCDP(options: {
       }
     }
 
-    // Take the screenshot
-    const screenshot = await page.screenshot(screenshotOptions);
-    const buffer = Buffer.from(screenshot);
+    let devbarHidden = false;
+    if (options.hideDevbar) {
+      devbarHidden = await page.evaluate(
+        (styleId, css) => {
+          if (document.getElementById(styleId)) return false;
+          const style = document.createElement('style');
+          style.id = styleId;
+          style.textContent = css;
+          document.head.appendChild(style);
+          return true;
+        },
+        HIDE_DEVBAR_STYLE_ID,
+        HIDE_DEVBAR_CSS
+      );
+    }
+
+    let buffer: Buffer;
+    try {
+      // Take the screenshot
+      const screenshot = await page.screenshot(screenshotOptions);
+      buffer = Buffer.from(screenshot);
+    } finally {
+      if (devbarHidden) {
+        await page.evaluate((styleId) => {
+          document.getElementById(styleId)?.remove();
+        }, HIDE_DEVBAR_STYLE_ID);
+      }
+    }
 
     // Save to file if output path provided
     if (options.output) {

@@ -132,6 +132,8 @@ vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
 }));
 
+import { screenshotViaPlaywright } from '../playwright.js';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -511,6 +513,7 @@ describe('per-command help', () => {
     expect(allOutput).toContain('screenshot');
     expect(allOutput).toContain('--selector');
     expect(allOutput).toContain('--force-cdp');
+    expect(allOutput).toContain('--hide-devbar');
     // Should NOT contain other commands' help
     expect(allOutput).not.toContain('exec --code');
     expect(allOutput).not.toContain('query --selector');
@@ -980,6 +983,42 @@ describe('screenshot command via WebSocket', () => {
     });
     expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
     expect(logs.some((l) => l.includes('960x540'))).toBe(true);
+  });
+
+  it('passes hideDevbar through the WebSocket screenshot command', async () => {
+    autoResponse.value = {
+      success: true,
+      data: {
+        screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+        width: 960,
+        height: 540,
+        selector: 'body',
+      },
+      timestamp: Date.now(),
+    };
+
+    await runCLI(['screenshot', '--hide-devbar', '--force-ws', '--output', '/tmp/test.png']);
+
+    const ws = MockWebSocket.instances[0];
+    const sentData = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sentData).toMatchObject({
+      type: 'screenshot',
+      hideDevbar: true,
+    });
+  });
+
+  it('passes hideDevbar to Playwright screenshots', async () => {
+    await runCLI([
+      'screenshot',
+      '--force-cdp',
+      '--hide-devbar',
+      '--output',
+      '/tmp/playwright-hide.png',
+    ]);
+
+    expect(screenshotViaPlaywright).toHaveBeenCalledWith(
+      expect.objectContaining({ hideDevbar: true })
+    );
   });
 });
 

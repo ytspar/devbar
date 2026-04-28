@@ -162,6 +162,9 @@ pnpm sweetlink screenshot
 # Element screenshot
 pnpm sweetlink screenshot --selector ".my-component"
 
+# Hide DevBar chrome from screenshot evidence
+pnpm sweetlink screenshot --hide-devbar
+
 # Get console logs
 pnpm sweetlink logs
 

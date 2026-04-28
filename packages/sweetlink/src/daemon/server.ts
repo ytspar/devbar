@@ -147,6 +147,7 @@ async function handleScreenshot(params: ScreenshotParams, url: string): Promise<
     viewport: params.viewport,
     padding: typeof padding === 'number' ? padding : undefined,
     theme,
+    hideDevbar: params.hideDevbar,
     page: targetPage,
   });
 
@@ -184,6 +185,7 @@ async function handleResponsiveScreenshot(
   const results = await takeResponsiveScreenshots({
     viewports,
     fullPage,
+    hideDevbar: params.hideDevbar,
   });
 
   return {

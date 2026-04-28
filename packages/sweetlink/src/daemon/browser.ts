@@ -48,6 +48,15 @@ let page: Page | null = null;
 let currentUrl: string | null = null;
 
 const NAVIGATION_TIMEOUT_MS = 30_000;
+const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
+const HIDE_DEVBAR_CSS = `
+[data-devbar],
+[data-devbar-overlay],
+[data-devbar-tooltip] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+`;
 
 // ============================================================================
 // Public API
@@ -127,6 +136,37 @@ export async function navigateTo(url: string): Promise<void> {
   }
 }
 
+async function withHiddenDevbar<T>(
+  targetPage: Page,
+  enabled: boolean | undefined,
+  capture: () => Promise<T>
+): Promise<T> {
+  if (!enabled) return capture();
+
+  const inserted = await targetPage.evaluate(
+    ({ css, styleId }) => {
+      if (document.getElementById(styleId)) return false;
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = css;
+      document.head.appendChild(style);
+      return true;
+    },
+    { css: HIDE_DEVBAR_CSS, styleId: HIDE_DEVBAR_STYLE_ID }
+  );
+  await targetPage.waitForTimeout(50);
+
+  try {
+    return await capture();
+  } finally {
+    if (inserted) {
+      await targetPage.evaluate((styleId) => {
+        document.getElementById(styleId)?.remove();
+      }, HIDE_DEVBAR_STYLE_ID);
+    }
+  }
+}
+
 /**
  * Take a screenshot of the current page or a specific element.
  * If `page` is provided, screenshots that page instead of the daemon's
@@ -141,6 +181,8 @@ export async function takeScreenshot(opts: {
   padding?: number;
   /** Force the page's color scheme: 'light' | 'dark' | 'no-preference' */
   theme?: 'light' | 'dark' | 'no-preference';
+  /** Temporarily hide DevBar chrome from the captured image. */
+  hideDevbar?: boolean;
 }): Promise<{
   buffer: Buffer;
   width: number;
@@ -189,15 +231,19 @@ export async function takeScreenshot(opts: {
           width: Math.min(pageDoc.w, box.width + 2 * pad),
           height: Math.min(pageDoc.h, box.height + 2 * pad),
         };
-        buffer = await p.screenshot({ fullPage: true, clip });
+        buffer = await withHiddenDevbar(p, opts.hideDevbar, () =>
+          p.screenshot({ fullPage: true, clip })
+        );
       } else {
-        buffer = await locator.screenshot();
+        buffer = await withHiddenDevbar(p, opts.hideDevbar, () => locator.screenshot());
       }
     } else {
-      buffer = await locator.screenshot();
+      buffer = await withHiddenDevbar(p, opts.hideDevbar, () => locator.screenshot());
     }
   } else {
-    buffer = await p.screenshot({ fullPage: opts.fullPage });
+    buffer = await withHiddenDevbar(p, opts.hideDevbar, () =>
+      p.screenshot({ fullPage: opts.fullPage })
+    );
   }
 
   // Always report the actual captured image dimensions. Reading from the
@@ -228,6 +274,7 @@ export async function takeScreenshot(opts: {
 export async function takeResponsiveScreenshots(opts: {
   viewports: number[];
   fullPage?: boolean;
+  hideDevbar?: boolean;
 }): Promise<Array<{ width: number; height: number; buffer: Buffer; label: string }>> {
   const p = getPage();
   const results: Array<{ width: number; height: number; buffer: Buffer; label: string }> = [];
@@ -240,7 +287,9 @@ export async function takeResponsiveScreenshots(opts: {
     await p.setViewportSize({ width, height });
     // Small wait for layout to settle
     await p.waitForTimeout(100);
-    const buffer = await p.screenshot({ fullPage: opts.fullPage });
+    const buffer = await withHiddenDevbar(p, opts.hideDevbar, () =>
+      p.screenshot({ fullPage: opts.fullPage })
+    );
     const label =
       width <= 480 ? `mobile-${width}` : width <= 1024 ? `tablet-${width}` : `desktop-${width}`;
     // Report the ACTUAL captured image dimensions, not the formula-derived

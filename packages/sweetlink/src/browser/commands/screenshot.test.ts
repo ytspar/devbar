@@ -210,6 +210,15 @@ describe('handleScreenshot', () => {
       })
     );
   });
+
+  it('hides devbar chrome when requested', async () => {
+    const command: ScreenshotCommand = { type: 'screenshot', hideDevbar: true };
+    await handleScreenshot(command);
+
+    expect(prepareForCapture).toHaveBeenCalledWith({ hideDevbar: true });
+    expect(delay).toHaveBeenCalledWith(50);
+    expect(mockCleanup).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -258,8 +267,20 @@ describe('handleRequestScreenshot', () => {
     };
     await handleRequestScreenshot(command, mockWs as unknown as WebSocket);
 
-    expect(prepareForCapture).toHaveBeenCalledTimes(1);
+    expect(prepareForCapture).toHaveBeenCalledWith({ hideDevbar: undefined });
     expect(delay).toHaveBeenCalledWith(50);
+    expect(mockCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes hideDevbar through request-screenshot preparation', async () => {
+    const command: RequestScreenshotCommand = {
+      type: 'request-screenshot',
+      requestId: 'req-hide',
+      hideDevbar: true,
+    };
+    await handleRequestScreenshot(command, mockWs as unknown as WebSocket);
+
+    expect(prepareForCapture).toHaveBeenCalledWith({ hideDevbar: true });
     expect(mockCleanup).toHaveBeenCalledTimes(1);
   });
 

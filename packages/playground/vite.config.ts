@@ -97,8 +97,8 @@ export default defineConfig({
     exclude: ['@ytspar/sweetlink'],
   },
 
-  // Build configuration for GitHub Pages
-  // Base URL is set via CLI: --base=/devbar/ for GitHub Pages
+  // Build configuration for Cloudflare Pages
+  // Base URL stays '/' because devbar.dev is served from the domain root.
   build: {
     outDir: 'dist',
     sourcemap: true,

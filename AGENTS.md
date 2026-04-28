@@ -8,7 +8,7 @@ Monorepo containing three packages:
 |---------|-----|-------------|
 | `@ytspar/devbar` | Published | Development toolbar — breakpoints, vitals, console, screenshots, accessibility, ruler |
 | `@ytspar/sweetlink` | Published | AI debugging toolkit — CLI + WebSocket bridge for screenshots, DOM queries, JS execution |
-| `@ytspar/playground` | Private | devbar.dev website — Vite SPA deployed to GitHub Pages |
+| `@ytspar/playground` | Private | devbar.dev website — Vite SPA deployed to Cloudflare Pages |
 
 ## Common Commands
 
@@ -49,24 +49,27 @@ Both `devbar` and `sweetlink` are published to npm. The devbar package depends o
 
 ## devbar.dev Website Deployment
 
-The playground package deploys to https://devbar.dev/ via GitHub Pages + GitHub Actions.
+The playground package deploys to https://devbar.dev/ via Cloudflare Pages + GitHub Actions.
 
 **Deployment is automatic on push to `main`.** The workflow (`.github/workflows/playground.yml`):
 1. Builds all packages
 2. Generates test coverage data
 3. Builds the playground with Vite
-4. Deploys to GitHub Pages
+4. Deploys `packages/playground/dist` to Cloudflare Pages with Wrangler
 
-**GitHub Pages config:**
-- Source: **GitHub Actions** (NOT branch-based / legacy)
-- Custom domain: `devbar.dev` (CNAME in `packages/playground/public/CNAME`)
+**Cloudflare Pages config:**
+- Project name: `devbar` by default; override with the GitHub repo variable `CLOUDFLARE_PAGES_PROJECT_NAME` if the Cloudflare project uses a different name.
+- Required GitHub secrets: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- The API token needs Cloudflare Pages edit access for the account.
+- Production branch should be `main`; `test/*` and `playground/*` branches deploy as Cloudflare preview deployments.
+- Custom domain `devbar.dev` is configured in Cloudflare Pages, not through a repo `CNAME` file.
+- Cloudflare DNS should point the apex domain at Pages with a proxied `CNAME` record: `devbar.dev` → `devbar.pages.dev`.
 
-**If the site shows the raw README instead of the playground:**
-The GitHub Pages source was changed back to "legacy" (branch-based). Fix it:
+**Initial Cloudflare setup:**
 ```bash
-gh api repos/ytspar/devbar/pages -X PUT -f build_type=workflow
-gh workflow run playground.yml
+pnpm dlx wrangler pages project create devbar --production-branch main
 ```
+Then add `devbar.dev` as a custom domain in the Cloudflare Pages dashboard and point DNS at Cloudflare.
 
 **Manual deployment trigger:**
 ```bash
@@ -123,7 +126,6 @@ packages/
     │   ├── main.ts
     │   ├── landing-content.ts # All page sections including releases
     │   └── style.css
-    ├── public/CNAME           # Custom domain
     └── package.json
 ```
 

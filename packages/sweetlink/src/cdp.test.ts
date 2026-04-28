@@ -161,6 +161,20 @@ describe('screenshotViaCDP', () => {
     expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/test.png', expect.any(Buffer));
   });
 
+  it('hides devbar chrome while taking CDP screenshots when requested', async () => {
+    await screenshotViaCDP({ hideDevbar: true });
+
+    expect(mockPage.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      'sweetlink-hide-devbar-for-screenshot',
+      expect.stringContaining('[data-devbar]')
+    );
+    expect(mockPage.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      'sweetlink-hide-devbar-for-screenshot'
+    );
+  });
+
   it('handles network idle timeout gracefully', async () => {
     mockPage.waitForNetworkIdle.mockRejectedValueOnce(new Error('Timeout'));
     const result = await screenshotViaCDP({});

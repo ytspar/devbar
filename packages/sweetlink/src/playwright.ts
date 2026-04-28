@@ -12,6 +12,16 @@ const CDP_CONNECTION_TIMEOUT_MS = 2000;
 const NAVIGATION_TIMEOUT_MS = 30000;
 const SELECTOR_TIMEOUT_MS = 5000;
 const HOVER_TRANSITION_DELAY_MS = 300;
+const HIDE_DEVBAR_SETTLE_MS = 50;
+const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
+const HIDE_DEVBAR_CSS = `
+[data-devbar],
+[data-devbar-overlay],
+[data-devbar-tooltip] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+`;
 
 /** Hard timeout for the entire screenshot operation (browser launch + navigate + capture).
  *  Prevents orphaned Playwright processes when the dev server dies mid-operation.
@@ -134,6 +144,42 @@ export async function getBrowser(
   }
 }
 
+/** Temporarily hide DevBar chrome on a Playwright page. */
+export async function hideDevbarOnPage(page: Page): Promise<() => Promise<void>> {
+  const inserted = await page.evaluate(
+    ({ css, styleId }) => {
+      if (document.getElementById(styleId)) return false;
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = css;
+      document.head.appendChild(style);
+      return true;
+    },
+    { css: HIDE_DEVBAR_CSS, styleId: HIDE_DEVBAR_STYLE_ID }
+  );
+
+  return async () => {
+    if (!inserted) return;
+    await page.evaluate((styleId) => {
+      document.getElementById(styleId)?.remove();
+    }, HIDE_DEVBAR_STYLE_ID);
+  };
+}
+
+/** Run an arbitrary Playwright capture while DevBar chrome is hidden. */
+export async function withHiddenDevbarForScreenshot<T>(
+  page: Page,
+  capture: () => Promise<T>
+): Promise<T> {
+  const cleanup = await hideDevbarOnPage(page);
+  await page.waitForTimeout(HIDE_DEVBAR_SETTLE_MS);
+  try {
+    return await capture();
+  } finally {
+    await cleanup();
+  }
+}
+
 /**
  * Take a screenshot using Playwright.
  *
@@ -146,6 +192,7 @@ export async function screenshotViaPlaywright(options: {
   fullPage?: boolean;
   viewport?: string;
   hover?: boolean;
+  hideDevbar?: boolean;
   a11y?: boolean; // Placeholder for future
   url?: string;
   /** Enable progress logging (default: false) */
@@ -178,6 +225,7 @@ async function screenshotViaPlaywrightCore(options: {
   fullPage?: boolean;
   viewport?: string;
   hover?: boolean;
+  hideDevbar?: boolean;
   a11y?: boolean;
   url?: string;
   verbose?: boolean;
@@ -221,20 +269,27 @@ async function screenshotViaPlaywrightCore(options: {
       ensureDir(options.output);
     }
 
-    let buffer: Buffer;
-    if (options.selector) {
-      const locator = page.locator(options.selector).first();
-      if (verbose) console.log('[Sweetlink] Capturing element screenshot...');
-      buffer = await locator.screenshot({ path: options.output });
-      if (verbose) console.log('[Sweetlink] Element screenshot captured.');
-    } else {
+    const capture = async (): Promise<Buffer> => {
+      if (options.selector) {
+        const locator = page.locator(options.selector).first();
+        if (verbose) console.log('[Sweetlink] Capturing element screenshot...');
+        const buffer = await locator.screenshot({ path: options.output });
+        if (verbose) console.log('[Sweetlink] Element screenshot captured.');
+        return buffer;
+      }
+
       if (verbose) console.log('[Sweetlink] Capturing full page screenshot...');
-      buffer = await page.screenshot({
+      const buffer = await page.screenshot({
         path: options.output,
         fullPage: options.fullPage,
       });
       if (verbose) console.log('[Sweetlink] Full page screenshot captured.');
-    }
+      return buffer;
+    };
+
+    const buffer = options.hideDevbar
+      ? await withHiddenDevbarForScreenshot(page, capture)
+      : await capture();
 
     // Get dimensions
     const size = options.selector

@@ -15,6 +15,16 @@ export const DEFAULT_SCREENSHOT_SCALE = 0.25;
 /** Default JPEG quality */
 export const DEFAULT_SCREENSHOT_QUALITY = 0.7;
 
+const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-capture';
+const HIDE_DEVBAR_CSS = `
+[data-devbar],
+[data-devbar-overlay],
+[data-devbar-tooltip] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+`;
+
 // ============================================================================
 // Canvas Scaling
 // ============================================================================
@@ -109,20 +119,49 @@ export function getMediaTypeFromDataUrl(dataUrl: string): 'image/png' | 'image/j
 // Screenshot Capture Helpers
 // ============================================================================
 
+export interface PrepareForCaptureOptions {
+  /** Temporarily hide devbar UI chrome from the captured image. */
+  hideDevbar?: boolean;
+}
+
 /**
- * Prepare the page for screenshot capture
- * Blurs active element and adds capturing class to body
+ * Temporarily hide DevBar chrome for screenshot capture.
  *
  * @returns Cleanup function to restore state
  */
-export function prepareForCapture(): () => void {
+export function hideDevbarForCapture(): () => void {
+  const existing = document.getElementById(HIDE_DEVBAR_STYLE_ID);
+  if (existing) {
+    return () => {};
+  }
+
+  const style = document.createElement('style');
+  style.id = HIDE_DEVBAR_STYLE_ID;
+  style.textContent = HIDE_DEVBAR_CSS;
+  document.head.appendChild(style);
+
+  return () => {
+    style.remove();
+  };
+}
+
+/**
+ * Prepare the page for screenshot capture.
+ * Blurs active element, adds capturing class to body, and optionally hides DevBar chrome.
+ *
+ * @returns Cleanup function to restore state
+ */
+export function prepareForCapture(options: PrepareForCaptureOptions = {}): () => void {
   document.body.classList.add('devbar-capturing');
 
   if (document.activeElement instanceof HTMLElement) {
     document.activeElement.blur();
   }
 
+  const cleanupDevbar = options.hideDevbar ? hideDevbarForCapture() : null;
+
   return () => {
+    cleanupDevbar?.();
     document.body.classList.remove('devbar-capturing');
   };
 }

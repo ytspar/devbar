@@ -76,6 +76,7 @@ export interface ScreenshotParams {
   fullPage?: boolean;
   viewport?: string;
   output?: string;
+  hideDevbar?: boolean;
 }
 
 export interface ScreenshotResponseData {
@@ -89,6 +90,7 @@ export interface ResponsiveScreenshotParams {
   viewports?: number[];
   fullPage?: boolean;
   output?: string;
+  hideDevbar?: boolean;
 }
 
 export interface ResponsiveScreenshotResponseData {

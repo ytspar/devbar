@@ -6,6 +6,7 @@ import {
   delay,
   extractBase64FromDataUrl,
   getMediaTypeFromDataUrl,
+  hideDevbarForCapture,
   prepareForCapture,
   scaleCanvas,
 } from './screenshotUtils.js';
@@ -170,10 +171,16 @@ describe('getMediaTypeFromDataUrl', () => {
 describe('prepareForCapture', () => {
   beforeEach(() => {
     document.body.classList.remove('devbar-capturing');
+    document.head.querySelectorAll('#sweetlink-hide-devbar-for-capture').forEach((el) => {
+      el.remove();
+    });
   });
 
   afterEach(() => {
     document.body.classList.remove('devbar-capturing');
+    document.head.querySelectorAll('#sweetlink-hide-devbar-for-capture').forEach((el) => {
+      el.remove();
+    });
   });
 
   it('adds devbar-capturing class to body', () => {
@@ -199,6 +206,43 @@ describe('prepareForCapture', () => {
     expect(document.activeElement).not.toBe(input);
 
     document.body.removeChild(input);
+  });
+
+  it('optionally hides devbar chrome until cleanup', () => {
+    const cleanup = prepareForCapture({ hideDevbar: true });
+    const style = document.getElementById('sweetlink-hide-devbar-for-capture');
+
+    expect(style?.textContent).toContain('[data-devbar]');
+
+    cleanup();
+    expect(document.getElementById('sweetlink-hide-devbar-for-capture')).toBeNull();
+  });
+});
+
+describe('hideDevbarForCapture', () => {
+  afterEach(() => {
+    document.head.querySelectorAll('#sweetlink-hide-devbar-for-capture').forEach((el) => {
+      el.remove();
+    });
+  });
+
+  it('injects and cleans up the devbar hiding style', () => {
+    const cleanup = hideDevbarForCapture();
+    expect(document.getElementById('sweetlink-hide-devbar-for-capture')).toBeTruthy();
+
+    cleanup();
+    expect(document.getElementById('sweetlink-hide-devbar-for-capture')).toBeNull();
+  });
+
+  it('does not remove an existing hide style from a nested capture cleanup', () => {
+    const outerCleanup = hideDevbarForCapture();
+    const innerCleanup = hideDevbarForCapture();
+
+    innerCleanup();
+    expect(document.getElementById('sweetlink-hide-devbar-for-capture')).toBeTruthy();
+
+    outerCleanup();
+    expect(document.getElementById('sweetlink-hide-devbar-for-capture')).toBeNull();
   });
 });
 

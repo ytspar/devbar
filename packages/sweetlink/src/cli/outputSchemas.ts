@@ -27,6 +27,7 @@ export interface ScreenshotData {
   height: number;
   method: string;
   selector?: string;
+  devbarHidden?: boolean;
 }
 
 export interface QueryData {
@@ -179,6 +180,7 @@ export const SCHEMAS: Record<string, string> = {
   height: number;
   method: string;
   selector?: string;
+  devbarHidden?: boolean;
 }`,
 
   query: `interface QueryData {

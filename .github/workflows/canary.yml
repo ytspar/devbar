@@ -42,9 +42,6 @@ jobs:
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Update npm for trusted publishing
-        run: npm install -g npm@latest
-
       - name: Install dependencies
         run: pnpm install
 
@@ -87,14 +84,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd packages/sweetlink
-          npm publish --tag canary --access public --provenance
+          pnpm publish --tag canary --access public --provenance --no-git-checks
 
       - name: Publish devbar canary
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd packages/devbar
-          npm publish --tag canary --access public --provenance
+          pnpm publish --tag canary --access public --provenance --no-git-checks
 
       - name: Summary
         env:

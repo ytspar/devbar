@@ -61,9 +61,6 @@ jobs:
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Update npm for trusted publishing
-        run: npm install -g npm@latest
-
       - name: Install dependencies
         run: pnpm install
 
@@ -93,7 +90,7 @@ jobs:
           cd packages/sweetlink
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/sweetlink@$VERSION"
-          npm publish --tag latest --access public --provenance
+          pnpm publish --tag latest --access public --provenance --no-git-checks
 
       - name: Create sweetlink GitHub release
         if: inputs.sweetlink_version != ''
@@ -117,7 +114,7 @@ jobs:
           cd packages/devbar
           node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = process.env.VERSION; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           echo "Publishing @ytspar/devbar@$VERSION"
-          npm publish --tag latest --access public --provenance
+          pnpm publish --tag latest --access public --provenance --no-git-checks
 
       - name: Create devbar GitHub release
         if: inputs.devbar_version != ''

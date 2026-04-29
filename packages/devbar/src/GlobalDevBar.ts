@@ -135,8 +135,14 @@ export class GlobalDevBar {
   }
 
   // -- Public state exposed via DevBarState interface for modules --
-  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug' | 'sweetlink'>> &
+  options: Required<
+    Omit<
+      GlobalDevBarOptions,
+      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode'
+    >
+  > &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
+  readonly forcedThemeMode: ThemeMode | undefined;
   private debugConfig!: DebugConfig;
   debug!: DebugLogger;
   container: HTMLDivElement | null = null;
@@ -263,9 +269,18 @@ export class GlobalDevBar {
     // Initialize debug config first so we can log during construction
     this.debugConfig = normalizeDebugConfig(options.debug);
     this.debug = new DebugLogger(this.debugConfig);
+    this.forcedThemeMode = options.themeMode;
 
     // Initialize settings manager
-    this.settingsManager = getSettingsManager();
+    this.settingsManager = getSettingsManager(
+      options.defaultThemeMode ? { themeMode: options.defaultThemeMode } : {}
+    );
+
+    if (this.forcedThemeMode) {
+      this.settingsManager.saveSettingsNow({
+        themeMode: this.forcedThemeMode,
+      });
+    }
 
     // Calculate app and WS ports from the browser URL for multi-instance support
     if (typeof window !== 'undefined') {
@@ -551,19 +566,29 @@ export class GlobalDevBar {
    * Apply settings to the DevBar state and options
    */
   applySettings(settings: DevBarSettings): void {
+    const effectiveSettings = this.forcedThemeMode
+      ? { ...settings, themeMode: this.forcedThemeMode }
+      : settings;
+
+    if (this.forcedThemeMode && this.settingsManager.get('themeMode') !== this.forcedThemeMode) {
+      this.settingsManager.saveSettingsNow({
+        themeMode: this.forcedThemeMode,
+      });
+    }
+
     // Update local state
-    this.themeMode = settings.themeMode;
-    this.compactMode = settings.compactMode;
+    this.themeMode = effectiveSettings.themeMode;
+    this.compactMode = effectiveSettings.compactMode;
 
     // Update options
-    this.options.position = settings.position;
-    this.options.accentColor = settings.accentColor;
-    this.options.showScreenshot = settings.showScreenshot;
-    this.options.showConsoleBadges = settings.showConsoleBadges;
-    this.options.showTooltips = settings.showTooltips;
-    this.options.saveLocation = settings.saveLocation;
-    this.options.screenshotQuality = settings.screenshotQuality ?? 0.65;
-    this.options.showMetrics = { ...settings.showMetrics };
+    this.options.position = effectiveSettings.position;
+    this.options.accentColor = effectiveSettings.accentColor;
+    this.options.showScreenshot = effectiveSettings.showScreenshot;
+    this.options.showConsoleBadges = effectiveSettings.showConsoleBadges;
+    this.options.showTooltips = effectiveSettings.showTooltips;
+    this.options.saveLocation = effectiveSettings.saveLocation;
+    this.options.screenshotQuality = effectiveSettings.screenshotQuality ?? 0.65;
+    this.options.showMetrics = { ...effectiveSettings.showMetrics };
 
     // Re-render with new settings
     this.render();

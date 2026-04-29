@@ -143,6 +143,18 @@ export const DEFAULT_SETTINGS: DevBarSettings = {
   debug: false,
 };
 
+function createDefaultSettings(overrides: Partial<DevBarSettings> = {}): DevBarSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...overrides,
+    version: 1,
+    showMetrics: {
+      ...DEFAULT_SETTINGS.showMetrics,
+      ...overrides.showMetrics,
+    },
+  };
+}
+
 // ============================================================================
 // Storage Keys
 // ============================================================================
@@ -170,6 +182,7 @@ export type SettingsChangeCallback = (settings: DevBarSettings) => void;
  * settings persist even when Sweetlink is unavailable.
  */
 export class SettingsManager {
+  private defaultSettings: DevBarSettings;
   private settings: DevBarSettings;
   private ws: WebSocket | null = null;
   private sweetlinkConnected = false;
@@ -180,10 +193,21 @@ export class SettingsManager {
   /** Debounce delay for saving settings (ms) */
   private static readonly SAVE_DEBOUNCE_MS = 300;
 
-  constructor() {
+  constructor(defaultSettings: Partial<DevBarSettings> = {}) {
+    this.defaultSettings = createDefaultSettings(defaultSettings);
     // Load settings from localStorage immediately (synchronous)
     // This ensures settings are available before first render
     this.settings = this.loadFromLocalStorage();
+  }
+
+  /**
+   * Update default values used for first run, missing settings, and reset.
+   */
+  setDefaultSettings(defaultSettings: Partial<DevBarSettings>): void {
+    this.defaultSettings = createDefaultSettings(defaultSettings);
+    this.settings = this.hasLocalStorageSettings()
+      ? this.migrateSettings(this.settings)
+      : { ...this.defaultSettings };
   }
 
   /**
@@ -298,7 +322,7 @@ export class SettingsManager {
    * Reset settings to defaults
    */
   resetToDefaults(): void {
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = { ...this.defaultSettings };
     this.performSave();
     this.notifyChange();
   }
@@ -341,20 +365,32 @@ export class SettingsManager {
 
   private loadFromLocalStorage(): DevBarSettings {
     if (typeof localStorage === 'undefined') {
-      return { ...DEFAULT_SETTINGS };
+      return { ...this.defaultSettings };
     }
 
     try {
       const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (!stored) {
-        return { ...DEFAULT_SETTINGS };
+        return { ...this.defaultSettings };
       }
 
       const parsed = JSON.parse(stored) as Partial<DevBarSettings>;
       return this.migrateSettings(parsed);
     } catch (error) {
       console.warn('[devbar] Failed to parse localStorage settings:', error);
-      return { ...DEFAULT_SETTINGS };
+      return { ...this.defaultSettings };
+    }
+  }
+
+  private hasLocalStorageSettings(): boolean {
+    if (typeof localStorage === 'undefined') {
+      return false;
+    }
+
+    try {
+      return localStorage.getItem(SETTINGS_STORAGE_KEY) !== null;
+    } catch {
+      return false;
     }
   }
 
@@ -409,13 +445,13 @@ export class SettingsManager {
   private migrateSettings(partial: Partial<DevBarSettings>): DevBarSettings {
     // Merge partial settings over defaults, then handle nested objects specially
     return {
-      ...DEFAULT_SETTINGS,
+      ...this.defaultSettings,
       ...partial,
       // Always use current schema version
       version: 1,
       // Deep merge showMetrics to preserve unset defaults
       showMetrics: {
-        ...DEFAULT_SETTINGS.showMetrics,
+        ...this.defaultSettings.showMetrics,
         ...partial.showMetrics,
       },
     };
@@ -430,9 +466,11 @@ let settingsManagerInstance: SettingsManager | null = null;
 /**
  * Get the singleton SettingsManager instance
  */
-export function getSettingsManager(): SettingsManager {
+export function getSettingsManager(defaultSettings: Partial<DevBarSettings> = {}): SettingsManager {
   if (!settingsManagerInstance) {
-    settingsManagerInstance = new SettingsManager();
+    settingsManagerInstance = new SettingsManager(defaultSettings);
+  } else if (Object.keys(defaultSettings).length > 0) {
+    settingsManagerInstance.setDefaultSettings(defaultSettings);
   }
   return settingsManagerInstance;
 }

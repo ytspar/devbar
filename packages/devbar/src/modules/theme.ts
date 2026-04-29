@@ -14,7 +14,10 @@ import type { DevBarState } from './types.js';
 export function setupTheme(state: DevBarState): void {
   // Load stored theme preference from settings manager
   const settings = state.settingsManager.getSettings();
-  state.themeMode = settings.themeMode;
+  state.themeMode = state.forcedThemeMode ?? settings.themeMode;
+  if (state.forcedThemeMode && settings.themeMode !== state.forcedThemeMode) {
+    state.settingsManager.saveSettingsNow({ themeMode: state.forcedThemeMode });
+  }
   // Inject the appropriate theme CSS variables on initial load
   injectThemeCSS(getTheme(state.themeMode));
   state.debug.state('Theme loaded', { mode: state.themeMode });
@@ -53,16 +56,20 @@ export function loadCompactMode(state: DevBarState): void {
  * Set the theme mode, persist it, inject CSS, and dispatch event.
  */
 export function setThemeMode(state: DevBarState, mode: ThemeMode): void {
-  state.themeMode = mode;
-  state.settingsManager.saveSettings({ themeMode: mode });
+  const nextMode = state.forcedThemeMode ?? mode;
+  state.themeMode = nextMode;
+  state.settingsManager.saveSettings({ themeMode: nextMode });
   // Also update legacy storage key for backwards compatibility with getStoredThemeMode()
-  setStoredThemeMode(mode);
+  setStoredThemeMode(nextMode);
   // Inject the appropriate theme CSS variables
-  injectThemeCSS(getTheme(mode));
-  state.debug.state('Theme mode changed', { mode, effectiveTheme: getEffectiveTheme(mode) });
+  injectThemeCSS(getTheme(nextMode));
+  state.debug.state('Theme mode changed', {
+    mode: nextMode,
+    effectiveTheme: getEffectiveTheme(nextMode),
+  });
   // Dispatch custom event so host apps can respond to theme changes
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('devbar-theme-change', { detail: { mode } }));
+    window.dispatchEvent(new CustomEvent('devbar-theme-change', { detail: { mode: nextMode } }));
   }
   state.render();
 }

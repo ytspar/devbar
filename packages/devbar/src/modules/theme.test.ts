@@ -47,6 +47,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
         saveLocation: 'auto',
       })),
       saveSettings: vi.fn(),
+      saveSettingsNow: vi.fn(),
     } as any,
     render: vi.fn(),
     ...overrides,
@@ -73,6 +74,19 @@ describe('setupTheme', () => {
 
     expect(state.themeMode).toBe('dark');
     expect(state.debug.state).toHaveBeenCalledWith('Theme loaded', { mode: 'dark' });
+  });
+
+  it('uses forced theme mode over stored settings', () => {
+    const state = createMockState({ forcedThemeMode: 'dark' });
+    (state.settingsManager.getSettings as any).mockReturnValue({
+      themeMode: 'light',
+      compactMode: false,
+    });
+
+    setupTheme(state);
+
+    expect(state.themeMode).toBe('dark');
+    expect(state.settingsManager.saveSettingsNow).toHaveBeenCalledWith({ themeMode: 'dark' });
   });
 
   it('injects theme CSS variables into the document', () => {
@@ -182,6 +196,19 @@ describe('setThemeMode', () => {
     setThemeMode(state, 'light');
 
     expect(state.settingsManager.saveSettings).toHaveBeenCalledWith({ themeMode: 'light' });
+  });
+
+  it('keeps forced theme mode when a different mode is requested', () => {
+    const state = createMockState({ forcedThemeMode: 'dark' });
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    setThemeMode(state, 'light');
+
+    expect(state.themeMode).toBe('dark');
+    expect(state.settingsManager.saveSettings).toHaveBeenCalledWith({ themeMode: 'dark' });
+    const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
+    expect(event.detail).toEqual({ mode: 'dark' });
+    dispatchSpy.mockRestore();
   });
 
   it('injects theme CSS for the new mode', () => {

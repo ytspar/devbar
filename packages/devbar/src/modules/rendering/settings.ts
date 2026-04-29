@@ -143,11 +143,14 @@ function createSettingsHeader(state: DevBarState): HTMLDivElement {
 
 function createThemeSection(state: DevBarState): HTMLDivElement {
   const { accentColor } = state.options;
+  const isThemeControlled = Boolean(state.forcedThemeMode);
 
   const themeSection = createSettingsSection('Theme');
   appendSettingHint(
     themeSection,
-    'Match the host app, force dark, or force light while reviewing.'
+    isThemeControlled
+      ? `Theme is controlled by the host app: ${state.forcedThemeMode}.`
+      : 'Follow OS/browser preference, force dark, or force light while reviewing.'
   );
 
   const themeOptions = document.createElement('div');
@@ -159,6 +162,8 @@ function createThemeSection(state: DevBarState): HTMLDivElement {
       label: mode,
       isActive: state.themeMode === mode,
       accentColor,
+      disabled: isThemeControlled && mode !== state.forcedThemeMode,
+      disabledTitle: 'Theme controlled by host app',
       onClick: () => setThemeMode(state, mode),
     });
     btn.style.textTransform = 'capitalize';

@@ -116,6 +116,26 @@ describe('settings', () => {
         expect(manager.get('themeMode')).toBe('system');
         expect(manager.get('compactMode')).toBe(false);
       });
+
+      it('uses custom default themeMode when no saved settings exist', () => {
+        const darkDefaultManager = new SettingsManager({ themeMode: 'dark' });
+
+        expect(darkDefaultManager.get('themeMode')).toBe('dark');
+      });
+
+      it('preserves saved themeMode over custom defaults', () => {
+        localStorageMock.setItem(
+          SETTINGS_STORAGE_KEY,
+          JSON.stringify({
+            ...DEFAULT_SETTINGS,
+            themeMode: 'light',
+          })
+        );
+
+        const darkDefaultManager = new SettingsManager({ themeMode: 'dark' });
+
+        expect(darkDefaultManager.get('themeMode')).toBe('light');
+      });
     });
 
     describe('saveSettings', () => {
@@ -192,6 +212,15 @@ describe('settings', () => {
         const stored = JSON.parse(localStorageMock.getItem(SETTINGS_STORAGE_KEY)!);
         expect(stored).toEqual(DEFAULT_SETTINGS);
       });
+
+      it('resets to custom defaults when configured', () => {
+        const darkDefaultManager = new SettingsManager({ themeMode: 'dark' });
+        darkDefaultManager.saveSettingsNow({ themeMode: 'light' });
+
+        darkDefaultManager.resetToDefaults();
+
+        expect(darkDefaultManager.get('themeMode')).toBe('dark');
+      });
     });
 
     describe('onChange', () => {
@@ -245,6 +274,20 @@ describe('settings', () => {
         expect(newManager.get('themeMode')).toBe('system');
         expect(newManager.get('compactMode')).toBe(false);
         expect(newManager.get('showMetrics')).toEqual(DEFAULT_SETTINGS.showMetrics);
+      });
+
+      it('fills missing themeMode from custom defaults', async () => {
+        const partialSettings = {
+          version: 1,
+          position: 'top-right',
+        };
+        localStorageMock.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(partialSettings));
+
+        const darkDefaultManager = new SettingsManager({ themeMode: 'dark' });
+        await darkDefaultManager.loadSettings();
+
+        expect(darkDefaultManager.get('position')).toBe('top-right');
+        expect(darkDefaultManager.get('themeMode')).toBe('dark');
       });
 
       it('merges partial showMetrics with defaults', async () => {

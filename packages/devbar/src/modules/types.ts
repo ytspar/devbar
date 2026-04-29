@@ -26,7 +26,12 @@ export type PositionStyle = {
  */
 export interface DevBarState {
   // Options
-  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug' | 'sweetlink'>> &
+  options: Required<
+    Omit<
+      GlobalDevBarOptions,
+      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode'
+    >
+  > &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
   debug: DebugLogger;
 
@@ -114,6 +119,7 @@ export interface DevBarState {
   inpObserver: PerformanceObserver | null;
 
   // Theme
+  readonly forcedThemeMode?: ThemeMode;
   themeMode: ThemeMode;
   themeMediaQuery: MediaQueryList | null;
   themeMediaHandler: ((e: MediaQueryListEvent) => void) | null;

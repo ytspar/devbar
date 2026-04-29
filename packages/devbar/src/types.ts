@@ -51,6 +51,10 @@ export interface GlobalDevBarOptions {
   position?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right' | 'bottom-center';
   /** Primary accent color (CSS color). Default: '#10b981' (emerald) */
   accentColor?: string;
+  /** First-run/reset theme mode when no saved preference exists. Default: 'system' */
+  defaultThemeMode?: ThemeMode;
+  /** Force a theme mode for host apps that do not support every DevBar theme. */
+  themeMode?: ThemeMode;
   /** Which metrics to show. Default: all enabled */
   showMetrics?: {
     breakpoint?: boolean;

@@ -199,6 +199,37 @@ describe('connectWebSocket', () => {
     expect(instances[0].url).toBe('ws://localhost:9225');
   });
 
+  it('uses injected WebSocket candidates before the default port', () => {
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({
+      baseWsPort: 10346,
+      wsUrlCandidates: ['wss://security1000.localhost/__sweetlink', 'ws://localhost:10346'],
+    } as Partial<DevBarState>);
+    connectWebSocket(state);
+
+    expect(instances[0].url).toBe('wss://security1000.localhost/__sweetlink');
+  });
+
+  it('falls back from same-origin WebSocket candidate to direct localhost port', () => {
+    vi.useFakeTimers();
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({
+      baseWsPort: 10346,
+      wsUrlCandidates: ['wss://security1000.localhost/__sweetlink', 'ws://localhost:10346'],
+    } as Partial<DevBarState>);
+    connectWebSocket(state);
+
+    instances[0].onclose!({});
+    vi.advanceTimersByTime(200);
+
+    expect(instances[1].url).toBe('ws://localhost:10346');
+    vi.useRealTimers();
+  });
+
   it('sends browser-client-ready on open', () => {
     const { MockWebSocket, instances } = createMockWebSocketClass();
     globalThis.WebSocket = MockWebSocket as any;

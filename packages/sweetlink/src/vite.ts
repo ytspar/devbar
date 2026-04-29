@@ -17,7 +17,7 @@
 
 import type { Plugin } from 'vite';
 import { closeSweetlink, initSweetlink } from './server/index.js';
-import { WS_PORT_OFFSET } from './types.js';
+import { SWEETLINK_WS_PATH, WS_PORT_OFFSET } from './types.js';
 
 export interface SweetlinkPluginOptions {
   /**
@@ -39,12 +39,29 @@ export interface SweetlinkPluginOptions {
    * Default: false
    */
   headed?: boolean;
+
+  /**
+   * Expose Sweetlink on the app origin at /__sweetlink.
+   * This lets HTTPS local proxies such as Portless use wss://<app>/__sweetlink.
+   * Default: true
+   */
+  sameOrigin?: boolean;
+
+  /**
+   * Same-origin WebSocket path. Only used when sameOrigin is enabled.
+   * Default: /__sweetlink
+   */
+  wsPath?: string;
 }
 
 /**
  * Vite plugin for automatic Sweetlink integration
  */
 export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
+  let appPort = 5173;
+  let actualWsPort = appPort + WS_PORT_OFFSET;
+  const wsPath = options.wsPath ?? SWEETLINK_WS_PATH;
+
   return {
     name: 'sweetlink',
     apply: 'serve', // Only run in dev mode
@@ -57,14 +74,22 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
 
         const address = viteServer.httpServer?.address();
         const vitePort = typeof address === 'object' && address ? address.port : 5173;
+        appPort = vitePort;
 
         // Calculate WebSocket port (matches GlobalDevBar's calculation)
         const wsPort = options.port ?? vitePort + WS_PORT_OFFSET;
+        actualWsPort = wsPort;
 
         initSweetlink({
           port: wsPort,
           appPort: vitePort,
+          appServer:
+            options.sameOrigin === false
+              ? undefined
+              : (viteServer.httpServer as Parameters<typeof initSweetlink>[0]['appServer']),
+          wsPath,
           onReady: (actualPort) => {
+            actualWsPort = actualPort;
             if (actualPort !== wsPort) {
               console.log(`[Sweetlink] Using port ${actualPort} (${wsPort} was in use)`);
             }
@@ -94,6 +119,16 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
             });
         }
       });
+    },
+
+    transformIndexHtml() {
+      return [
+        {
+          tag: 'script',
+          injectTo: 'head-prepend',
+          children: `window.__SWEETLINK__=Object.assign({},window.__SWEETLINK__,{appPort:${appPort},wsPort:${actualWsPort},wsPath:${JSON.stringify(wsPath)}});window.__SWEETLINK_APP_PORT__=${appPort};window.__SWEETLINK_WS_PORT__=${actualWsPort};window.__SWEETLINK_WS_PATH__=${JSON.stringify(wsPath)};`,
+        },
+      ];
     },
 
     buildEnd() {

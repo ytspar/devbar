@@ -140,6 +140,10 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
   afterEach(() => {
     bridge.destroy();
     restoreWS();
+    delete (window as unknown as Record<string, unknown>).__SWEETLINK__;
+    delete (window as unknown as Record<string, unknown>).__SWEETLINK_APP_PORT__;
+    delete (window as unknown as Record<string, unknown>).__SWEETLINK_WS_PORT__;
+    delete (window as unknown as Record<string, unknown>).__SWEETLINK_WS_PATH__;
     console.log = originalLog;
     console.error = originalError;
     console.warn = originalWarn;
@@ -150,6 +154,20 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
     bridge.init();
     expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(1);
     expect(MockWebSocket.instances[0].url).toBe('ws://localhost:9000');
+  });
+
+  it('uses injected runtime config and same-origin WebSocket path', () => {
+    bridge.destroy();
+    (window as unknown as Record<string, unknown>).__SWEETLINK__ = {
+      appPort: 4123,
+      wsPort: 10346,
+      wsPath: '/__sweetlink',
+    };
+    bridge = new SweetlinkBridge();
+
+    bridge.init();
+
+    expect(MockWebSocket.instances.at(-1)?.url).toBe('ws://localhost:3000/__sweetlink');
   });
 
   it('sends browser-client-ready on WebSocket open', () => {

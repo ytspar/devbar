@@ -38,12 +38,67 @@ function cleanupPendingWindow(state: DevBarState): void {
   }
 }
 
-export function connectWebSocket(state: DevBarState, port?: number): void {
+function getDefaultWsUrl(state: DevBarState): string {
+  return `ws://localhost:${state.baseWsPort}`;
+}
+
+function getWsUrlCandidates(state: DevBarState): readonly string[] {
+  return state.wsUrlCandidates?.length ? state.wsUrlCandidates : [getDefaultWsUrl(state)];
+}
+
+function getWsUrlForTarget(state: DevBarState, target?: number | string): string {
+  if (typeof target === 'string') return target;
+  if (typeof target === 'number') return `ws://localhost:${target}`;
+  return getWsUrlCandidates(state)[0] ?? getDefaultWsUrl(state);
+}
+
+function getPortForTarget(targetUrl: string): number | null {
+  try {
+    const url = new URL(targetUrl);
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return null;
+    const port = Number(url.port);
+    return Number.isInteger(port) && port > 0 ? port : null;
+  } catch {
+    return null;
+  }
+}
+
+function scheduleNextTarget(
+  state: DevBarState,
+  targetUrl: string,
+  delayMs: number = PORT_RETRY_DELAY_MS
+): void {
+  const candidates = getWsUrlCandidates(state);
+  const candidateIndex = candidates.indexOf(targetUrl);
+  if (candidateIndex >= 0 && candidateIndex + 1 < candidates.length) {
+    setTimeout(() => connectWebSocket(state, candidates[candidateIndex + 1]!), delayMs);
+    return;
+  }
+
+  const targetPort = getPortForTarget(targetUrl);
+  if (targetPort !== null) {
+    const nextPort = targetPort + 1;
+    if (nextPort < state.baseWsPort + MAX_PORT_RETRIES) {
+      setTimeout(() => connectWebSocket(state, nextPort), delayMs);
+      return;
+    }
+  }
+
+  setTimeout(() => connectWebSocket(state), PORT_SCAN_RESTART_DELAY_MS);
+}
+
+export function connectWebSocket(state: DevBarState, port?: number | string): void {
   if (state.destroyed) return;
 
-  const targetPort = port ?? state.baseWsPort;
-  state.debug.ws('Connecting to WebSocket', { port: targetPort, appPort: state.currentAppPort });
-  const ws = new WebSocket(`ws://localhost:${targetPort}`);
+  const targetUrl = getWsUrlForTarget(state, port);
+  const targetPort = getPortForTarget(targetUrl);
+  state.debug.ws('Connecting to WebSocket', {
+    url: targetUrl,
+    port: targetPort ?? 'same-origin',
+    appPort: state.currentAppPort,
+  });
+  const ws = new WebSocket(targetUrl);
+  let switchingTargets = false;
   state.ws = ws;
   state.wsVerified = false;
 
@@ -65,18 +120,11 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
           state.debug.ws('Server mismatch', {
             serverAppPort,
             currentAppPort: state.currentAppPort,
-            tryingNextPort: targetPort + 1,
+            targetUrl,
           });
+          switchingTargets = true;
           ws.close();
-
-          // Try next port
-          const nextPort = targetPort + 1;
-          if (nextPort < state.baseWsPort + MAX_PORT_RETRIES) {
-            setTimeout(() => connectWebSocket(state, nextPort), PORT_RETRY_DELAY_MS);
-          } else {
-            state.debug.ws('No matching server found, will retry from base port');
-            setTimeout(() => connectWebSocket(state, state.baseWsPort), PORT_SCAN_RESTART_DELAY_MS);
-          }
+          scheduleNextTarget(state, targetUrl);
           return;
         }
 
@@ -180,6 +228,13 @@ export function connectWebSocket(state: DevBarState, port?: number): void {
           () => connectWebSocket(state, state.baseWsPort),
           Math.min(delayMs, MAX_RECONNECT_DELAY_MS)
         );
+      }
+    } else if (!state.destroyed && !switchingTargets) {
+      const candidates = getWsUrlCandidates(state);
+      const candidateIndex = candidates.indexOf(targetUrl);
+      if (candidateIndex >= 0 && candidateIndex + 1 < candidates.length) {
+        state.debug.ws('WebSocket closed before verification, trying next candidate');
+        scheduleNextTarget(state, targetUrl);
       }
     }
   };

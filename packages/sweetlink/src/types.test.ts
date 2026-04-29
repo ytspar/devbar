@@ -6,8 +6,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  createSameOriginSweetlinkWsUrl,
   DEFAULT_WS_PORT,
   getErrorMessage,
+  getSweetlinkRuntimeConfig,
   isConsoleLog,
   isDesignReviewScreenshotData,
   isHmrScreenshotData,
@@ -24,6 +26,7 @@ import {
   resolveAppPortFromLocation,
   resolveSweetlinkWsPortForAppPort,
   resolveSweetlinkWsPortFromLocation,
+  SWEETLINK_WS_PATH,
   WS_PORT_OFFSET,
 } from './types.js';
 
@@ -217,6 +220,8 @@ describe('Local Development URL Helpers', () => {
     expect(isLocalDevelopmentHostname('127.0.0.1')).toBe(true);
     expect(isLocalDevelopmentHostname('[::1]')).toBe(true);
     expect(isLocalDevelopmentHostname('security1000.localhost')).toBe(true);
+    expect(isLocalDevelopmentHostname('security1000.test')).toBe(true);
+    expect(isLocalDevelopmentHostname('security1000.local')).toBe(true);
     expect(isLocalDevelopmentHostname('example.com')).toBe(false);
     expect(isLocalDevelopmentHostname('localhost.example.com')).toBe(false);
   });
@@ -236,9 +241,42 @@ describe('Local Development URL Helpers', () => {
     );
   });
 
+  it('reads injected Sweetlink runtime config for proxied dev servers', () => {
+    const config = getSweetlinkRuntimeConfig({
+      __SWEETLINK__: {
+        appPort: 4123,
+        wsPort: 10346,
+        wsPath: SWEETLINK_WS_PATH,
+      },
+    });
+
+    expect(config.appPort).toBe(4123);
+    expect(config.wsPort).toBe(10346);
+    expect(config.wsPath).toBe(SWEETLINK_WS_PATH);
+  });
+
+  it('creates same-origin websocket URLs for HTTP and HTTPS app origins', () => {
+    expect(
+      createSameOriginSweetlinkWsUrl({
+        protocol: 'https:',
+        host: 'security1000.localhost',
+        port: '',
+      })
+    ).toBe('wss://security1000.localhost/__sweetlink');
+    expect(
+      createSameOriginSweetlinkWsUrl({
+        protocol: 'http:',
+        host: 'localhost:5173',
+        port: '5173',
+      })
+    ).toBe('ws://localhost:5173/__sweetlink');
+  });
+
   it('accepts Portless-style local origins and rejects external origins', () => {
     expect(isLocalDevelopmentOrigin('http://security1000.localhost:1355')).toBe(true);
     expect(isLocalDevelopmentOrigin('https://security1000.localhost')).toBe(true);
+    expect(isLocalDevelopmentOrigin('https://security1000.test')).toBe(true);
+    expect(isLocalDevelopmentOrigin('https://security1000.local')).toBe(true);
     expect(isLocalDevelopmentOrigin('http://localhost:3000')).toBe(true);
     expect(isLocalDevelopmentOrigin('http://127.0.0.1:3000')).toBe(true);
     expect(isLocalDevelopmentOrigin('http://[::1]:3000')).toBe(true);

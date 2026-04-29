@@ -26,7 +26,7 @@ export type PositionStyle = {
  */
 export interface DevBarState {
   // Options
-  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug'>> &
+  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug' | 'sweetlink'>> &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
   debug: DebugLogger;
 
@@ -44,6 +44,7 @@ export interface DevBarState {
   reconnectAttempts: number;
   readonly currentAppPort: number;
   readonly baseWsPort: number;
+  readonly wsUrlCandidates?: readonly string[];
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
   destroyed: boolean;
 
@@ -156,7 +157,7 @@ export interface DevBarState {
   createCollapsedBadge: (count: number, bgColor: string, rightPos: string) => HTMLSpanElement;
   handleScreenshot: (copyToClipboard: boolean) => Promise<void>;
   toggleCompactMode: () => void;
-  connectWebSocket: (port?: number) => void;
+  connectWebSocket: (port?: number | string) => void;
   handleNotification: (
     type: 'screenshot' | 'designReview' | 'outline' | 'schema' | 'consoleLogs' | 'a11y',
     path: string | undefined,

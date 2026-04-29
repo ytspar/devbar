@@ -402,9 +402,9 @@ describe('Sweetlink server module', () => {
       return ws;
     }
 
-    function makeRequest(origin?: string): IncomingMessage {
+    function makeRequest(origin?: string, host = 'localhost:9223'): IncomingMessage {
       return {
-        headers: { origin },
+        headers: { origin, host },
         socket: { remoteAddress: '127.0.0.1', remotePort: 54321 },
       } as unknown as IncomingMessage;
     }
@@ -444,6 +444,26 @@ describe('Sweetlink server module', () => {
       await initDefault({ appPort: 443 });
       const ws = makeClientSocket();
       const req = makeRequest('https://security1000.localhost');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    it('allows Portless custom .test origins', async () => {
+      await initDefault({ appPort: 4123 });
+      const ws = makeClientSocket();
+      const req = makeRequest('https://security1000.test');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    it('allows same-origin proxy endpoints for arbitrary local hostnames', async () => {
+      await initDefault({ appPort: 4123 });
+      const ws = makeClientSocket();
+      const req = makeRequest('https://security1000.dev', 'security1000.dev');
 
       mockWssInstance.emit('connection', ws, req);
 
@@ -525,6 +545,19 @@ describe('Sweetlink server module', () => {
 
       mockWssInstance.emit('connection', ws, req);
 
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
+      consoleSpy.mockRestore();
+    });
+
+    it('does not warn when a named Portless origin hides the internal app port', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await initDefault({ appPort: 4123 });
+      const ws = makeClientSocket();
+      const req = makeRequest('https://security1000.localhost');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).not.toHaveBeenCalled();
       expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
       consoleSpy.mockRestore();
     });

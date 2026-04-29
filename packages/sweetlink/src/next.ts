@@ -30,6 +30,23 @@ export interface WithSweetlinkOptions {
   port?: number;
 }
 
+function addSweetlinkClientEnv<T>(nextConfig: T, appPort: number, wsPort: number): T {
+  if (!nextConfig || typeof nextConfig !== 'object' || Array.isArray(nextConfig)) {
+    return nextConfig;
+  }
+
+  const config = nextConfig as Record<string, unknown>;
+  const env = config.env && typeof config.env === 'object' ? config.env : {};
+  return {
+    ...config,
+    env: {
+      ...(env as Record<string, unknown>),
+      NEXT_PUBLIC_SWEETLINK_APP_PORT: String(appPort),
+      NEXT_PUBLIC_SWEETLINK_WS_PORT: String(wsPort),
+    },
+  } as T;
+}
+
 /**
  * Detect the Next.js dev server port from CLI args or environment.
  *
@@ -91,7 +108,7 @@ export function withSweetlink<T>(nextConfig: T, options?: WithSweetlinkOptions):
   process.on('SIGTERM', handleShutdown);
   process.on('SIGINT', handleShutdown);
 
-  return nextConfig;
+  return addSweetlinkClientEnv(nextConfig, appPort, wsPort);
 }
 
 export default withSweetlink;

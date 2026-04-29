@@ -218,6 +218,17 @@ The devbar automatically connects to the Sweetlink WebSocket server (port 9223) 
 - AI-powered design review via Claude
 - Document outline and schema export
 
+For proxied local URLs such as Portless (`https://myapp.localhost`), use the
+Sweetlink Vite or Next integration so the real internal app/WebSocket ports are
+injected automatically. If you run Sweetlink manually behind a proxy, pass both
+the internal app port and WebSocket port:
+
+```typescript
+initGlobalDevBar({
+  sweetlink: { appPort: 4123, wsPort: 10346 }
+});
+```
+
 For screenshot evidence where the toolbar should not appear, use Sweetlink's capture flag:
 
 ```bash

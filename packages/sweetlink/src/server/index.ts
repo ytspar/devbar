@@ -6,7 +6,13 @@
 
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
-import { createServer, type IncomingMessage, type ServerResponse } from 'http';
+import {
+  createServer,
+  type Server as HttpServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'http';
+import type { Server as HttpsServer } from 'https';
 import * as path from 'path';
 import { WebSocket, WebSocketServer } from 'ws';
 
@@ -36,6 +42,7 @@ import {
   isSaveScreenshotData,
   isSaveSettingsData,
   localOriginMatchesAppPort,
+  SWEETLINK_WS_PATH,
 } from '../types.js';
 
 // Import constants
@@ -139,6 +146,7 @@ function detectAppName(cwd: string): string | undefined {
 
 // Module-level state
 let wss: WebSocketServer | null = null;
+let attachedWss: WebSocketServer | null = null;
 let httpServer: ReturnType<typeof createServer> | null = null;
 let activePort: number | null = null;
 let associatedAppPort: number | null = null;
@@ -197,6 +205,10 @@ export interface InitSweetlinkOptions {
   appPort?: number;
   /** Override the app name (default: auto-detected from package.json) */
   appName?: string;
+  /** Existing app server to expose a same-origin WebSocket endpoint on. */
+  appServer?: HttpServer | HttpsServer;
+  /** Path for the same-origin WebSocket endpoint. Default: /__sweetlink */
+  wsPath?: string;
 }
 
 /**
@@ -294,6 +306,12 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         }
         options.onReady?.(port);
         setupServerHandlers(server);
+        if (options.appServer) {
+          const wsPath = options.wsPath ?? SWEETLINK_WS_PATH;
+          attachedWss = new WebSocketServer({ server: options.appServer, path: wsPath });
+          setupServerHandlers(attachedWss);
+          console.log(`[Sweetlink] Same-origin WebSocket endpoint available at ${wsPath}`);
+        }
         resolve(server);
       });
     };
@@ -1053,6 +1071,41 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
 // Server Setup
 // ============================================================================
 
+function getRequestHost(req: IncomingMessage): string | null {
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const rawHost = Array.isArray(forwardedHost)
+    ? forwardedHost[0]
+    : (forwardedHost ?? req.headers.host);
+  return typeof rawHost === 'string' && rawHost ? rawHost.toLowerCase() : null;
+}
+
+function originMatchesRequestHost(origin: string, req: IncomingMessage): boolean {
+  const requestHost = getRequestHost(req);
+  if (!requestHost) return false;
+
+  try {
+    return new URL(origin).host.toLowerCase() === requestHost;
+  } catch {
+    return false;
+  }
+}
+
+function shouldWarnAboutOriginPort(origin: string, req: IncomingMessage): boolean {
+  if (originMatchesRequestHost(origin, req)) return false;
+
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname === '[::1]'
+    );
+  } catch {
+    return false;
+  }
+}
+
 function setupServerHandlers(server: WebSocketServer): void {
   server.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
@@ -1065,14 +1118,18 @@ function setupServerHandlers(server: WebSocketServer): void {
       );
     }
     if (origin) {
-      if (!isLocalDevelopmentOrigin(origin)) {
+      const isAllowedOrigin =
+        isLocalDevelopmentOrigin(origin) || originMatchesRequestHost(origin, req);
+      if (!isAllowedOrigin) {
         console.log(`[Sweetlink] Rejecting non-local development connection from ${origin}`);
         ws.close(4001, 'Only local development origins allowed');
         return;
       }
 
-      // If appPort is configured, enforce strict port matching for security
-      if (associatedAppPort !== null) {
+      // Direct localhost origins should usually match the app port. Named proxy
+      // origins (Portless, LAN mode) expose a proxy port, so matching here would
+      // produce noisy false positives.
+      if (associatedAppPort !== null && shouldWarnAboutOriginPort(origin, req)) {
         if (!localOriginMatchesAppPort(origin, associatedAppPort)) {
           console.warn(
             `[Sweetlink] Connection from unexpected port: ${origin} (expected port: ${associatedAppPort})`
@@ -1147,7 +1204,7 @@ function setupServerHandlers(server: WebSocketServer): void {
 
 export function closeSweetlink(): Promise<void> {
   return new Promise((resolve) => {
-    if (!wss && !httpServer) {
+    if (!wss && !attachedWss && !httpServer) {
       resolve();
       return;
     }
@@ -1174,6 +1231,11 @@ export function closeSweetlink(): Promise<void> {
     if (wss) {
       wss.close();
       wss = null;
+    }
+
+    if (attachedWss) {
+      attachedWss.close();
+      attachedWss = null;
     }
 
     // Close HTTP server (this releases the port)

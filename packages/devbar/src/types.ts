@@ -79,6 +79,17 @@ export interface GlobalDevBarOptions {
     /** Custom min-width (CSS value). Optional */
     minWidth?: string;
   };
+  /** Sweetlink connection overrides for non-standard local routing. */
+  sweetlink?: {
+    /** Internal app port. Useful when a proxy such as Portless hides the real port. */
+    appPort?: number;
+    /** Sweetlink WebSocket port. Overrides the default appPort + 6223 calculation. */
+    wsPort?: number;
+    /** Full Sweetlink WebSocket URL. Takes precedence over wsPort. */
+    wsUrl?: string;
+    /** Same-origin WebSocket path exposed by framework integrations. */
+    wsPath?: string;
+  };
   /** Enable debug logging. Pass true for all options, or an object for specific options. */
   debug?: boolean | DebugConfig;
 }

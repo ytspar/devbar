@@ -18,8 +18,11 @@
 
 import { ConsoleCapture, type LogChangeListener } from '@ytspar/sweetlink/browser/consoleCapture';
 import {
-  resolveAppPortFromLocation,
-  resolveSweetlinkWsPortFromLocation,
+  createSameOriginSweetlinkWsUrl,
+  getSweetlinkRuntimeConfig,
+  parsePortNumber,
+  resolveAppPortFromRuntimeConfig,
+  resolveSweetlinkWsPortForAppPort,
 } from '@ytspar/sweetlink/types';
 import {
   CSS_COLORS,
@@ -71,6 +74,31 @@ export type {
 
 // html2canvas is lazy-loaded via getHtml2Canvas() to avoid bundling ~400KB upfront
 
+function buildSweetlinkWsUrlCandidates(
+  location: Location,
+  options: {
+    wsUrl?: string | null;
+    wsPort?: number | string | null;
+    wsPath?: string | null;
+    fallbackPort: number;
+  }
+): string[] {
+  const urls: string[] = [];
+  const add = (url: string | null | undefined): void => {
+    if (url && !urls.includes(url)) urls.push(url);
+  };
+
+  add(options.wsUrl);
+  if (options.wsPath) {
+    add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
+  }
+
+  const directPort = parsePortNumber(options.wsPort) ?? options.fallbackPort;
+  add(`ws://localhost:${directPort}`);
+
+  return urls;
+}
+
 // ============================================================================
 // Console Capture (single implementation from @ytspar/sweetlink)
 // ============================================================================
@@ -107,7 +135,7 @@ export class GlobalDevBar {
   }
 
   // -- Public state exposed via DevBarState interface for modules --
-  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug'>> &
+  options: Required<Omit<GlobalDevBarOptions, 'sizeOverrides' | 'debug' | 'sweetlink'>> &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
   private debugConfig!: DebugConfig;
   debug!: DebugLogger;
@@ -186,6 +214,7 @@ export class GlobalDevBar {
   // Port scanning state for multi-instance support
   readonly currentAppPort: number;
   readonly baseWsPort: number;
+  readonly wsUrlCandidates: readonly string[];
   wsVerified = false;
   serverProjectDir: string | null = null;
   serverGitBranch: string | null = null;
@@ -240,11 +269,27 @@ export class GlobalDevBar {
 
     // Calculate app and WS ports from the browser URL for multi-instance support
     if (typeof window !== 'undefined') {
-      this.currentAppPort = resolveAppPortFromLocation(window.location);
-      this.baseWsPort = resolveSweetlinkWsPortFromLocation(window.location);
+      const runtimeConfig = getSweetlinkRuntimeConfig(window);
+      const sweetlinkOptions = options.sweetlink;
+      const configuredAppPort =
+        sweetlinkOptions?.appPort ??
+        resolveAppPortFromRuntimeConfig(window.location, runtimeConfig);
+      this.currentAppPort = configuredAppPort;
+      this.baseWsPort =
+        sweetlinkOptions?.wsPort ??
+        parsePortNumber(runtimeConfig.wsPort) ??
+        resolveSweetlinkWsPortForAppPort(configuredAppPort);
+
+      this.wsUrlCandidates = buildSweetlinkWsUrlCandidates(window.location, {
+        wsUrl: sweetlinkOptions?.wsUrl ?? runtimeConfig.wsUrl,
+        wsPort: sweetlinkOptions?.wsPort ?? runtimeConfig.wsPort,
+        wsPath: sweetlinkOptions?.wsPath ?? runtimeConfig.wsPath,
+        fallbackPort: this.baseWsPort,
+      });
     } else {
       this.currentAppPort = 0;
       this.baseWsPort = WS_PORT;
+      this.wsUrlCandidates = [`ws://localhost:${WS_PORT}`];
     }
 
     this.options = {
@@ -490,7 +535,7 @@ export class GlobalDevBar {
 
   // Delegate to module functions, binding `this` as state
 
-  connectWebSocket(port?: number): void {
+  connectWebSocket(port?: number | string): void {
     connectWebSocket(this as DevBarState, port);
   }
 

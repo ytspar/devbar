@@ -92,6 +92,8 @@ That's it! The plugin automatically:
 - Starts the Sweetlink server when Vite starts
 - Detects Vite's port and configures everything
 - DevBar connects automatically
+- Exposes a same-origin WebSocket endpoint at `/__sweetlink` for Portless and
+  other local HTTPS proxies
 
 ### For Next.js (Recommended)
 
@@ -109,6 +111,7 @@ That's it! The plugin automatically:
 - Detects the port from `--port` argv (e.g., `next dev --port 3002`)
 - Falls back to `process.env.PORT`, then `3000`
 - Starts the WebSocket server on `appPort + 6223`
+- Injects public Sweetlink port hints for proxied local URLs such as Portless
 - No-ops in production
 
 Works with other wrappers too:

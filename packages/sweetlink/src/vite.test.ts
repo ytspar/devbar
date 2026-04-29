@@ -28,7 +28,7 @@ vi.mock('./server/index.js', () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { WS_PORT_OFFSET } from './types.js';
+import { SWEETLINK_WS_PATH, WS_PORT_OFFSET } from './types.js';
 import defaultExport, { sweetlink } from './vite.js';
 
 // ---------------------------------------------------------------------------
@@ -127,6 +127,24 @@ describe('sweetlink vite plugin', () => {
           expect.objectContaining({
             port: vitePort + WS_PORT_OFFSET,
             appPort: vitePort,
+            appServer: httpServer,
+            wsPath: SWEETLINK_WS_PATH,
+          })
+        );
+      });
+    });
+
+    it('can disable the same-origin websocket endpoint', async () => {
+      const plugin = sweetlink({ sameOrigin: false });
+      const { viteServer, httpServer } = makeMockViteServer(5173);
+
+      (plugin.configureServer as (server: ViteDevServer) => void)(viteServer);
+      httpServer.emit('listening');
+
+      await vi.waitFor(() => {
+        expect(mockInitSweetlink).toHaveBeenCalledWith(
+          expect.objectContaining({
+            appServer: undefined,
           })
         );
       });
@@ -298,6 +316,26 @@ describe('sweetlink vite plugin', () => {
       const plugin = sweetlink();
       (plugin.buildEnd as () => void)();
       expect(mockCloseSweetlink).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('transformIndexHtml', () => {
+    it('injects Sweetlink runtime connection hints', async () => {
+      const plugin = sweetlink();
+      const { viteServer, httpServer } = makeMockViteServer(4123);
+
+      (plugin.configureServer as (server: ViteDevServer) => void)(viteServer);
+      httpServer.emit('listening');
+
+      await vi.waitFor(() => {
+        expect(mockInitSweetlink).toHaveBeenCalled();
+      });
+
+      const tags = await (plugin.transformIndexHtml as () => unknown)();
+      expect(JSON.stringify(tags)).toContain('__SWEETLINK__');
+      expect(JSON.stringify(tags)).toContain('appPort:4123');
+      expect(JSON.stringify(tags)).toContain(`wsPort:${4123 + WS_PORT_OFFSET}`);
+      expect(JSON.stringify(tags)).toContain(SWEETLINK_WS_PATH);
     });
   });
 

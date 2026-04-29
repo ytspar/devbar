@@ -35,11 +35,14 @@ import {
 // ============================================================================
 
 import {
+  createSameOriginSweetlinkWsUrl,
   DEFAULT_WS_PORT,
+  getSweetlinkRuntimeConfig,
   MAX_PORT_RETRIES,
   PORT_RETRY_DELAY_MS,
-  resolveAppPortFromLocation,
-  resolveSweetlinkWsPortFromLocation,
+  parsePortNumber,
+  resolveAppPortFromRuntimeConfig,
+  resolveSweetlinkWsPortForAppPort,
 } from '../types.js';
 
 /** HMR settings */
@@ -53,6 +56,10 @@ const PORT_SEARCH_FAIL_RETRY_MS = 3000;
 
 export interface SweetlinkBridgeConfig {
   basePort?: number;
+  appPort?: number;
+  wsPort?: number;
+  wsUrl?: string;
+  wsPath?: string;
   maxPortRetries?: number;
   hmrScreenshots?: boolean;
   hmrDebounceMs?: number;
@@ -84,6 +91,7 @@ export class SweetlinkBridge {
 
   // Configuration
   private readonly basePort: number;
+  private readonly wsUrlCandidates: readonly string[];
   private readonly maxPortRetries: number;
   private readonly hmrScreenshots: boolean;
   private readonly hmrConfig: HmrCaptureConfig;
@@ -107,12 +115,25 @@ export class SweetlinkBridge {
         captureDelay: DEFAULT_HMR_CAPTURE_DELAY_MS,
       };
       this.currentAppPort = 0;
+      this.wsUrlCandidates = [`ws://localhost:${DEFAULT_WS_PORT}`];
       return;
     }
 
     // Calculate expected app and WS ports from the browser URL.
-    this.basePort = config.basePort ?? resolveSweetlinkWsPortFromLocation(window.location);
-    this.currentAppPort = resolveAppPortFromLocation(window.location);
+    const runtimeConfig = getSweetlinkRuntimeConfig(window);
+    this.currentAppPort =
+      config.appPort ?? resolveAppPortFromRuntimeConfig(window.location, runtimeConfig);
+    this.basePort =
+      config.basePort ??
+      config.wsPort ??
+      parsePortNumber(runtimeConfig.wsPort) ??
+      resolveSweetlinkWsPortForAppPort(this.currentAppPort);
+    this.wsUrlCandidates = this.buildWsUrlCandidates(window.location, {
+      wsUrl: config.wsUrl ?? runtimeConfig.wsUrl,
+      wsPort: config.wsPort ?? config.basePort ?? runtimeConfig.wsPort,
+      wsPath: config.wsPath ?? runtimeConfig.wsPath,
+      fallbackPort: this.basePort,
+    });
 
     this.maxPortRetries = config.maxPortRetries ?? MAX_PORT_RETRIES;
     this.hmrScreenshots = config.hmrScreenshots ?? false;
@@ -140,7 +161,7 @@ export class SweetlinkBridge {
       this.consoleLogs = this.capture.getLogs();
     });
     this.setupErrorHandlers();
-    this.connectWebSocket(this.basePort);
+    this.connectWebSocket(this.wsUrlCandidates[0] ?? this.basePort);
 
     if (this.hmrScreenshots) {
       const cleanup = setupHmrDetection((trigger, changedFile, hmrMetadata) => {
@@ -228,9 +249,65 @@ export class SweetlinkBridge {
     this.cleanupFunctions.push(cleanup);
   }
 
-  private connectWebSocket(port: number): void {
-    const wsUrl = `ws://localhost:${port}`;
+  private buildWsUrlCandidates(
+    location: Location,
+    options: {
+      wsUrl?: string | null;
+      wsPort?: number | string | null;
+      wsPath?: string | null;
+      fallbackPort: number;
+    }
+  ): string[] {
+    const urls: string[] = [];
+    const add = (url: string | null | undefined): void => {
+      if (url && !urls.includes(url)) urls.push(url);
+    };
+
+    add(options.wsUrl);
+    if (options.wsPath) {
+      add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
+    }
+    add(`ws://localhost:${parsePortNumber(options.wsPort) ?? options.fallbackPort}`);
+    return urls;
+  }
+
+  private getWsUrlForTarget(target: number | string): string {
+    return typeof target === 'string' ? target : `ws://localhost:${target}`;
+  }
+
+  private getPortForTarget(targetUrl: string): number | null {
+    try {
+      const url = new URL(targetUrl);
+      if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return null;
+      return parsePortNumber(url.port);
+    } catch {
+      return null;
+    }
+  }
+
+  private connectNextTarget(targetUrl: string, delayMs: number = PORT_RETRY_DELAY_MS): boolean {
+    const candidateIndex = this.wsUrlCandidates.indexOf(targetUrl);
+    if (candidateIndex >= 0 && candidateIndex + 1 < this.wsUrlCandidates.length) {
+      setTimeout(() => this.connectWebSocket(this.wsUrlCandidates[candidateIndex + 1]!), delayMs);
+      return true;
+    }
+
+    const targetPort = this.getPortForTarget(targetUrl);
+    if (targetPort !== null) {
+      const nextPort = targetPort + 1;
+      if (nextPort < this.basePort + this.maxPortRetries) {
+        setTimeout(() => this.connectWebSocket(nextPort), delayMs);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private connectWebSocket(target: number | string): void {
+    const wsUrl = this.getWsUrlForTarget(target);
     const ws = new WebSocket(wsUrl);
+    let switchingTargets = false;
     this.ws = ws;
     this.verified = false;
 
@@ -239,7 +316,7 @@ export class SweetlinkBridge {
       if (!this.verified && ws.readyState === WebSocket.OPEN) {
         // Server didn't send server-info (old version) - accept for backwards compatibility
         this.log(
-          `[Sweetlink] Server on port ${port} is old version (no server-info). Accepting for backwards compatibility.`
+          `[Sweetlink] Server on ${wsUrl} is old version (no server-info). Accepting for backwards compatibility.`
         );
         this.verified = true;
         this.connected = true;
@@ -247,7 +324,7 @@ export class SweetlinkBridge {
     }, VERIFICATION_TIMEOUT_MS);
 
     ws.onopen = () => {
-      this.log(`[Sweetlink] Connected to server on port ${port}`);
+      this.log(`[Sweetlink] Connected to server on ${wsUrl}`);
       ws.send(JSON.stringify({ type: 'browser-client-ready' }));
     };
 
@@ -280,12 +357,9 @@ export class SweetlinkBridge {
               this.log(
                 `[Sweetlink] Server is for port ${info.appPort}, but we're on port ${this.currentAppPort}. Trying next port...`
               );
+              switchingTargets = true;
               ws.close();
-
-              const nextPort = port + 1;
-              if (nextPort < this.basePort + this.maxPortRetries) {
-                setTimeout(() => this.connectWebSocket(nextPort), PORT_RETRY_DELAY_MS);
-              } else {
+              if (!this.connectNextTarget(wsUrl)) {
                 this.log(
                   `[Sweetlink] No matching server found for port ${this.currentAppPort}. Will retry...`
                 );
@@ -330,18 +404,20 @@ export class SweetlinkBridge {
     ws.onclose = (event) => {
       clearTimeout(verificationTimeout);
       this.log('[Sweetlink] Disconnected from server');
+      const wasVerified = this.verified;
       this.connected = false;
       this.serverInfo = null;
       this.verified = false;
 
       // If closed due to origin mismatch (code 4001), try next port immediately
       if (event.code === 4001) {
-        const nextPort = port + 1;
-        if (nextPort < this.basePort + this.maxPortRetries) {
-          this.log(`[Sweetlink] Origin mismatch, trying port ${nextPort}...`);
-          setTimeout(() => this.connectWebSocket(nextPort), PORT_RETRY_DELAY_MS);
-          return;
-        }
+        this.log(`[Sweetlink] Origin mismatch from ${wsUrl}; trying next target...`);
+        if (this.connectNextTarget(wsUrl)) return;
+      }
+
+      if (!wasVerified && !switchingTargets && this.connectNextTarget(wsUrl)) {
+        this.log(`[Sweetlink] Connection closed before verification from ${wsUrl}`);
+        return;
       }
 
       // Try to reconnect

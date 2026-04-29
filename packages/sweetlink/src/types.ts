@@ -21,6 +21,9 @@ export const MAX_PORT_RETRIES = 10;
 /** Delay between port scan attempts (ms) */
 export const PORT_RETRY_DELAY_MS = 100;
 
+/** Same-origin WebSocket path used when an app server can proxy Sweetlink. */
+export const SWEETLINK_WS_PATH = '/__sweetlink';
+
 // ============================================================================
 // Local Development URL Helpers
 // ============================================================================
@@ -28,6 +31,14 @@ export const PORT_RETRY_DELAY_MS = 100;
 export interface SweetlinkLocationLike {
   protocol: string;
   port: string;
+  host?: string;
+}
+
+export interface SweetlinkRuntimeConfig {
+  appPort?: number | string | null;
+  wsPort?: number | string | null;
+  wsUrl?: string | null;
+  wsPath?: string | null;
 }
 
 export function parsePortNumber(value: number | string | null | undefined): number | null {
@@ -62,6 +73,77 @@ export function resolveSweetlinkWsPortFromLocation(location: SweetlinkLocationLi
   return resolveSweetlinkWsPortForAppPort(resolveAppPortFromLocation(location));
 }
 
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function getProcessEnv(): Record<string, string | undefined> {
+  if (typeof process === 'undefined') return {};
+  return process.env;
+}
+
+function normalizeWsPath(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const path = value.trim();
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function normalizeWsUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'ws:' || url.protocol === 'wss:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read Sweetlink connection hints injected by framework integrations.
+ *
+ * Vite injects `window.__SWEETLINK__`; Next.js exposes the same values through
+ * `NEXT_PUBLIC_SWEETLINK_*` env replacement. Explicit user options should still
+ * take precedence over these hints.
+ */
+export function getSweetlinkRuntimeConfig(
+  globalValue: unknown = globalThis
+): SweetlinkRuntimeConfig {
+  const globalRecord = getRecord(globalValue);
+  const nested = getRecord(globalRecord?.__SWEETLINK__);
+  const env = getProcessEnv();
+  const appPort =
+    globalRecord?.__SWEETLINK_APP_PORT__ ?? nested?.appPort ?? env.NEXT_PUBLIC_SWEETLINK_APP_PORT;
+  const wsPort =
+    globalRecord?.__SWEETLINK_WS_PORT__ ?? nested?.wsPort ?? env.NEXT_PUBLIC_SWEETLINK_WS_PORT;
+
+  return {
+    appPort: typeof appPort === 'string' || typeof appPort === 'number' ? appPort : null,
+    wsPort: typeof wsPort === 'string' || typeof wsPort === 'number' ? wsPort : null,
+    wsUrl:
+      normalizeWsUrl(globalRecord?.__SWEETLINK_WS_URL__ ?? nested?.wsUrl) ??
+      normalizeWsUrl(env.NEXT_PUBLIC_SWEETLINK_WS_URL),
+    wsPath:
+      normalizeWsPath(globalRecord?.__SWEETLINK_WS_PATH__ ?? nested?.wsPath) ??
+      normalizeWsPath(env.NEXT_PUBLIC_SWEETLINK_WS_PATH),
+  };
+}
+
+export function resolveAppPortFromRuntimeConfig(
+  location: SweetlinkLocationLike,
+  config: SweetlinkRuntimeConfig
+): number {
+  return parsePortNumber(config.appPort) ?? resolveAppPortFromLocation(location);
+}
+
+export function createSameOriginSweetlinkWsUrl(
+  location: SweetlinkLocationLike,
+  path: string = SWEETLINK_WS_PATH
+): string | null {
+  if (!location.host) return null;
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${location.host}${normalizeWsPath(path) ?? SWEETLINK_WS_PATH}`;
+}
+
 export function isLocalDevelopmentHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.$/, '');
   return (
@@ -69,7 +151,9 @@ export function isLocalDevelopmentHostname(hostname: string): boolean {
     normalized === '127.0.0.1' ||
     normalized === '::1' ||
     normalized === '[::1]' ||
-    normalized.endsWith('.localhost')
+    normalized.endsWith('.localhost') ||
+    normalized.endsWith('.test') ||
+    normalized.endsWith('.local')
   );
 }
 

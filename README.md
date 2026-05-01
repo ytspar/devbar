@@ -4,6 +4,8 @@
 
 Development toolbar and AI debugging toolkit. This monorepo contains **devbar** (development toolbar) and **sweetlink** (autonomous AI agent toolkit for browser debugging).
 
+For Codex, Claude, and other coding agents, start with the machine-readable setup brief at **[devbar.dev/llms.txt](https://devbar.dev/llms.txt)**.
+
 ## What Is This?
 
 Tools that enable AI agents (like Claude) to autonomously debug, test, and iterate on web applications through real-time browser interaction:

@@ -17,6 +17,7 @@ import {
 } from '@ytspar/devbar';
 import { createDemoContent } from './demo-content.js';
 import {
+  createAgentSetupSection,
   createChangelogSection,
   createFeaturesSection,
   createLandingHero,
@@ -168,6 +169,7 @@ const app = document.getElementById('app');
 if (app) {
   // Landing sections
   app.appendChild(createLandingHero());
+  app.appendChild(createAgentSetupSection());
   app.appendChild(createFeaturesSection());
   app.appendChild(createSweetlinkSection());
   app.appendChild(createPluginsSection());

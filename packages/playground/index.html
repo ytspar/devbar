@@ -15,7 +15,12 @@
     <!-- Standard meta tags -->
     <meta name="description" content="Development toolbar and AI debugging toolkit. Breakpoint indicator, Core Web Vitals, console capture, screenshots, and a WebSocket bridge for AI agents." />
     <meta name="author" content="ytspar" />
+    <meta name="application-name" content="devbar" />
+    <meta name="agent-entrypoint" content="https://devbar.dev/llms.txt" />
+    <meta name="agent-install" content="pnpm add @ytspar/devbar @ytspar/sweetlink" />
+    <meta name="agent-protocol" content="inspect-act-verify with Sweetlink @e refs, screenshots, console, network, accessibility, and vitals evidence" />
     <link rel="canonical" href="https://devbar.dev/" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM setup guide for Codex and Claude" />
 
     <!-- Open Graph meta tags -->
     <meta property="og:title" content="devbar — Development toolbar and AI debugging toolkit" />
@@ -52,8 +57,40 @@
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "USD"
+      },
+      "softwareRequirements": "Node.js 20+, pnpm, a local Vite or Next.js development server",
+      "codeRepository": "https://github.com/ytspar/devbar",
+      "isAccessibleForFree": true,
+      "keywords": [
+        "Codex",
+        "Claude",
+        "AI browser testing",
+        "frontend verification",
+        "screenshots",
+        "accessibility",
+        "Web Vitals",
+        "console logs"
+      ],
+      "potentialAction": {
+        "@type": "UseAction",
+        "name": "Install devbar and sweetlink",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://devbar.dev/llms.txt"
+        }
       }
     }
+    </script>
+
+    <script type="application/json" id="devbar-agent-context">
+      {
+        "name": "devbar",
+        "llmsTxt": "https://devbar.dev/llms.txt",
+        "install": "pnpm add @ytspar/devbar @ytspar/sweetlink",
+        "protocol": "inspect-act-verify",
+        "primaryCommand": "pnpm sweetlink inspect --url <local-url> --json",
+        "agentInstruction": "Use Devbar and Sweetlink for browser verification. Inspect before and after UI changes, act through returned @e refs, and cite screenshots, console, network, accessibility, and vitals evidence."
+      }
     </script>
 
     <!-- Departure Mono font - retro pixel terminal aesthetic -->

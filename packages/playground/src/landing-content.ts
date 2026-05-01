@@ -38,6 +38,7 @@ function createNotchedCard(
 
   const titleEl = document.createElement(titleTag);
   const titleClassMap: Record<string, string> = {
+    'agent-step': 'agent-step-title',
     'quickstart-step': 'step-title',
     package: 'package-name',
   };
@@ -1074,6 +1075,78 @@ export function createFeaturesSection(): HTMLElement {
   }
 
   section.appendChild(grid);
+  return section;
+}
+
+/**
+ * Create an agent setup section for Codex, Claude, and other LLM coding agents.
+ */
+export function createAgentSetupSection(): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'landing-agent-setup';
+  section.id = 'agents';
+
+  section.appendChild(createTextElement('h2', 'section-heading', 'Codex / Claude setup'));
+
+  const intro = createTextElement(
+    'p',
+    'agent-setup-summary',
+    'A machine-readable setup path for agents: install the packages, give the agent a short operating contract, then verify every UI change through Sweetlink evidence.'
+  );
+  section.appendChild(intro);
+
+  const grid = document.createElement('div');
+  grid.className = 'agent-setup-grid';
+
+  const steps = [
+    {
+      title: '1. Install the bridge',
+      body: 'Add the toolbar plus the browser bridge to the app under test.',
+      code: 'pnpm add @ytspar/devbar @ytspar/sweetlink',
+    },
+    {
+      title: '2. Hand off context',
+      body: 'Point Codex or Claude at the public agent brief before it starts browser work.',
+      code: 'Read https://devbar.dev/llms.txt, then use Sweetlink for inspect-act-verify.',
+    },
+    {
+      title: '3. Verify with evidence',
+      body: 'Inspect before and after edits, act through returned refs, and attach proof.',
+      code: 'pnpm sweetlink inspect --url http://localhost:5173 --json',
+    },
+  ];
+
+  for (const step of steps) {
+    const { card, content } = createNotchedCard('agent-step', step.title);
+    content.appendChild(createTextElement('p', 'agent-step-description', step.body));
+    content.appendChild(
+      createCopyCard({
+        className: 'agent-copy-card',
+        ariaLabel: `Copy ${step.title}`,
+        command: step.code,
+      })
+    );
+    grid.appendChild(card);
+  }
+
+  section.appendChild(grid);
+
+  const links = document.createElement('div');
+  links.className = 'agent-resource-links';
+
+  const llmsLink = document.createElement('a');
+  llmsLink.href = '/llms.txt';
+  llmsLink.textContent = 'Open llms.txt';
+
+  const readmeLink = document.createElement('a');
+  readmeLink.href = 'https://github.com/ytspar/devbar#agent-protocol';
+  readmeLink.target = '_blank';
+  readmeLink.rel = 'noopener noreferrer';
+  readmeLink.textContent = 'Agent protocol in README';
+
+  links.append(llmsLink, readmeLink);
+  section.appendChild(links);
+
   return section;
 }
 

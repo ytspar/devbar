@@ -25,6 +25,7 @@ vi.mock('@ytspar/devbar', () => ({
 
 // Mock landing-content to avoid heavy DOM construction
 vi.mock('./landing-content.js', () => ({
+  createAgentSetupSection: vi.fn(() => document.createElement('section')),
   createChangelogSection: vi.fn(() => document.createElement('section')),
   createFeaturesSection: vi.fn(() => document.createElement('section')),
   createLandingHero: vi.fn(() => document.createElement('section')),

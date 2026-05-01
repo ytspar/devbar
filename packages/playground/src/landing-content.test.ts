@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  createAgentSetupSection,
   createChangelogSection,
   createFeaturesSection,
   createLandingHero,
@@ -24,6 +25,19 @@ describe('Landing Content', () => {
     it('contains the product name', () => {
       const el = createLandingHero();
       expect(el.textContent).toContain('devbar');
+    });
+  });
+
+  describe('createAgentSetupSection', () => {
+    it('returns an HTMLElement', () => {
+      const el = createAgentSetupSection();
+      expect(el).toBeInstanceOf(HTMLElement);
+    });
+
+    it('links to the LLM setup guide', () => {
+      const el = createAgentSetupSection();
+      expect(el.textContent).toContain('llms.txt');
+      expect(el.textContent).toContain('pnpm sweetlink inspect');
     });
   });
 

@@ -1,0 +1,103 @@
+# devbar
+
+> Development toolbar and Sweetlink AI browser bridge for Codex, Claude, and other coding agents.
+
+devbar.dev documents two npm packages:
+
+- `@ytspar/devbar`: a browser development toolbar for breakpoints, Web Vitals, console badges, screenshots, accessibility, schema, and custom debug controls.
+- `@ytspar/sweetlink`: an AI agent bridge that connects a local browser to a CLI/WebSocket server for screenshots, DOM refs, console/network logs, accessibility checks, visual diffs, and browser actions.
+
+Use this project when an agent needs to inspect a web page, act on stable element refs, and verify frontend changes with repeatable evidence.
+
+## Install
+
+```bash
+pnpm add @ytspar/devbar @ytspar/sweetlink
+```
+
+## Vite Setup
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { sweetlink } from "@ytspar/sweetlink/vite";
+
+export default defineConfig({
+  plugins: [sweetlink()],
+});
+```
+
+```ts
+// main.ts
+if (import.meta.env.DEV) {
+  const { initGlobalDevBar } = await import("@ytspar/devbar");
+  initGlobalDevBar();
+}
+```
+
+## Next.js Setup
+
+```ts
+// next.config.ts
+import { withSweetlink } from "@ytspar/sweetlink/next";
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {};
+
+export default withSweetlink(nextConfig);
+```
+
+```tsx
+// src/components/DevBar.tsx
+"use client";
+
+import { useEffect } from "react";
+
+export function DevBar() {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+
+    let destroy: (() => void) | undefined;
+    import("@ytspar/devbar").then(({ destroyGlobalDevBar, initGlobalDevBar }) => {
+      initGlobalDevBar();
+      destroy = destroyGlobalDevBar;
+    });
+
+    return () => destroy?.();
+  }, []);
+
+  return null;
+}
+```
+
+Render `<DevBar />` once from the root layout body.
+
+## Agent Protocol
+
+Give Codex or Claude this instruction after setup:
+
+```text
+Use Devbar and Sweetlink for browser verification. Start the app, run `pnpm sweetlink inspect --url <local-url> --json` before and after UI changes, use returned @e refs for browser actions, and cite screenshot, console, network, accessibility, and vitals evidence in the final answer.
+```
+
+## Core Commands
+
+```bash
+pnpm sweetlink inspect --url http://localhost:5173 --json
+pnpm sweetlink screenshot --url http://localhost:5173 --hide-devbar
+pnpm sweetlink logs
+pnpm sweetlink a11y
+pnpm sweetlink click @e12
+pnpm sweetlink fill @e15 "hello"
+pnpm sweetlink snapshot -D
+```
+
+Prefer `inspect` first because it returns a compact state bundle: screenshot paths, interactive refs, DOM outline, console/network deltas, accessibility issues, Web Vitals, and suggested next actions.
+
+## Links
+
+- Homepage: https://devbar.dev/
+- Repository: https://github.com/ytspar/devbar
+- npm devbar: https://www.npmjs.com/package/@ytspar/devbar
+- npm sweetlink: https://www.npmjs.com/package/@ytspar/sweetlink
+- README: https://github.com/ytspar/devbar#readme

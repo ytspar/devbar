@@ -315,6 +315,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 
 .demo-section,
 .feature-card,
+.agent-step-card,
 .package-card,
 .quickstart-step-card {
   background: transparent;
@@ -329,6 +330,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 
 .demo-section-header,
 .feature-card-header,
+.agent-step-card-header,
 .package-card-header,
 .quickstart-step-card-header {
   display: flex;
@@ -338,6 +340,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 
 .demo-section-wing,
 .feature-card-wing,
+.agent-step-card-wing,
 .package-card-wing,
 .quickstart-step-card-wing {
   width: 12px;
@@ -348,6 +351,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 
 .demo-section-wing-left,
 .feature-card-wing-left,
+.agent-step-card-wing-left,
 .package-card-wing-left,
 .quickstart-step-card-wing-left {
   border-left: 1px solid var(--devbar-color-border);
@@ -355,6 +359,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 
 .demo-section-wing-right,
 .feature-card-wing-right,
+.agent-step-card-wing-right,
 .package-card-wing-right,
 .quickstart-step-card-wing-right {
   flex-grow: 1;
@@ -364,6 +369,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 /* Notched card title (shared typography) */
 .demo-section h2,
 .feature-title,
+.agent-step-title,
 .package-name,
 .step-title {
   min-width: 0;
@@ -383,6 +389,7 @@ html[data-sweetlink-demo="true"] .devbar-actions::before {
 /* Notched card content area */
 .demo-section-content,
 .feature-card-content,
+.agent-step-card-content,
 .package-card-content,
 .quickstart-step-card-content {
   min-width: 0;
@@ -1188,7 +1195,8 @@ body.theme-light {
     transform var(--devbar-transition-fast);
 }
 
-.landing-command:hover {
+.landing-command:hover,
+.agent-copy-card:hover {
   border-color: var(--devbar-color-primary);
   box-shadow: 0 0 14px var(--devbar-color-primary-glow);
   transform: translateY(-1px);
@@ -1202,7 +1210,8 @@ body.theme-light {
   text-transform: uppercase;
 }
 
-.landing-command code {
+.landing-command code,
+.agent-copy-card code {
   font-family: var(--devbar-font-mono);
   font-size: 0.875rem;
   color: var(--devbar-color-primary);
@@ -1264,7 +1273,8 @@ body.theme-light {
   transition: color var(--devbar-transition-fast);
 }
 
-.landing-install:hover .copy-btn {
+.landing-install:hover .copy-btn,
+.agent-copy-card:hover .copy-btn {
   color: var(--devbar-color-primary);
 }
 
@@ -1295,6 +1305,88 @@ body.theme-light {
   max-width: 1200px;
   margin: 0 auto 4rem;
   padding: 0 2rem;
+}
+
+.landing-agent-setup {
+  max-width: 1120px;
+  margin: 0 auto 4rem;
+  padding: 0 2rem;
+}
+
+.agent-setup-summary {
+  max-width: 760px;
+  margin: -1rem auto 1.5rem;
+  color: var(--devbar-color-text-secondary);
+  font-size: var(--devbar-text-base);
+  line-height: var(--devbar-leading-relaxed);
+  text-align: center;
+}
+
+.agent-setup-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.agent-step-card-content {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.agent-step-description {
+  min-height: 3.75rem;
+  color: var(--devbar-color-text-secondary);
+  font-size: var(--devbar-text-base);
+  line-height: var(--devbar-leading-relaxed);
+}
+
+.agent-copy-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 3.25rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid rgba(16, 185, 129, 0.24);
+  border-radius: var(--devbar-radius-md);
+  background: rgba(16, 185, 129, 0.08);
+  cursor: pointer;
+  transition:
+    border-color var(--devbar-transition-fast),
+    box-shadow var(--devbar-transition-fast),
+    transform var(--devbar-transition-fast);
+}
+
+.agent-copy-card code {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-resource-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.agent-resource-links a {
+  color: var(--devbar-color-primary);
+  font-size: 0.6875rem;
+  font-weight: var(--devbar-font-medium);
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: text-shadow var(--devbar-transition-fast);
+}
+
+.agent-resource-links a:hover {
+  text-shadow: 0 0 8px var(--devbar-color-primary-glow);
 }
 
 /* Sweetlink section variant -- purple tint to differentiate */
@@ -1915,6 +2007,7 @@ body.theme-light {
 
 .landing-hero,
 .landing-features,
+.landing-agent-setup,
 .sweetlink-features,
 .landing-plugins,
 .landing-packages,
@@ -1927,23 +2020,26 @@ body.theme-light {
 .landing-features {
   animation-delay: 0.06s;
 }
-.sweetlink-features {
+.landing-agent-setup {
   animation-delay: 0.12s;
 }
-.landing-plugins {
+.sweetlink-features {
   animation-delay: 0.18s;
 }
-.landing-packages {
+.landing-plugins {
   animation-delay: 0.24s;
 }
-.landing-quickstart {
+.landing-packages {
   animation-delay: 0.3s;
 }
-.landing-changelog {
+.landing-quickstart {
   animation-delay: 0.36s;
 }
-.demo-container {
+.landing-changelog {
   animation-delay: 0.42s;
+}
+.demo-container {
+  animation-delay: 0.48s;
 }
 
 /* CRT scanline overlay -- subtle atmospheric texture */
@@ -1996,6 +2092,7 @@ body::after {
 
   .demo-section h2,
   .feature-title,
+  .agent-step-title,
   .package-name,
   .step-title {
     font-size: 11px;
@@ -2003,6 +2100,7 @@ body::after {
 
   .demo-section-wing,
   .feature-card-wing,
+  .agent-step-card-wing,
   .package-card-wing,
   .quickstart-step-card-wing {
     width: 14px;
@@ -2045,6 +2143,7 @@ body::after {
 
   .demo-section h2,
   .feature-title,
+  .agent-step-title,
   .package-name,
   .step-title {
     font-size: 12px;
@@ -2052,6 +2151,7 @@ body::after {
 
   .demo-section-wing,
   .feature-card-wing,
+  .agent-step-card-wing,
   .package-card-wing,
   .quickstart-step-card-wing {
     width: 16px;
@@ -2068,6 +2168,10 @@ body::after {
 @media (max-width: 900px) {
   .assistant-loop {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-setup-grid {
+    grid-template-columns: 1fr;
   }
 
   .plugins-demo-shell {
@@ -2136,6 +2240,10 @@ body::after {
     text-align: left;
   }
 
+  .agent-setup-summary {
+    text-align: left;
+  }
+
   .plugin-demo-card-copy {
     white-space: normal;
   }
@@ -2157,6 +2265,7 @@ body::after {
   }
 
   .landing-command code,
+  .agent-copy-card code,
   .landing-install code {
     font-size: 0.75rem;
     white-space: normal;
@@ -2164,6 +2273,7 @@ body::after {
   }
 
   .landing-features,
+  .landing-agent-setup,
   .landing-packages,
   .landing-plugins,
   .landing-quickstart,
@@ -2198,6 +2308,7 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .landing-hero,
   .landing-features,
+  .landing-agent-setup,
   .sweetlink-features,
   .landing-plugins,
   .landing-packages,

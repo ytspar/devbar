@@ -111,7 +111,7 @@ function styleExpandedWrapper(
     backgroundColor: 'var(--devbar-color-bg-card)',
     border: `1px solid ${accentColor}`,
     borderRadius: '12px',
-    color: CSS_COLORS.primary,
+    color: accentColor,
     boxShadow: `${DEVBAR_THEME.shadows.dropToolbar}, 0 0 0 1px ${withAlpha(accentColor, 10)}`,
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',

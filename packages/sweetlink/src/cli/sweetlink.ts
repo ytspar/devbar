@@ -3016,6 +3016,1133 @@ async function handleStatusCommand(): Promise<StatusData> {
   }
 }
 
+// ============================================================================
+// Command Handlers
+// ============================================================================
+//
+// Each named handler below corresponds to one entry in the COMMAND_HANDLERS
+// dispatch map further down. They close over the module-level `args`,
+// `getArg`, and `hasFlag` so callers don't need to plumb context. Returning
+// the value previously assigned to `result` keeps the JSON-mode emission
+// path unchanged.
+
+type CommandHandler = () => Promise<unknown>;
+
+async function handleScreenshotCmd(): Promise<unknown> {
+  return screenshot({
+    selector: getArg('--selector'),
+    output: getArg('--output'),
+    fullPage: hasFlag('--full-page'),
+    forceCDP: hasFlag('--force-cdp'),
+    forceWS: hasFlag('--force-ws'),
+    hifi: hasFlag('--hifi'),
+    responsive: hasFlag('--responsive'),
+    a11y: hasFlag('--a11y'),
+    viewport: getArg('--viewport'),
+    width: getArg('--width') ? parseInt(getArg('--width')!, 10) : undefined,
+    height: getArg('--height') ? parseInt(getArg('--height')!, 10) : undefined,
+    hover: hasFlag('--hover'),
+    hideDevbar: hasFlag('--hide-devbar'),
+    padding: getArg('--padding') ? parseInt(getArg('--padding')!, 10) : undefined,
+    theme: getArg('--theme') as 'light' | 'dark' | 'no-preference' | undefined,
+    url: getArg('--url'),
+    wait: !hasFlag('--no-wait'),
+    waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+  });
+}
+
+async function handleInspectCmd(): Promise<unknown> {
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const state = await ensureDaemon(projRoot, targetUrl);
+  const actionTranscript: Array<{ action: string; target?: string; result?: string }> = [];
+  args.forEach((arg, index) => {
+    if (arg !== '--action') return;
+    const value = args[index + 1];
+    if (!value) return;
+    actionTranscript.push({ action: value });
+  });
+  const resp = await daemonRequest(state, 'inspect', {
+    last: getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined,
+    label: getArg('--label'),
+    expectedOutcome: getArg('--expected'),
+    actionTranscript,
+    includeA11y: !hasFlag('--no-a11y'),
+  });
+  const data = resp.data as unknown as InspectData;
+  const output = getArg('--output');
+  if (output) {
+    ensureDir(output);
+    fs.writeFileSync(output, JSON.stringify(data, null, 2), 'utf-8');
+  }
+  if (getArg('--format') === 'json') {
+    console.log(JSON.stringify(data, null, 2));
+  } else {
+    printInspectSummary(data);
+  }
+  return data;
+}
+
+async function handleQueryCmd(): Promise<unknown> {
+  const selector = getArg('--selector');
+  if (!selector) {
+    console.error('[Sweetlink] Error: --selector is required for query command');
+    process.exit(1);
+  }
+  if (getArg('--url')) {
+    const navigated = await navigateBrowser(getArg('--url')!);
+    if (!navigated) {
+      console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
+      process.exit(1);
+    }
+  }
+  return queryDOM({
+    selector,
+    property: getArg('--property'),
+    waitFor: getArg('--wait-for'),
+    waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+  });
+}
+
+async function handleLogsCmd(): Promise<unknown> {
+  const format = getArg('--format') as 'text' | 'json' | 'summary' | undefined;
+  return getLogs({
+    filter: getArg('--filter'),
+    format: format || 'text',
+    dedupe: hasFlag('--dedupe'),
+    output: getArg('--output'),
+  });
+}
+
+async function handleExecCmd(): Promise<unknown> {
+  const code = getArg('--code');
+  if (!code) {
+    console.error('[Sweetlink] Error: --code is required for exec command');
+    process.exit(1);
+  }
+  if (getArg('--url')) {
+    const navigated = await navigateBrowser(getArg('--url')!);
+    if (!navigated) {
+      console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
+      process.exit(1);
+    }
+  }
+  return execJS({
+    code,
+    waitFor: getArg('--wait-for'),
+    waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+  });
+}
+
+async function handleClickCmd(): Promise<unknown> {
+  const clickTarget = getArg('--selector') ?? args[1];
+  const clickText = getArg('--text');
+  const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+
+  // Route @e refs to daemon
+  if (clickTarget && /^@e\d+$/.test(clickTarget)) {
+    const state = await ensureDaemon(projRoot, targetUrl);
+    await daemonRequest(state, 'click-ref', { ref: clickTarget });
+    console.log(`[Sweetlink] Clicked ${clickTarget}`);
+    return { clicked: clickTarget, found: 1, index: 0 } satisfies ClickData;
+  }
+
+  // If a recording is in progress, route CSS clicks through the daemon
+  // so they target the recording page (which has no devbar/WebSocket
+  // bridge) and get logged into the session manifest.
+  try {
+    const status = await getDaemonStatus(projRoot, extractPort(targetUrl));
+    if (status.running) {
+      const state = await ensureDaemon(projRoot, targetUrl);
+      const recStatus = await daemonRequest(state, 'record-status');
+      const recData = recStatus.data as { recording?: boolean } | undefined;
+      if (recData?.recording) {
+        const resp = await daemonRequest(state, 'click-css', {
+          selector: clickTarget,
+          text: clickText,
+          index: clickIndex,
+        });
+        const data = resp.data as { clicked?: string; found?: number; index?: number };
+        console.log(
+          `[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`
+        );
+        return {
+          clicked: data.clicked ?? 'unknown',
+          found: data.found ?? 1,
+          index: data.index ?? clickIndex,
+        } satisfies ClickData;
+      }
+    }
+  } catch {
+    /* fall through to WS path */
+  }
+
+  return click({
+    selector: clickTarget,
+    text: clickText,
+    index: clickIndex,
+  });
+}
+
+async function handleNetworkCmd(): Promise<unknown> {
+  if (hasFlag('--failed')) {
+    const projRoot = findProjectRoot();
+    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
+    const state = await ensureDaemon(projRoot, targetUrl);
+    const resp = await daemonRequest(state, 'network-read', {
+      failed: true,
+      last: lastN,
+    });
+    const data = resp.data as { formatted: string; total: number; failedCount: number };
+    console.log(data.formatted);
+    console.log(`\nTotal: ${data.total} | Failed: ${data.failedCount}`);
+    return data;
+  }
+  return getNetwork({ filter: getArg('--filter') });
+}
+
+async function handleRefreshCmd(): Promise<unknown> {
+  return refresh({ hard: hasFlag('--hard') });
+}
+
+async function handleRulerCmd(): Promise<unknown> {
+  const rulerSelectors: string[] = [];
+  args.forEach((arg, i) => {
+    if (arg === '--selector' && args[i + 1]) {
+      rulerSelectors.push(args[i + 1]!);
+    }
+  });
+  return ruler({
+    selectors: rulerSelectors.length > 0 ? rulerSelectors : undefined,
+    preset: getArg('--preset') as 'card-header' | 'navigation' | undefined,
+    url: getArg('--url'),
+    output: getArg('--output'),
+    showCenterLines: !hasFlag('--no-center-lines'),
+    showDimensions: !hasFlag('--no-dimensions'),
+    showPosition: hasFlag('--show-position'),
+    showAlignment: !hasFlag('--no-alignment'),
+    limit: getArg('--limit') ? parseInt(getArg('--limit')!, 10) : undefined,
+    format: getArg('--format') as 'text' | 'json' | undefined,
+  });
+}
+
+async function handleSchemaCmd(): Promise<unknown> {
+  return getSchema({
+    format: getArg('--format') as 'text' | 'json' | undefined,
+    output: getArg('--output'),
+  });
+}
+
+async function handleOutlineCmd(): Promise<unknown> {
+  return getOutline({
+    format: getArg('--format') as 'text' | 'json' | 'markdown' | undefined,
+    output: getArg('--output'),
+  });
+}
+
+async function handleA11yCmd(): Promise<unknown> {
+  return getA11y({
+    format: getArg('--format') as 'text' | 'json' | undefined,
+    output: getArg('--output'),
+  });
+}
+
+async function handleVitalsCmd(): Promise<unknown> {
+  return getVitals({ format: getArg('--format') as 'text' | 'json' | undefined });
+}
+
+async function handleCleanupCmd(): Promise<unknown> {
+  return cleanup({ force: hasFlag('--force'), verbose: hasFlag('--verbose') });
+}
+
+async function handleSetupCmd(): Promise<unknown> {
+  const { execFileSync } = await import('child_process');
+  const scriptDir = path.dirname(import.meta.url.replace('file://', ''));
+  const setupScript = path.resolve(scriptDir, '..', '..', 'scripts', 'setup-claude-context.mjs');
+  execFileSync('node', [setupScript], { stdio: 'inherit' });
+  return undefined;
+}
+
+async function handleConsoleCmd(): Promise<unknown> {
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const errorsOnly = hasFlag('--errors');
+  const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
+  const state = await ensureDaemon(projRoot, targetUrl);
+  const resp = await daemonRequest(state, 'console-read', {
+    errors: errorsOnly,
+    last: lastN,
+  });
+  const data = resp.data as {
+    formatted: string;
+    total: number;
+    errorCount: number;
+    warningCount: number;
+  };
+  console.log(data.formatted);
+  console.log(
+    `\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`
+  );
+  return data;
+}
+
+async function handleSessionsCmd(): Promise<unknown> {
+  const sub = args[1];
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const state = await ensureDaemon(projRoot, targetUrl);
+  const resp = await daemonRequest(state, 'sessions-list');
+  const data = resp.data as {
+    sessions: Array<{
+      sessionId: string;
+      label?: string;
+      url?: string;
+      startedAt?: string;
+      duration?: number;
+      actionCount: number;
+      errors?: { console: number; network: number; server: number };
+      hasVideo: boolean;
+      hasViewer: boolean;
+      manifestPath: string;
+    }>;
+    indexPath?: string;
+  };
+
+  if (sub === 'list' || !sub) {
+    if (data.sessions.length === 0) {
+      console.log('[Sweetlink] No sessions found.');
+    } else {
+      console.log(`[Sweetlink] ${data.sessions.length} session(s):\n`);
+      for (const s of data.sessions) {
+        const errTotal = s.errors ? s.errors.console + s.errors.network + s.errors.server : 0;
+        const errBadge = errTotal > 0 ? ` · ${errTotal} err` : '';
+        const labelTxt = s.label ? ` [${s.label}]` : '';
+        const dur = s.duration ? `${s.duration.toFixed(1)}s` : '—';
+        console.log(`  ${s.sessionId}${labelTxt} · ${dur} · ${s.actionCount} actions${errBadge}`);
+      }
+      if (data.indexPath) console.log(`\n  Index: ${data.indexPath}`);
+    }
+    return { sessions: data.sessions };
+  }
+
+  if (sub === 'diff') {
+    // sessions diff <a> <b> — compare two recordings
+    const [aId, bId] = [args[2], args[3]];
+    if (!aId || !bId) {
+      console.error('[Sweetlink] Usage: sessions diff <session-A> <session-B>');
+      process.exit(1);
+    }
+    const findSession = (id: string) =>
+      data.sessions.find((s) => s.sessionId === id || s.sessionId.endsWith(id));
+    const a = findSession(aId);
+    const b = findSession(bId);
+    if (!a || !b) {
+      console.error(`[Sweetlink] Could not find session: ${!a ? aId : bId}`);
+      process.exit(1);
+    }
+    const aManifest = JSON.parse(fs.readFileSync(a.manifestPath, 'utf-8'));
+    const bManifest = JSON.parse(fs.readFileSync(b.manifestPath, 'utf-8'));
+    const aActions = aManifest.commands.map(
+      (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
+    );
+    const bActions = bManifest.commands.map(
+      (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
+    );
+    console.log(
+      `\n${a.sessionId}${a.label ? ` "${a.label}"` : ''}  vs  ${b.sessionId}${b.label ? ` "${b.label}"` : ''}\n`
+    );
+    console.log(`Duration: ${a.duration?.toFixed(1)}s  vs  ${b.duration?.toFixed(1)}s`);
+    console.log(`Actions:  ${a.actionCount}  vs  ${b.actionCount}`);
+    const aErr = a.errors ? a.errors.console + a.errors.network + a.errors.server : 0;
+    const bErr = b.errors ? b.errors.console + b.errors.network + b.errors.server : 0;
+    console.log(`Errors:   ${aErr}  vs  ${bErr}`);
+    // Action diff (myers-style "added/removed" by line)
+    const inA = new Set(aActions);
+    const inB = new Set(bActions);
+    const added = bActions.filter((x: string) => !inA.has(x));
+    const removed = aActions.filter((x: string) => !inB.has(x));
+    if (removed.length) {
+      console.log(`\nOnly in ${a.sessionId}:`);
+      removed.forEach((s: string) => console.log(`  - ${s}`));
+    }
+    if (added.length) {
+      console.log(`\nOnly in ${b.sessionId}:`);
+      added.forEach((s: string) => console.log(`  + ${s}`));
+    }
+    if (!added.length && !removed.length) {
+      console.log('\nAction sequences are identical.');
+    }
+    return {
+      a: {
+        id: a.sessionId,
+        label: a.label,
+        duration: a.duration,
+        actions: a.actionCount,
+        errors: aErr,
+      },
+      b: {
+        id: b.sessionId,
+        label: b.label,
+        duration: b.duration,
+        actions: b.actionCount,
+        errors: bErr,
+      },
+      added,
+      removed,
+    };
+  }
+
+  if (sub === 'open') {
+    if (data.indexPath) {
+      openInBrowser(data.indexPath);
+      console.log(`[Sweetlink] Opened ${data.indexPath}`);
+    }
+    return { indexPath: data.indexPath };
+  }
+
+  console.error(`[Sweetlink] Unknown sessions subcommand: ${sub}. Try: list, open`);
+  process.exit(1);
+}
+
+async function handleDemoCmd(): Promise<unknown> {
+  const sub = args[1];
+  const projRoot = findProjectRoot();
+  const demoDir = getArg('--output') ?? path.join(projRoot, '.sweetlink', 'demo');
+  const stateFile = path.join(demoDir, 'demo-state.json');
+
+  // Lazy import demo module
+  const demoMod = await import('../daemon/demo.js');
+
+  if (sub === 'init') {
+    const title = args[2];
+    if (!title) {
+      console.error('[Sweetlink] Error: demo init requires a title');
+      process.exit(1);
+    }
+    const demoState = await demoMod.initDemo(title, demoDir, { url: getArg('--url') });
+    await demoMod.writeDemo(demoState);
+    console.log(`[Sweetlink] Demo initialized: ${demoState.filePath}`);
+    return { filePath: demoState.filePath };
+  }
+
+  if (sub === 'note') {
+    const text = args.slice(2).join(' ');
+    if (!text) {
+      console.error('[Sweetlink] Error: demo note requires text');
+      process.exit(1);
+    }
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const updated = demoMod.addNote(state, text);
+    await demoMod.writeDemo(updated);
+    console.log(`[Sweetlink] Note added (${updated.sections.length} sections)`);
+    return { sections: updated.sections.length };
+  }
+
+  if (sub === 'exec') {
+    const cmd = args.slice(2).join(' ');
+    if (!cmd) {
+      console.error('[Sweetlink] Error: demo exec requires a command');
+      process.exit(1);
+    }
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const updated = await demoMod.addExec(state, cmd, []);
+    await demoMod.writeDemo(updated);
+    const lastSection = updated.sections[updated.sections.length - 1]!;
+    console.log(`[Sweetlink] Exec added: ${cmd} (exit ${lastSection.exitCode ?? 0})`);
+    return { sections: updated.sections.length, exitCode: lastSection.exitCode };
+  }
+
+  if (sub === 'screenshot') {
+    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const caption = getArg('--caption') ?? 'Screenshot';
+    const daemonState = await ensureDaemon(projRoot, targetUrl);
+    const resp = await daemonRequest(daemonState, 'screenshot', {});
+    const data = resp.data as { screenshot: string };
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const updated = await demoMod.addScreenshot(
+      state,
+      Buffer.from(data.screenshot, 'base64'),
+      caption
+    );
+    await demoMod.writeDemo(updated);
+    console.log(`[Sweetlink] Screenshot added: ${caption}`);
+    return { sections: updated.sections.length };
+  }
+
+  if (sub === 'snapshot') {
+    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const daemonState = await ensureDaemon(projRoot, targetUrl);
+    const resp = await daemonRequest(daemonState, 'snapshot', { interactive: true });
+    const data = resp.data as { tree: string };
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const updated = demoMod.addSnapshot(state, data.tree);
+    await demoMod.writeDemo(updated);
+    console.log(`[Sweetlink] Snapshot added (${updated.sections.length} sections)`);
+    return { sections: updated.sections.length };
+  }
+
+  if (sub === 'pop') {
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const updated = demoMod.popSection(state);
+    await demoMod.writeDemo(updated);
+    console.log(`[Sweetlink] Last section removed (${updated.sections.length} remaining)`);
+    return { sections: updated.sections.length };
+  }
+
+  if (sub === 'verify') {
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const verifyResult = await demoMod.verifyDemo(state);
+    if (verifyResult.passed) {
+      console.log('[Sweetlink] Demo verified: all outputs match');
+    } else {
+      console.log(
+        `[Sweetlink] Demo verification FAILED: ${verifyResult.failures.length} mismatch(es)`
+      );
+      for (const f of verifyResult.failures) {
+        console.log(`  Section ${f.index}: ${f.command}`);
+        console.log(`    Expected: ${f.expected.substring(0, 80)}...`);
+        console.log(`    Actual:   ${f.actual.substring(0, 80)}...`);
+      }
+    }
+    return verifyResult;
+  }
+
+  // Default: status
+  if (fs.existsSync(stateFile)) {
+    const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    console.log(`[Sweetlink] Demo: "${state.title}" (${state.sections.length} sections)`);
+    console.log(`  File: ${state.filePath}`);
+    for (const s of state.sections) {
+      const preview =
+        s.type === 'note'
+          ? s.content.substring(0, 60)
+          : s.type === 'exec'
+            ? `$ ${s.command}`
+            : s.type === 'screenshot'
+              ? `[image] ${s.screenshotFile}`
+              : '[snapshot]';
+      console.log(`  ${s.type.padEnd(12)} ${preview}`);
+    }
+    return state;
+  }
+  console.log('[Sweetlink] No demo in progress. Run `demo init <title>` to start.');
+  return null;
+}
+
+async function handleDaemonCmd(): Promise<unknown> {
+  const subcommand = args[1];
+  const projRoot = findProjectRoot();
+  // Daemon state files are scoped by app port (`daemon-<port>.json`),
+  // so honour --url for status/stop too — otherwise they look up the
+  // un-suffixed `daemon.json` and miss the daemon that `start`
+  // wrote with --url.
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const appPort = extractPort(targetUrl);
+  if (subcommand === 'stop') {
+    const stopped = await stopDaemon(projRoot, appPort);
+    console.log(stopped ? '[Sweetlink] Daemon stopped.' : '[Sweetlink] No daemon running.');
+    return { running: false } satisfies DaemonStatusData;
+  }
+  if (subcommand === 'start') {
+    const headedFlag = hasFlag('--headed');
+    const state = await ensureDaemon(projRoot, targetUrl, { headed: headedFlag });
+    console.log(`[Sweetlink] Daemon running on port ${state.port} (PID: ${state.pid})`);
+    return {
+      running: true,
+      pid: state.pid,
+      port: state.port,
+      url: state.url,
+    } satisfies DaemonStatusData;
+  }
+  // Default: status
+  const status = await getDaemonStatus(projRoot, appPort);
+  if (status.running) {
+    console.log(
+      `[Sweetlink] Daemon running: port=${status.port} pid=${status.pid} uptime=${status.uptime}s`
+    );
+  } else {
+    console.log('[Sweetlink] No daemon running.');
+  }
+  return status satisfies DaemonStatusData;
+}
+
+async function handleFillCmd(): Promise<unknown> {
+  const fillTarget = getArg('--selector') ?? args[1];
+  const fillValue = getArg('--value') ?? args[2];
+  if (!fillTarget) {
+    console.error('[Sweetlink] Error: fill requires a target (@ref or --selector)');
+    process.exit(1);
+  }
+  if (fillValue === undefined) {
+    console.error('[Sweetlink] Error: fill requires a value (--value or positional arg)');
+    process.exit(1);
+  }
+  if (/^@e\d+$/.test(fillTarget)) {
+    const projRoot = findProjectRoot();
+    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const state = await ensureDaemon(projRoot, targetUrl);
+    await daemonRequest(state, 'fill-ref', { ref: fillTarget, value: fillValue });
+    console.log(`[Sweetlink] Filled ${fillTarget} with "${fillValue}"`);
+    return { clicked: fillTarget, found: 1, index: 0 } satisfies ClickData;
+  }
+  console.error('[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.');
+  process.exit(1);
+}
+
+async function handleSnapshotCmd(): Promise<unknown> {
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const interactive = hasFlag('-i') || hasFlag('--interactive');
+  const doDiff = hasFlag('-D') || hasFlag('--diff');
+  const doAnnotate = hasFlag('-a') || hasFlag('--annotate');
+  const state = await ensureDaemon(projRoot, targetUrl);
+  const resp = await daemonRequest(state, 'snapshot', {
+    interactive,
+    diff: doDiff,
+    annotate: doAnnotate,
+  });
+  const data = resp.data as {
+    tree: string;
+    diff?: string;
+    screenshot?: string;
+    refs: Array<{ ref: string; role: string; name: string }>;
+    count: number;
+  };
+
+  if (doDiff && data.diff) {
+    console.log(data.diff);
+  } else if (doAnnotate && data.screenshot) {
+    const outputPath = getArg('--output') ?? getArg('-o') ?? 'annotated-snapshot.png';
+    fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
+    console.log(`[Sweetlink] Annotated screenshot saved: ${outputPath}`);
+  } else {
+    console.log(data.tree);
+  }
+  console.log(`\n${data.count} elements found`);
+  return {
+    tree: data.tree,
+    refs: data.refs,
+    diff: data.diff,
+  } satisfies SnapshotData;
+}
+
+async function handleReportCmd(): Promise<unknown> {
+  const sessionDirArg = getArg('--session') ?? '.sweetlink';
+  if (!fs.existsSync(sessionDirArg)) {
+    console.error(`[Sweetlink] Session directory not found: ${sessionDirArg}`);
+    process.exit(1);
+  }
+  const reportSessionDir = findLatestSessionDir(sessionDirArg);
+  if (!reportSessionDir) {
+    console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+    process.exit(1);
+  }
+
+  if (hasFlag('--clipboard')) {
+    const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+    if (!fs.existsSync(summaryPath)) {
+      console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
+      process.exit(1);
+    }
+    const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
+    const { execFileSync } = await import('child_process');
+    const clipCmd = process.platform === 'darwin' ? 'pbcopy' : 'xclip';
+    const clipArgs = process.platform === 'darwin' ? [] : ['-selection', 'clipboard'];
+    try {
+      execFileSync(clipCmd, clipArgs, { input: summaryContent });
+      console.log('[Sweetlink] SUMMARY.md copied to clipboard.');
+    } catch (err) {
+      console.error(
+        `[Sweetlink] Failed to copy to clipboard (${clipCmd}):`,
+        err instanceof Error ? err.message : err
+      );
+      process.exit(1);
+    }
+    return { mode: 'clipboard', session: path.basename(reportSessionDir) };
+  }
+
+  if (hasFlag('--serve')) {
+    const viewerPath = path.join(reportSessionDir, 'viewer.html');
+    if (!fs.existsSync(viewerPath)) {
+      console.error(`[Sweetlink] viewer.html not found at ${viewerPath}`);
+      process.exit(1);
+    }
+    const viewerContent = fs.readFileSync(viewerPath, 'utf-8');
+    const http = await import('http');
+    const port = 10000 + Math.floor(Math.random() * 50000);
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(viewerContent);
+    });
+    server.listen(port, '0.0.0.0', () => {
+      const os = require('os');
+      const nets = os.networkInterfaces();
+      let lanIp = 'localhost';
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          if (net.family === 'IPv4' && !net.internal) {
+            lanIp = net.address;
+            break;
+          }
+        }
+        if (lanIp !== 'localhost') break;
+      }
+      console.log(`[Sweetlink] Serving viewer at:`);
+      console.log(`  Local:   http://localhost:${port}`);
+      console.log(`  Network: http://${lanIp}:${port}`);
+      console.log('  Press Ctrl+C to stop.');
+    });
+    // Keep running until Ctrl+C
+    await new Promise(() => {});
+    return undefined;
+  }
+
+  if (getArg('--webhook')) {
+    const webhookUrl = getArg('--webhook')!;
+    const manifestPath = path.join(reportSessionDir, 'sweetlink-session.json');
+    const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+    if (!fs.existsSync(manifestPath)) {
+      console.error(`[Sweetlink] Manifest not found at ${manifestPath}`);
+      process.exit(1);
+    }
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : '';
+    const payload: { summary: string; manifest: object; viewerHtml?: string } = {
+      summary,
+      manifest,
+    };
+    // Include viewer HTML for Slack/Discord webhooks
+    if (/slack|discord/i.test(webhookUrl)) {
+      const viewerPath = path.join(reportSessionDir, 'viewer.html');
+      if (fs.existsSync(viewerPath)) {
+        payload.viewerHtml = fs.readFileSync(viewerPath, 'utf-8');
+      }
+    }
+    const body = JSON.stringify(payload);
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+    if (res.ok) {
+      console.log(`[Sweetlink] Report posted to ${webhookUrl} (${res.status})`);
+    } else {
+      console.error(`[Sweetlink] Webhook failed: ${res.status} ${res.statusText}`);
+      process.exit(1);
+    }
+    return { mode: 'webhook', url: webhookUrl, status: res.status };
+  }
+
+  // Default: print SUMMARY.md to stdout
+  const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
+  if (!fs.existsSync(summaryPath)) {
+    console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
+    process.exit(1);
+  }
+  const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
+  process.stdout.write(summaryContent);
+  return { mode: 'stdout', session: path.basename(reportSessionDir) };
+}
+
+async function handleSimCmd(): Promise<unknown> {
+  // Record iOS Simulator or Android Emulator screen while running a command.
+  const platform = args[1];
+  if (platform !== 'ios' && platform !== 'android') {
+    console.error(
+      '[Sweetlink] Usage: sweetlink sim <ios|android> "<command>" [--output path] [--device <name>]'
+    );
+    process.exit(1);
+  }
+  const flagsWithValues = new Set([
+    '--output',
+    '--label',
+    '--device',
+    '--time-limit',
+    '--app',
+    '--run',
+  ]);
+  const positional: string[] = [];
+  for (let i = 2; i < args.length; i++) {
+    const a = args[i]!;
+    if (a.startsWith('--')) {
+      if (flagsWithValues.has(a)) i++;
+      continue;
+    }
+    positional.push(a);
+  }
+  const command = positional.join(' ').trim();
+  if (!command) {
+    console.error(
+      `[Sweetlink] Error: sim ${platform} requires a command. Example: sweetlink sim ${platform} "fastlane scan"`
+    );
+    process.exit(1);
+  }
+
+  const label = getArg('--label');
+  const labelSlug = label
+    ? label
+        .replace(/[^a-z0-9]/gi, '-')
+        .toLowerCase()
+        .slice(0, 40)
+    : `sim-${platform}`;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const { runSlot: simRunSlot } = await import('../runs.js');
+  const defaultDir = simRunSlot({
+    baseDir: findProjectRoot(),
+    app: getArg('--app'),
+    run: getArg('--run'),
+    kind: 'sim',
+  });
+  const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.mp4`);
+  ensureDir(output);
+  const device = getArg('--device');
+
+  console.log(`[Sweetlink] Recording ${platform} simulator: ${command}`);
+
+  let recResult: {
+    output: string;
+    device: string;
+    exitCode: number;
+    durationSec: number;
+    recordingClosed: boolean;
+    tapCount?: number;
+    tapsJsonPath?: string;
+    overlaysApplied?: boolean;
+  };
+  if (platform === 'ios') {
+    const { recordIosSimulator } = await import('../simulator/ios.js');
+    recResult = await recordIosSimulator({ command, output, device });
+  } else {
+    const { recordAndroidEmulator } = await import('../simulator/android.js');
+    const tl = getArg('--time-limit');
+    recResult = await recordAndroidEmulator({
+      command,
+      output,
+      device,
+      timeLimit: tl ? parseInt(tl, 10) : undefined,
+      overlays: !hasFlag('--no-overlays'),
+    });
+  }
+
+  let sizeKb = '?';
+  try {
+    sizeKb = String(Math.round(fs.statSync(output).size / 1024));
+  } catch {
+    /* file may not exist if recordingClosed is false */
+  }
+  const tapSuffix =
+    (recResult.tapCount ?? 0) > 0
+      ? ` · ${recResult.tapCount} taps${recResult.overlaysApplied ? ' (overlaid)' : ' (sidecar only — install ffmpeg for overlays)'}`
+      : '';
+  console.log(
+    `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
+      `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
+      tapSuffix +
+      (recResult.recordingClosed
+        ? ''
+        : ' (recording was force-killed; mp4 may be incomplete)')
+  );
+
+  const result = {
+    path: output,
+    device: recResult.device,
+    durationSec: recResult.durationSec,
+    exitCode: recResult.exitCode,
+    recordingClosed: recResult.recordingClosed,
+    tapCount: recResult.tapCount,
+    tapsJsonPath: recResult.tapsJsonPath,
+    overlaysApplied: recResult.overlaysApplied,
+  };
+  if (recResult.exitCode !== 0 && !hasFlag('--ignore-exit')) {
+    process.exit(recResult.exitCode);
+  }
+  return result;
+}
+
+async function handleTermCmd(): Promise<unknown> {
+  // Record a shell command's stdout/stderr into asciicast v2 + HTML player.
+  const flagsWithValues = new Set([
+    '--output',
+    '--label',
+    '--shell',
+    '--cols',
+    '--rows',
+    '--app',
+    '--run',
+  ]);
+  const positional: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i]!;
+    if (a.startsWith('--')) {
+      if (flagsWithValues.has(a)) i++;
+      continue;
+    }
+    positional.push(a);
+  }
+  const command = positional.join(' ').trim();
+  if (!command) {
+    console.error(
+      '[Sweetlink] Error: term requires a command. Example: sweetlink term "pytest tests/"'
+    );
+    process.exit(1);
+  }
+
+  const label = getArg('--label');
+  const labelSlug = label
+    ? label
+        .replace(/[^a-z0-9]/gi, '-')
+        .toLowerCase()
+        .slice(0, 40)
+    : 'term';
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const { runSlot } = await import('../runs.js');
+  const defaultDir = runSlot({
+    baseDir: findProjectRoot(),
+    app: getArg('--app'),
+    run: getArg('--run'),
+    kind: 'term',
+  });
+  const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.cast`);
+  ensureDir(output);
+
+  console.log(`[Sweetlink] Recording terminal: ${command}`);
+  const { captureTerminal } = await import('../term/recorder.js');
+  const { generatePlayer } = await import('../term/player.js');
+  const cap = await captureTerminal({
+    command,
+    output,
+    label,
+    shell: getArg('--shell'),
+    cols: getArg('--cols') ? parseInt(getArg('--cols')!, 10) : undefined,
+    rows: getArg('--rows') ? parseInt(getArg('--rows')!, 10) : undefined,
+  });
+  const playerPath = await generatePlayer({ castPath: output });
+  console.log(
+    `[Sweetlink] ✓ ${getRelativePath(output)} · ${cap.durationSec.toFixed(1)}s · ` +
+      `${cap.events} events · ${(cap.bytes / 1024).toFixed(0)}KB · exit=${cap.exitCode}`
+  );
+  console.log(`[Sweetlink] ▶ ${getRelativePath(playerPath)}`);
+  const result = {
+    castPath: output,
+    playerPath,
+    durationSec: cap.durationSec,
+    bytes: cap.bytes,
+    events: cap.events,
+    exitCode: cap.exitCode,
+  };
+  // Propagate the recorded command's exit code by default so CI fails
+  // when the wrapped tests fail.
+  if (cap.exitCode !== 0 && !hasFlag('--ignore-exit')) {
+    process.exit(cap.exitCode);
+  }
+  return result;
+}
+
+async function handleRecordCmd(): Promise<unknown> {
+  const projRoot = findProjectRoot();
+  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const subcommand = args[1];
+  const state = await ensureDaemon(projRoot, targetUrl);
+
+  if (subcommand === 'start') {
+    const params: Record<string, unknown> = {};
+    const label = getArg('--label');
+    const viewport = getArg('--viewport');
+    const storageState = getArg('--storage-state');
+    if (label) params.label = label;
+    if (viewport) params.viewport = viewport;
+    if (storageState) params.storageState = storageState;
+    if (hasFlag('--trace')) params.trace = true;
+    const resp = await daemonRequest(state, 'record-start', params);
+    const data = resp.data as { sessionId: string; label?: string };
+    console.log(
+      `[Sweetlink] Recording started: ${data.sessionId}` +
+        (data.label ? ` (${data.label})` : '')
+    );
+    return data;
+  }
+
+  if (subcommand === 'stop') {
+    const resp = await daemonRequest(state, 'record-stop');
+    const data = resp.data as {
+      manifest: { sessionId: string; duration: number; commands: unknown[]; video?: string };
+      viewerPath?: string;
+    };
+    const m = data.manifest;
+    console.log(`[Sweetlink] Recording stopped: ${m.sessionId}`);
+    console.log(
+      `  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ` | Video: ${m.video}` : ''}`
+    );
+
+    // Auto-open the viewer (cross-platform; --no-open to suppress)
+    if (data.viewerPath && !hasFlag('--no-open')) {
+      console.log(`  Viewer: ${data.viewerPath}`);
+      openInBrowser(data.viewerPath);
+      console.log(`  Opened in browser.`);
+    } else if (data.viewerPath) {
+      console.log(`  Viewer: ${data.viewerPath}`);
+    }
+    return data;
+  }
+
+  if (subcommand === 'exec') {
+    // record exec "click @e2; fill @e3 hello world; click @e5"
+    // Runs a semicolon-separated DSL inside a fresh recording, then
+    // auto-stops. Each step is one of:
+    //   click <selector|@ref>
+    //   fill <@ref> <value>          (rest of line after ref = value)
+    //   press <key>
+    //   sleep <ms>
+    // Strip known --flag value pairs from positional args before
+    // joining what remains as the script body.
+    const flagsWithValues = new Set(['--url', '--label', '--viewport', '--storage-state']);
+    const positional: string[] = [];
+    for (let i = 2; i < args.length; i++) {
+      const a = args[i]!;
+      if (a.startsWith('--')) {
+        if (flagsWithValues.has(a)) i++; // skip its value
+        continue;
+      }
+      positional.push(a);
+    }
+    const script = positional.join(' ').trim();
+    if (!script) {
+      console.error(
+        '[Sweetlink] Error: record exec requires a script. Example: `record exec "click @e2; fill @e3 hello"`'
+      );
+      process.exit(1);
+    }
+    const label = getArg('--label');
+    const startResp = await daemonRequest(state, 'record-start', label ? { label } : {});
+    const startData = startResp.data as { sessionId: string };
+    console.log(`[Sweetlink] Recording: ${startData.sessionId}${label ? ` (${label})` : ''}`);
+
+    const steps = script
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    // Snapshot once up-front so refs resolve.
+    await daemonRequest(state, 'snapshot', { interactive: true });
+
+    for (const step of steps) {
+      const [verb, ...rest] = step.split(/\s+/);
+      try {
+        if (verb === 'click') {
+          const target = rest[0];
+          if (!target) throw new Error('click needs a target');
+          if (/^@e\d+$/.test(target)) {
+            await daemonRequest(state, 'click-ref', { ref: target });
+          } else {
+            await daemonRequest(state, 'click-css', { selector: target });
+          }
+          console.log(`  · click ${target}`);
+        } else if (verb === 'fill') {
+          const ref = rest[0];
+          const value = rest.slice(1).join(' ');
+          if (!ref || !/^@e\d+$/.test(ref)) throw new Error('fill needs a @ref and a value');
+          await daemonRequest(state, 'fill-ref', { ref, value });
+          console.log(`  · fill ${ref} = "${value}"`);
+        } else if (verb === 'press') {
+          const key = rest[0];
+          if (!key) throw new Error('press needs a key');
+          await daemonRequest(state, 'press-key', { key });
+          console.log(`  · press ${key}`);
+        } else if (verb === 'sleep') {
+          const ms = parseInt(rest[0] ?? '0', 10);
+          await new Promise((r) => setTimeout(r, ms));
+          console.log(`  · sleep ${ms}ms`);
+        } else {
+          throw new Error(`Unknown verb '${verb}'. Allowed: click, fill, press, sleep.`);
+        }
+      } catch (err) {
+        console.error(
+          `  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`
+        );
+        // Continue to record-stop so the partial recording is preserved.
+      }
+    }
+
+    const stopResp = await daemonRequest(state, 'record-stop');
+    const stopData = stopResp.data as {
+      manifest: { sessionId: string; commands: unknown[]; duration: number; video?: string };
+      viewerPath?: string;
+    };
+    console.log(
+      `[Sweetlink] Done: ${stopData.manifest.commands.length} actions in ` +
+        `${stopData.manifest.duration.toFixed(1)}s${stopData.viewerPath ? ` · ${stopData.viewerPath}` : ''}`
+    );
+    return stopData;
+  }
+
+  if (subcommand === 'pause') {
+    const resp = await daemonRequest(state, 'record-pause');
+    console.log('[Sweetlink] Recording paused. Use `record resume` to continue.');
+    return resp.data;
+  }
+
+  if (subcommand === 'resume') {
+    const resp = await daemonRequest(state, 'record-resume');
+    const d = resp.data as { pausedDurationMs: number };
+    console.log(
+      `[Sweetlink] Recording resumed. Paused for ${(d.pausedDurationMs / 1000).toFixed(1)}s.`
+    );
+    return resp.data;
+  }
+
+  // Default: status
+  const resp = await daemonRequest(state, 'record-status');
+  const data = resp.data as {
+    recording: boolean;
+    sessionId: string | null;
+    duration: number | null;
+    actionCount: number;
+  };
+  if (data.recording) {
+    console.log(
+      `[Sweetlink] Recording in progress: ${data.sessionId} (${Math.round(data.duration ?? 0)}s, ${data.actionCount} actions)`
+    );
+  } else {
+    console.log('[Sweetlink] No recording in progress.');
+  }
+  return data;
+}
+
+async function handleProofCmd(): Promise<unknown> {
+  const prNum = getArg('--pr');
+  if (!prNum) {
+    console.error('[Sweetlink] Error: --pr <number> is required');
+    process.exit(1);
+  }
+  const sessionDirArg = getArg('--session') ?? '.sweetlink';
+  const latestSession = findLatestSessionDir(sessionDirArg);
+  if (!latestSession) {
+    console.error('[Sweetlink] No session found. Run `record start` and `record stop` first.');
+    process.exit(1);
+  }
+  const manifestPath = path.join(latestSession, 'sweetlink-session.json');
+  if (!fs.existsSync(manifestPath)) {
+    console.error(`[Sweetlink] No manifest found at ${manifestPath}`);
+    process.exit(1);
+  }
+  const manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  try {
+    const { commentUrl } = await uploadEvidence(manifestData, latestSession, parseInt(prNum, 10), {
+      repo: getArg('--repo') ?? undefined,
+    });
+    console.log(`[Sweetlink] Evidence posted: ${commentUrl}`);
+    return { commentUrl };
+  } catch (error) {
+    console.error(
+      '[Sweetlink] Failed to upload evidence:',
+      error instanceof Error ? error.message : error
+    );
+    process.exit(1);
+  }
+}
+
 (async () => {
   const startTime = Date.now();
 
@@ -3047,230 +4174,42 @@ async function handleStatusCommand(): Promise<StatusData> {
 
     switch (commandType) {
       case 'screenshot':
-        result = await screenshot({
-          selector: getArg('--selector'),
-          output: getArg('--output'),
-          fullPage: hasFlag('--full-page'),
-          forceCDP: hasFlag('--force-cdp'),
-          forceWS: hasFlag('--force-ws'),
-          hifi: hasFlag('--hifi'),
-          responsive: hasFlag('--responsive'),
-          a11y: hasFlag('--a11y'),
-          viewport: getArg('--viewport'),
-          width: getArg('--width') ? parseInt(getArg('--width')!, 10) : undefined,
-          height: getArg('--height') ? parseInt(getArg('--height')!, 10) : undefined,
-          hover: hasFlag('--hover'),
-          hideDevbar: hasFlag('--hide-devbar'),
-          padding: getArg('--padding') ? parseInt(getArg('--padding')!, 10) : undefined,
-          theme: getArg('--theme') as 'light' | 'dark' | 'no-preference' | undefined,
-          url: getArg('--url'),
-          wait: !hasFlag('--no-wait'), // Wait by default, --no-wait to skip
-          waitTimeout: getArg('--wait-timeout')
-            ? parseInt(getArg('--wait-timeout')!, 10)
-            : undefined,
-        });
+        result = await handleScreenshotCmd();
         break;
 
       case 'inspect':
-      case 'context': {
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const state = await ensureDaemon(projRoot, targetUrl);
-        const actionTranscript: Array<{ action: string; target?: string; result?: string }> = [];
-        args.forEach((arg, index) => {
-          if (arg !== '--action') return;
-          const value = args[index + 1];
-          if (!value) return;
-          actionTranscript.push({ action: value });
-        });
-        const resp = await daemonRequest(state, 'inspect', {
-          last: getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined,
-          label: getArg('--label'),
-          expectedOutcome: getArg('--expected'),
-          actionTranscript,
-          includeA11y: !hasFlag('--no-a11y'),
-        });
-        const data = resp.data as unknown as InspectData;
-        const output = getArg('--output');
-        if (output) {
-          ensureDir(output);
-          fs.writeFileSync(output, JSON.stringify(data, null, 2), 'utf-8');
-        }
-        if (getArg('--format') === 'json') {
-          console.log(JSON.stringify(data, null, 2));
-        } else {
-          printInspectSummary(data);
-        }
-        result = data;
+      case 'context':
+        result = await handleInspectCmd();
         break;
-      }
 
-      case 'query': {
-        const selector = getArg('--selector');
-        if (!selector) {
-          console.error('[Sweetlink] Error: --selector is required for query command');
-          process.exit(1);
-        }
-        if (getArg('--url')) {
-          const navigated = await navigateBrowser(getArg('--url')!);
-          if (!navigated) {
-            console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
-            process.exit(1);
-          }
-        }
-        result = await queryDOM({
-          selector,
-          property: getArg('--property'),
-          waitFor: getArg('--wait-for'),
-          waitTimeout: getArg('--wait-timeout')
-            ? parseInt(getArg('--wait-timeout')!, 10)
-            : undefined,
-        });
+      case 'query':
+        result = await handleQueryCmd();
         break;
-      }
 
-      case 'logs': {
-        const format = getArg('--format') as 'text' | 'json' | 'summary' | undefined;
-        result = await getLogs({
-          filter: getArg('--filter'),
-          format: format || 'text',
-          dedupe: hasFlag('--dedupe'),
-          output: getArg('--output'),
-        });
+      case 'logs':
+        result = await handleLogsCmd();
         break;
-      }
 
-      case 'exec': {
-        const code = getArg('--code');
-        if (!code) {
-          console.error('[Sweetlink] Error: --code is required for exec command');
-          process.exit(1);
-        }
-        if (getArg('--url')) {
-          const navigated = await navigateBrowser(getArg('--url')!);
-          if (!navigated) {
-            console.error('[Sweetlink] Could not navigate browser to', getArg('--url'));
-            process.exit(1);
-          }
-        }
-        result = await execJS({
-          code,
-          waitFor: getArg('--wait-for'),
-          waitTimeout: getArg('--wait-timeout')
-            ? parseInt(getArg('--wait-timeout')!, 10)
-            : undefined,
-        });
+      case 'exec':
+        result = await handleExecCmd();
         break;
-      }
 
-      case 'click': {
-        const clickTarget = getArg('--selector') ?? args[1];
-        const clickText = getArg('--text');
-        const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-
-        // Route @e refs to daemon
-        if (clickTarget && /^@e\d+$/.test(clickTarget)) {
-          const state = await ensureDaemon(projRoot, targetUrl);
-          await daemonRequest(state, 'click-ref', { ref: clickTarget });
-          console.log(`[Sweetlink] Clicked ${clickTarget}`);
-          result = { clicked: clickTarget, found: 1, index: 0 } satisfies ClickData;
-          break;
-        }
-
-        // If a recording is in progress, route CSS clicks through the daemon
-        // so they target the recording page (which has no devbar/WebSocket
-        // bridge) and get logged into the session manifest.
-        try {
-          const status = await getDaemonStatus(projRoot, extractPort(targetUrl));
-          if (status.running) {
-            const state = await ensureDaemon(projRoot, targetUrl);
-            const recStatus = await daemonRequest(state, 'record-status');
-            const recData = recStatus.data as { recording?: boolean } | undefined;
-            if (recData?.recording) {
-              const resp = await daemonRequest(state, 'click-css', {
-                selector: clickTarget,
-                text: clickText,
-                index: clickIndex,
-              });
-              const data = resp.data as { clicked?: string; found?: number; index?: number };
-              console.log(
-                `[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`
-              );
-              result = {
-                clicked: data.clicked ?? 'unknown',
-                found: data.found ?? 1,
-                index: data.index ?? clickIndex,
-              } satisfies ClickData;
-              break;
-            }
-          }
-        } catch {
-          /* fall through to WS path */
-        }
-
-        result = await click({
-          selector: clickTarget,
-          text: clickText,
-          index: clickIndex,
-        });
+      case 'click':
+        result = await handleClickCmd();
         break;
-      }
 
-      case 'network': {
-        // If --failed flag is present and daemon is running, use daemon ring buffer
-        if (hasFlag('--failed')) {
-          const projRoot = findProjectRoot();
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-          const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
-          const state = await ensureDaemon(projRoot, targetUrl);
-          const resp = await daemonRequest(state, 'network-read', {
-            failed: true,
-            last: lastN,
-          });
-          const data = resp.data as { formatted: string; total: number; failedCount: number };
-          console.log(data.formatted);
-          console.log(`\nTotal: ${data.total} | Failed: ${data.failedCount}`);
-          result = data;
-        } else {
-          result = await getNetwork({
-            filter: getArg('--filter'),
-          });
-        }
+      case 'network':
+        result = await handleNetworkCmd();
         break;
-      }
 
       case 'refresh':
-        result = await refresh({
-          hard: hasFlag('--hard'),
-        });
+        result = await handleRefreshCmd();
         break;
 
       case 'ruler':
-      case 'measure': {
-        // Collect all --selector arguments
-        const rulerSelectors: string[] = [];
-        args.forEach((arg, i) => {
-          if (arg === '--selector' && args[i + 1]) {
-            rulerSelectors.push(args[i + 1]!);
-          }
-        });
-
-        result = await ruler({
-          selectors: rulerSelectors.length > 0 ? rulerSelectors : undefined,
-          preset: getArg('--preset') as 'card-header' | 'navigation' | undefined,
-          url: getArg('--url'),
-          output: getArg('--output'),
-          showCenterLines: !hasFlag('--no-center-lines'),
-          showDimensions: !hasFlag('--no-dimensions'),
-          showPosition: hasFlag('--show-position'),
-          showAlignment: !hasFlag('--no-alignment'),
-          limit: getArg('--limit') ? parseInt(getArg('--limit')!, 10) : undefined,
-          format: getArg('--format') as 'text' | 'json' | undefined,
-        });
+      case 'measure':
+        result = await handleRulerCmd();
         break;
-      }
 
       case 'wait':
         result = await handleWaitCommand();
@@ -3281,929 +4220,73 @@ async function handleStatusCommand(): Promise<StatusData> {
         break;
 
       case 'schema':
-        result = await getSchema({
-          format: getArg('--format') as 'text' | 'json' | undefined,
-          output: getArg('--output'),
-        });
+        result = await handleSchemaCmd();
         break;
 
       case 'outline':
-        result = await getOutline({
-          format: getArg('--format') as 'text' | 'json' | 'markdown' | undefined,
-          output: getArg('--output'),
-        });
+        result = await handleOutlineCmd();
         break;
 
       case 'a11y':
       case 'accessibility':
-        result = await getA11y({
-          format: getArg('--format') as 'text' | 'json' | undefined,
-          output: getArg('--output'),
-        });
+        result = await handleA11yCmd();
         break;
 
       case 'vitals':
-        result = await getVitals({
-          format: getArg('--format') as 'text' | 'json' | undefined,
-        });
+        result = await handleVitalsCmd();
         break;
 
       case 'cleanup':
-        result = await cleanup({
-          force: hasFlag('--force'),
-          verbose: hasFlag('--verbose'),
-        });
+        result = await handleCleanupCmd();
         break;
 
-      case 'setup': {
-        // Run the setup script to symlink Claude context and skills
-        const { execFileSync } = await import('child_process');
-        const scriptDir = path.dirname(import.meta.url.replace('file://', ''));
-        const setupScript = path.resolve(
-          scriptDir,
-          '..',
-          '..',
-          'scripts',
-          'setup-claude-context.mjs'
-        );
-        execFileSync('node', [setupScript], { stdio: 'inherit' });
+      case 'setup':
+        result = await handleSetupCmd();
         break;
-      }
 
-      case 'console': {
-        // Route to daemon ring buffer when daemon is alive
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const errorsOnly = hasFlag('--errors');
-        const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
-        const state = await ensureDaemon(projRoot, targetUrl);
-        const resp = await daemonRequest(state, 'console-read', {
-          errors: errorsOnly,
-          last: lastN,
-        });
-        const data = resp.data as {
-          formatted: string;
-          total: number;
-          errorCount: number;
-          warningCount: number;
-        };
-        console.log(data.formatted);
-        console.log(
-          `\nTotal: ${data.total} | Errors: ${data.errorCount} | Warnings: ${data.warningCount}`
-        );
-        result = data;
+      case 'console':
+        result = await handleConsoleCmd();
         break;
-      }
 
-      case 'proof': {
-        const prNum = getArg('--pr');
-        if (!prNum) {
-          console.error('[Sweetlink] Error: --pr <number> is required');
-          process.exit(1);
-        }
-        const sessionDirArg = getArg('--session') ?? '.sweetlink';
-        const latestSession = findLatestSessionDir(sessionDirArg);
-        if (!latestSession) {
-          console.error(
-            '[Sweetlink] No session found. Run `record start` and `record stop` first.'
-          );
-          process.exit(1);
-        }
-        const manifestPath = path.join(latestSession, 'sweetlink-session.json');
-        if (!fs.existsSync(manifestPath)) {
-          console.error(`[Sweetlink] No manifest found at ${manifestPath}`);
-          process.exit(1);
-        }
-        const manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-        try {
-          const { commentUrl } = await uploadEvidence(
-            manifestData,
-            latestSession,
-            parseInt(prNum, 10),
-            { repo: getArg('--repo') ?? undefined }
-          );
-          console.log(`[Sweetlink] Evidence posted: ${commentUrl}`);
-          result = { commentUrl };
-        } catch (error) {
-          console.error(
-            '[Sweetlink] Failed to upload evidence:',
-            error instanceof Error ? error.message : error
-          );
-          process.exit(1);
-        }
+      case 'proof':
+        result = await handleProofCmd();
         break;
-      }
 
-      case 'record': {
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const subcommand = args[1];
-        const state = await ensureDaemon(projRoot, targetUrl);
-
-        if (subcommand === 'start') {
-          const params: Record<string, unknown> = {};
-          const label = getArg('--label');
-          const viewport = getArg('--viewport');
-          const storageState = getArg('--storage-state');
-          if (label) params.label = label;
-          if (viewport) params.viewport = viewport;
-          if (storageState) params.storageState = storageState;
-          if (hasFlag('--trace')) params.trace = true;
-          const resp = await daemonRequest(state, 'record-start', params);
-          const data = resp.data as { sessionId: string; label?: string };
-          console.log(
-            `[Sweetlink] Recording started: ${data.sessionId}` +
-              (data.label ? ` (${data.label})` : '')
-          );
-          result = data;
-        } else if (subcommand === 'stop') {
-          const resp = await daemonRequest(state, 'record-stop');
-          const data = resp.data as {
-            manifest: { sessionId: string; duration: number; commands: unknown[]; video?: string };
-            viewerPath?: string;
-          };
-          const m = data.manifest;
-          console.log(`[Sweetlink] Recording stopped: ${m.sessionId}`);
-          console.log(
-            `  Duration: ${m.duration.toFixed(1)}s | Actions: ${m.commands.length}${m.video ? ` | Video: ${m.video}` : ''}`
-          );
-
-          // Auto-open the viewer (cross-platform; --no-open to suppress)
-          if (data.viewerPath && !hasFlag('--no-open')) {
-            console.log(`  Viewer: ${data.viewerPath}`);
-            openInBrowser(data.viewerPath);
-            console.log(`  Opened in browser.`);
-          } else if (data.viewerPath) {
-            console.log(`  Viewer: ${data.viewerPath}`);
-          }
-          result = data;
-        } else if (subcommand === 'exec') {
-          // record exec "click @e2; fill @e3 hello world; click @e5"
-          // Runs a semicolon-separated DSL inside a fresh recording, then
-          // auto-stops. Each step is one of:
-          //   click <selector|@ref>
-          //   fill <@ref> <value>          (rest of line after ref = value)
-          //   press <key>
-          //   sleep <ms>
-          // Strip known --flag value pairs from positional args before
-          // joining what remains as the script body.
-          const flagsWithValues = new Set(['--url', '--label', '--viewport', '--storage-state']);
-          const positional: string[] = [];
-          for (let i = 2; i < args.length; i++) {
-            const a = args[i]!;
-            if (a.startsWith('--')) {
-              if (flagsWithValues.has(a)) i++; // skip its value
-              continue;
-            }
-            positional.push(a);
-          }
-          const script = positional.join(' ').trim();
-          if (!script) {
-            console.error(
-              '[Sweetlink] Error: record exec requires a script. Example: `record exec "click @e2; fill @e3 hello"`'
-            );
-            process.exit(1);
-          }
-          const label = getArg('--label');
-          const startResp = await daemonRequest(state, 'record-start', label ? { label } : {});
-          const startData = startResp.data as { sessionId: string };
-          console.log(`[Sweetlink] Recording: ${startData.sessionId}${label ? ` (${label})` : ''}`);
-
-          const steps = script
-            .split(';')
-            .map((s) => s.trim())
-            .filter(Boolean);
-          // Snapshot once up-front so refs resolve.
-          await daemonRequest(state, 'snapshot', { interactive: true });
-
-          for (const step of steps) {
-            const [verb, ...rest] = step.split(/\s+/);
-            try {
-              if (verb === 'click') {
-                const target = rest[0];
-                if (!target) throw new Error('click needs a target');
-                if (/^@e\d+$/.test(target)) {
-                  await daemonRequest(state, 'click-ref', { ref: target });
-                } else {
-                  await daemonRequest(state, 'click-css', { selector: target });
-                }
-                console.log(`  · click ${target}`);
-              } else if (verb === 'fill') {
-                const ref = rest[0];
-                const value = rest.slice(1).join(' ');
-                if (!ref || !/^@e\d+$/.test(ref)) throw new Error('fill needs a @ref and a value');
-                await daemonRequest(state, 'fill-ref', { ref, value });
-                console.log(`  · fill ${ref} = "${value}"`);
-              } else if (verb === 'press') {
-                const key = rest[0];
-                if (!key) throw new Error('press needs a key');
-                await daemonRequest(state, 'press-key', { key });
-                console.log(`  · press ${key}`);
-              } else if (verb === 'sleep') {
-                const ms = parseInt(rest[0] ?? '0', 10);
-                await new Promise((r) => setTimeout(r, ms));
-                console.log(`  · sleep ${ms}ms`);
-              } else {
-                throw new Error(`Unknown verb '${verb}'. Allowed: click, fill, press, sleep.`);
-              }
-            } catch (err) {
-              console.error(
-                `  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`
-              );
-              // Continue to record-stop so the partial recording is preserved.
-            }
-          }
-
-          const stopResp = await daemonRequest(state, 'record-stop');
-          const stopData = stopResp.data as {
-            manifest: { sessionId: string; commands: unknown[]; duration: number; video?: string };
-            viewerPath?: string;
-          };
-          console.log(
-            `[Sweetlink] Done: ${stopData.manifest.commands.length} actions in ` +
-              `${stopData.manifest.duration.toFixed(1)}s${stopData.viewerPath ? ` · ${stopData.viewerPath}` : ''}`
-          );
-          result = stopData;
-        } else if (subcommand === 'pause') {
-          const resp = await daemonRequest(state, 'record-pause');
-          console.log('[Sweetlink] Recording paused. Use `record resume` to continue.');
-          result = resp.data;
-        } else if (subcommand === 'resume') {
-          const resp = await daemonRequest(state, 'record-resume');
-          const d = resp.data as { pausedDurationMs: number };
-          console.log(
-            `[Sweetlink] Recording resumed. Paused for ${(d.pausedDurationMs / 1000).toFixed(1)}s.`
-          );
-          result = resp.data;
-        } else {
-          const resp = await daemonRequest(state, 'record-status');
-          const data = resp.data as {
-            recording: boolean;
-            sessionId: string | null;
-            duration: number | null;
-            actionCount: number;
-          };
-          if (data.recording) {
-            console.log(
-              `[Sweetlink] Recording in progress: ${data.sessionId} (${Math.round(data.duration ?? 0)}s, ${data.actionCount} actions)`
-            );
-          } else {
-            console.log('[Sweetlink] No recording in progress.');
-          }
-          result = data;
-        }
+      case 'record':
+        result = await handleRecordCmd();
         break;
-      }
 
-      case 'report': {
-        const sessionDirArg = getArg('--session') ?? '.sweetlink';
-        if (!fs.existsSync(sessionDirArg)) {
-          console.error(`[Sweetlink] Session directory not found: ${sessionDirArg}`);
-          process.exit(1);
-        }
-        const reportSessionDir = findLatestSessionDir(sessionDirArg);
-        if (!reportSessionDir) {
-          console.error(
-            '[Sweetlink] No session found. Run `record start` and `record stop` first.'
-          );
-          process.exit(1);
-        }
-
-        if (hasFlag('--clipboard')) {
-          // Copy SUMMARY.md to clipboard
-          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
-          if (!fs.existsSync(summaryPath)) {
-            console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
-            process.exit(1);
-          }
-          const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
-          const { execFileSync } = await import('child_process');
-          const clipCmd = process.platform === 'darwin' ? 'pbcopy' : 'xclip';
-          const clipArgs = process.platform === 'darwin' ? [] : ['-selection', 'clipboard'];
-          try {
-            execFileSync(clipCmd, clipArgs, { input: summaryContent });
-            console.log('[Sweetlink] SUMMARY.md copied to clipboard.');
-          } catch (err) {
-            console.error(
-              `[Sweetlink] Failed to copy to clipboard (${clipCmd}):`,
-              err instanceof Error ? err.message : err
-            );
-            process.exit(1);
-          }
-          result = { mode: 'clipboard', session: path.basename(reportSessionDir) };
-        } else if (hasFlag('--serve')) {
-          // Serve viewer.html on a random port
-          const viewerPath = path.join(reportSessionDir, 'viewer.html');
-          if (!fs.existsSync(viewerPath)) {
-            console.error(`[Sweetlink] viewer.html not found at ${viewerPath}`);
-            process.exit(1);
-          }
-          const viewerContent = fs.readFileSync(viewerPath, 'utf-8');
-          const http = await import('http');
-          const port = 10000 + Math.floor(Math.random() * 50000);
-          const server = http.createServer((_req, res) => {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(viewerContent);
-          });
-          server.listen(port, '0.0.0.0', () => {
-            const os = require('os');
-            const nets = os.networkInterfaces();
-            let lanIp = 'localhost';
-            for (const name of Object.keys(nets)) {
-              for (const net of nets[name]) {
-                if (net.family === 'IPv4' && !net.internal) {
-                  lanIp = net.address;
-                  break;
-                }
-              }
-              if (lanIp !== 'localhost') break;
-            }
-            console.log(`[Sweetlink] Serving viewer at:`);
-            console.log(`  Local:   http://localhost:${port}`);
-            console.log(`  Network: http://${lanIp}:${port}`);
-            console.log('  Press Ctrl+C to stop.');
-          });
-          // Keep running until Ctrl+C
-          await new Promise(() => {});
-        } else if (getArg('--webhook')) {
-          // POST session data to webhook
-          const webhookUrl = getArg('--webhook')!;
-          const manifestPath = path.join(reportSessionDir, 'sweetlink-session.json');
-          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
-          if (!fs.existsSync(manifestPath)) {
-            console.error(`[Sweetlink] Manifest not found at ${manifestPath}`);
-            process.exit(1);
-          }
-          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-          const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : '';
-          const payload: { summary: string; manifest: object; viewerHtml?: string } = {
-            summary,
-            manifest,
-          };
-          // Include viewer HTML for Slack/Discord webhooks
-          if (/slack|discord/i.test(webhookUrl)) {
-            const viewerPath = path.join(reportSessionDir, 'viewer.html');
-            if (fs.existsSync(viewerPath)) {
-              payload.viewerHtml = fs.readFileSync(viewerPath, 'utf-8');
-            }
-          }
-          const body = JSON.stringify(payload);
-          const res = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-          });
-          if (res.ok) {
-            console.log(`[Sweetlink] Report posted to ${webhookUrl} (${res.status})`);
-          } else {
-            console.error(`[Sweetlink] Webhook failed: ${res.status} ${res.statusText}`);
-            process.exit(1);
-          }
-          result = { mode: 'webhook', url: webhookUrl, status: res.status };
-        } else {
-          // Default: print SUMMARY.md to stdout
-          const summaryPath = path.join(reportSessionDir, 'SUMMARY.md');
-          if (!fs.existsSync(summaryPath)) {
-            console.error(`[Sweetlink] SUMMARY.md not found at ${summaryPath}`);
-            process.exit(1);
-          }
-          const summaryContent = fs.readFileSync(summaryPath, 'utf-8');
-          process.stdout.write(summaryContent);
-          result = { mode: 'stdout', session: path.basename(reportSessionDir) };
-        }
+      case 'report':
+        result = await handleReportCmd();
         break;
-      }
 
-      case 'sim': {
-        // Record iOS Simulator or Android Emulator screen while running a command.
-        // Example: sweetlink sim ios "fastlane scan" --device "iPhone 15"
-        const platform = args[1];
-        if (platform !== 'ios' && platform !== 'android') {
-          console.error(
-            '[Sweetlink] Usage: sweetlink sim <ios|android> "<command>" [--output path] [--device <name>]'
-          );
-          process.exit(1);
-        }
-        const flagsWithValues = new Set([
-          '--output',
-          '--label',
-          '--device',
-          '--time-limit',
-          '--app',
-          '--run',
-        ]);
-        const positional: string[] = [];
-        for (let i = 2; i < args.length; i++) {
-          const a = args[i]!;
-          if (a.startsWith('--')) {
-            if (flagsWithValues.has(a)) i++;
-            continue;
-          }
-          positional.push(a);
-        }
-        const command = positional.join(' ').trim();
-        if (!command) {
-          console.error(
-            `[Sweetlink] Error: sim ${platform} requires a command. Example: sweetlink sim ${platform} "fastlane scan"`
-          );
-          process.exit(1);
-        }
-
-        const label = getArg('--label');
-        const labelSlug = label
-          ? label
-              .replace(/[^a-z0-9]/gi, '-')
-              .toLowerCase()
-              .slice(0, 40)
-          : `sim-${platform}`;
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const { runSlot: simRunSlot } = await import('../runs.js');
-        const defaultDir = simRunSlot({
-          baseDir: findProjectRoot(),
-          app: getArg('--app'),
-          run: getArg('--run'),
-          kind: 'sim',
-        });
-        const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.mp4`);
-        ensureDir(output);
-        const device = getArg('--device');
-
-        console.log(`[Sweetlink] Recording ${platform} simulator: ${command}`);
-
-        let recResult: {
-          output: string;
-          device: string;
-          exitCode: number;
-          durationSec: number;
-          recordingClosed: boolean;
-          tapCount?: number;
-          tapsJsonPath?: string;
-          overlaysApplied?: boolean;
-        };
-        if (platform === 'ios') {
-          const { recordIosSimulator } = await import('../simulator/ios.js');
-          recResult = await recordIosSimulator({ command, output, device });
-        } else {
-          const { recordAndroidEmulator } = await import('../simulator/android.js');
-          const tl = getArg('--time-limit');
-          recResult = await recordAndroidEmulator({
-            command,
-            output,
-            device,
-            timeLimit: tl ? parseInt(tl, 10) : undefined,
-            overlays: !hasFlag('--no-overlays'),
-          });
-        }
-
-        let sizeKb = '?';
-        try {
-          sizeKb = String(Math.round(fs.statSync(output).size / 1024));
-        } catch {
-          /* file may not exist if recordingClosed is false */
-        }
-        const tapSuffix =
-          (recResult.tapCount ?? 0) > 0
-            ? ` · ${recResult.tapCount} taps${recResult.overlaysApplied ? ' (overlaid)' : ' (sidecar only — install ffmpeg for overlays)'}`
-            : '';
-        console.log(
-          `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
-            `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
-            tapSuffix +
-            (recResult.recordingClosed
-              ? ''
-              : ' (recording was force-killed; mp4 may be incomplete)')
-        );
-
-        result = {
-          path: output,
-          device: recResult.device,
-          durationSec: recResult.durationSec,
-          exitCode: recResult.exitCode,
-          recordingClosed: recResult.recordingClosed,
-          tapCount: recResult.tapCount,
-          tapsJsonPath: recResult.tapsJsonPath,
-          overlaysApplied: recResult.overlaysApplied,
-        };
-        if (recResult.exitCode !== 0 && !hasFlag('--ignore-exit')) {
-          process.exit(recResult.exitCode);
-        }
+      case 'sim':
+        result = await handleSimCmd();
         break;
-      }
 
-      case 'term': {
-        // Record a shell command's stdout/stderr into asciicast v2 + HTML player.
-        // Example: sweetlink term "pytest -v" --label api-tests --app my-app
-        const flagsWithValues = new Set([
-          '--output',
-          '--label',
-          '--shell',
-          '--cols',
-          '--rows',
-          '--app',
-          '--run',
-        ]);
-        const positional: string[] = [];
-        for (let i = 1; i < args.length; i++) {
-          const a = args[i]!;
-          if (a.startsWith('--')) {
-            if (flagsWithValues.has(a)) i++;
-            continue;
-          }
-          positional.push(a);
-        }
-        const command = positional.join(' ').trim();
-        if (!command) {
-          console.error(
-            '[Sweetlink] Error: term requires a command. Example: sweetlink term "pytest tests/"'
-          );
-          process.exit(1);
-        }
-
-        const label = getArg('--label');
-        const labelSlug = label
-          ? label
-              .replace(/[^a-z0-9]/gi, '-')
-              .toLowerCase()
-              .slice(0, 40)
-          : 'term';
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const { runSlot } = await import('../runs.js');
-        const defaultDir = runSlot({
-          baseDir: findProjectRoot(),
-          app: getArg('--app'),
-          run: getArg('--run'),
-          kind: 'term',
-        });
-        const output = getArg('--output') ?? path.join(defaultDir, `${labelSlug}-${stamp}.cast`);
-        ensureDir(output);
-
-        console.log(`[Sweetlink] Recording terminal: ${command}`);
-        const { captureTerminal } = await import('../term/recorder.js');
-        const { generatePlayer } = await import('../term/player.js');
-        const cap = await captureTerminal({
-          command,
-          output,
-          label,
-          shell: getArg('--shell'),
-          cols: getArg('--cols') ? parseInt(getArg('--cols')!, 10) : undefined,
-          rows: getArg('--rows') ? parseInt(getArg('--rows')!, 10) : undefined,
-        });
-        const playerPath = await generatePlayer({ castPath: output });
-        console.log(
-          `[Sweetlink] ✓ ${getRelativePath(output)} · ${cap.durationSec.toFixed(1)}s · ` +
-            `${cap.events} events · ${(cap.bytes / 1024).toFixed(0)}KB · exit=${cap.exitCode}`
-        );
-        console.log(`[Sweetlink] ▶ ${getRelativePath(playerPath)}`);
-        result = {
-          castPath: output,
-          playerPath,
-          durationSec: cap.durationSec,
-          bytes: cap.bytes,
-          events: cap.events,
-          exitCode: cap.exitCode,
-        };
-        // Propagate the recorded command's exit code by default so CI fails
-        // when the wrapped tests fail.
-        if (cap.exitCode !== 0 && !hasFlag('--ignore-exit')) {
-          process.exit(cap.exitCode);
-        }
+      case 'term':
+        result = await handleTermCmd();
         break;
-      }
 
-      case 'sessions': {
-        const sub = args[1];
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const state = await ensureDaemon(projRoot, targetUrl);
-        const resp = await daemonRequest(state, 'sessions-list');
-        const data = resp.data as {
-          sessions: Array<{
-            sessionId: string;
-            label?: string;
-            url?: string;
-            startedAt?: string;
-            duration?: number;
-            actionCount: number;
-            errors?: { console: number; network: number; server: number };
-            hasVideo: boolean;
-            hasViewer: boolean;
-            manifestPath: string;
-          }>;
-          indexPath?: string;
-        };
-        if (sub === 'list' || !sub) {
-          if (data.sessions.length === 0) {
-            console.log('[Sweetlink] No sessions found.');
-          } else {
-            console.log(`[Sweetlink] ${data.sessions.length} session(s):\n`);
-            for (const s of data.sessions) {
-              const errTotal = s.errors ? s.errors.console + s.errors.network + s.errors.server : 0;
-              const errBadge = errTotal > 0 ? ` · ${errTotal} err` : '';
-              const labelTxt = s.label ? ` [${s.label}]` : '';
-              const dur = s.duration ? `${s.duration.toFixed(1)}s` : '—';
-              console.log(
-                `  ${s.sessionId}${labelTxt} · ${dur} · ${s.actionCount} actions${errBadge}`
-              );
-            }
-            if (data.indexPath) console.log(`\n  Index: ${data.indexPath}`);
-          }
-          result = { sessions: data.sessions };
-        } else if (sub === 'diff') {
-          // sessions diff <a> <b> — compare two recordings
-          const [aId, bId] = [args[2], args[3]];
-          if (!aId || !bId) {
-            console.error('[Sweetlink] Usage: sessions diff <session-A> <session-B>');
-            process.exit(1);
-          }
-          const findSession = (id: string) =>
-            data.sessions.find((s) => s.sessionId === id || s.sessionId.endsWith(id));
-          const a = findSession(aId);
-          const b = findSession(bId);
-          if (!a || !b) {
-            console.error(`[Sweetlink] Could not find session: ${!a ? aId : bId}`);
-            process.exit(1);
-          }
-          const aManifest = JSON.parse(fs.readFileSync(a.manifestPath, 'utf-8'));
-          const bManifest = JSON.parse(fs.readFileSync(b.manifestPath, 'utf-8'));
-          const aActions = aManifest.commands.map(
-            (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
-          );
-          const bActions = bManifest.commands.map(
-            (c: { action: string; args: string[] }) => `${c.action} ${c.args.join(' ')}`
-          );
-          console.log(
-            `\n${a.sessionId}${a.label ? ` "${a.label}"` : ''}  vs  ${b.sessionId}${b.label ? ` "${b.label}"` : ''}\n`
-          );
-          console.log(`Duration: ${a.duration?.toFixed(1)}s  vs  ${b.duration?.toFixed(1)}s`);
-          console.log(`Actions:  ${a.actionCount}  vs  ${b.actionCount}`);
-          const aErr = a.errors ? a.errors.console + a.errors.network + a.errors.server : 0;
-          const bErr = b.errors ? b.errors.console + b.errors.network + b.errors.server : 0;
-          console.log(`Errors:   ${aErr}  vs  ${bErr}`);
-          // Action diff (myers-style "added/removed" by line)
-          const inA = new Set(aActions);
-          const inB = new Set(bActions);
-          const added = bActions.filter((x: string) => !inA.has(x));
-          const removed = aActions.filter((x: string) => !inB.has(x));
-          if (removed.length) {
-            console.log(`\nOnly in ${a.sessionId}:`);
-            removed.forEach((s: string) => console.log(`  - ${s}`));
-          }
-          if (added.length) {
-            console.log(`\nOnly in ${b.sessionId}:`);
-            added.forEach((s: string) => console.log(`  + ${s}`));
-          }
-          if (!added.length && !removed.length) {
-            console.log('\nAction sequences are identical.');
-          }
-          result = {
-            a: {
-              id: a.sessionId,
-              label: a.label,
-              duration: a.duration,
-              actions: a.actionCount,
-              errors: aErr,
-            },
-            b: {
-              id: b.sessionId,
-              label: b.label,
-              duration: b.duration,
-              actions: b.actionCount,
-              errors: bErr,
-            },
-            added,
-            removed,
-          };
-        } else if (sub === 'open') {
-          // Open the index.html in the browser
-          if (data.indexPath) {
-            openInBrowser(data.indexPath);
-            console.log(`[Sweetlink] Opened ${data.indexPath}`);
-          }
-          result = { indexPath: data.indexPath };
-        } else {
-          console.error(`[Sweetlink] Unknown sessions subcommand: ${sub}. Try: list, open`);
-          process.exit(1);
-        }
+      case 'sessions':
+        result = await handleSessionsCmd();
         break;
-      }
 
-      case 'demo': {
-        const sub = args[1];
-        const projRoot = findProjectRoot();
-        const demoDir = getArg('--output') ?? path.join(projRoot, '.sweetlink', 'demo');
-        const stateFile = path.join(demoDir, 'demo-state.json');
-
-        // Lazy import demo module
-        const demoMod = await import('../daemon/demo.js');
-
-        if (sub === 'init') {
-          const title = args[2];
-          if (!title) {
-            console.error('[Sweetlink] Error: demo init requires a title');
-            process.exit(1);
-          }
-          const demoState = await demoMod.initDemo(title, demoDir, { url: getArg('--url') });
-          await demoMod.writeDemo(demoState);
-          console.log(`[Sweetlink] Demo initialized: ${demoState.filePath}`);
-          result = { filePath: demoState.filePath };
-        } else if (sub === 'note') {
-          const text = args.slice(2).join(' ');
-          if (!text) {
-            console.error('[Sweetlink] Error: demo note requires text');
-            process.exit(1);
-          }
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = demoMod.addNote(state, text);
-          await demoMod.writeDemo(updated);
-          console.log(`[Sweetlink] Note added (${updated.sections.length} sections)`);
-          result = { sections: updated.sections.length };
-        } else if (sub === 'exec') {
-          const cmd = args.slice(2).join(' ');
-          if (!cmd) {
-            console.error('[Sweetlink] Error: demo exec requires a command');
-            process.exit(1);
-          }
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = await demoMod.addExec(state, cmd, []);
-          await demoMod.writeDemo(updated);
-          const lastSection = updated.sections[updated.sections.length - 1]!;
-          console.log(`[Sweetlink] Exec added: ${cmd} (exit ${lastSection.exitCode ?? 0})`);
-          result = { sections: updated.sections.length, exitCode: lastSection.exitCode };
-        } else if (sub === 'screenshot') {
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-          const caption = getArg('--caption') ?? 'Screenshot';
-          const daemonState = await ensureDaemon(projRoot, targetUrl);
-          const resp = await daemonRequest(daemonState, 'screenshot', {});
-          const data = resp.data as { screenshot: string };
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = await demoMod.addScreenshot(
-            state,
-            Buffer.from(data.screenshot, 'base64'),
-            caption
-          );
-          await demoMod.writeDemo(updated);
-          console.log(`[Sweetlink] Screenshot added: ${caption}`);
-          result = { sections: updated.sections.length };
-        } else if (sub === 'snapshot') {
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-          const daemonState = await ensureDaemon(projRoot, targetUrl);
-          const resp = await daemonRequest(daemonState, 'snapshot', { interactive: true });
-          const data = resp.data as { tree: string };
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = demoMod.addSnapshot(state, data.tree);
-          await demoMod.writeDemo(updated);
-          console.log(`[Sweetlink] Snapshot added (${updated.sections.length} sections)`);
-          result = { sections: updated.sections.length };
-        } else if (sub === 'pop') {
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const updated = demoMod.popSection(state);
-          await demoMod.writeDemo(updated);
-          console.log(`[Sweetlink] Last section removed (${updated.sections.length} remaining)`);
-          result = { sections: updated.sections.length };
-        } else if (sub === 'verify') {
-          const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-          const verifyResult = await demoMod.verifyDemo(state);
-          if (verifyResult.passed) {
-            console.log('[Sweetlink] Demo verified: all outputs match');
-          } else {
-            console.log(
-              `[Sweetlink] Demo verification FAILED: ${verifyResult.failures.length} mismatch(es)`
-            );
-            for (const f of verifyResult.failures) {
-              console.log(`  Section ${f.index}: ${f.command}`);
-              console.log(`    Expected: ${f.expected.substring(0, 80)}...`);
-              console.log(`    Actual:   ${f.actual.substring(0, 80)}...`);
-            }
-          }
-          result = verifyResult;
-        } else {
-          // status
-          if (fs.existsSync(stateFile)) {
-            const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-            console.log(`[Sweetlink] Demo: "${state.title}" (${state.sections.length} sections)`);
-            console.log(`  File: ${state.filePath}`);
-            for (const s of state.sections) {
-              const preview =
-                s.type === 'note'
-                  ? s.content.substring(0, 60)
-                  : s.type === 'exec'
-                    ? `$ ${s.command}`
-                    : s.type === 'screenshot'
-                      ? `[image] ${s.screenshotFile}`
-                      : '[snapshot]';
-              console.log(`  ${s.type.padEnd(12)} ${preview}`);
-            }
-            result = state;
-          } else {
-            console.log('[Sweetlink] No demo in progress. Run `demo init <title>` to start.');
-            result = null;
-          }
-        }
+      case 'demo':
+        result = await handleDemoCmd();
         break;
-      }
 
-      case 'daemon': {
-        const subcommand = args[1];
-        const projRoot = findProjectRoot();
-        // Daemon state files are scoped by app port (`daemon-<port>.json`),
-        // so honour --url for status/stop too — otherwise they look up the
-        // un-suffixed `daemon.json` and miss the daemon that `start`
-        // wrote with --url.
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const appPort = extractPort(targetUrl);
-        if (subcommand === 'stop') {
-          const stopped = await stopDaemon(projRoot, appPort);
-          console.log(stopped ? '[Sweetlink] Daemon stopped.' : '[Sweetlink] No daemon running.');
-          result = { running: false } satisfies DaemonStatusData;
-        } else if (subcommand === 'start') {
-          const headedFlag = hasFlag('--headed');
-          const state = await ensureDaemon(projRoot, targetUrl, { headed: headedFlag });
-          console.log(`[Sweetlink] Daemon running on port ${state.port} (PID: ${state.pid})`);
-          result = {
-            running: true,
-            pid: state.pid,
-            port: state.port,
-            url: state.url,
-          } satisfies DaemonStatusData;
-        } else {
-          // Default: status
-          const status = await getDaemonStatus(projRoot, appPort);
-          if (status.running) {
-            console.log(
-              `[Sweetlink] Daemon running: port=${status.port} pid=${status.pid} uptime=${status.uptime}s`
-            );
-          } else {
-            console.log('[Sweetlink] No daemon running.');
-          }
-          result = status satisfies DaemonStatusData;
-        }
+      case 'daemon':
+        result = await handleDaemonCmd();
         break;
-      }
 
-      case 'fill': {
-        const fillTarget = getArg('--selector') ?? args[1];
-        const fillValue = getArg('--value') ?? args[2];
-        if (!fillTarget) {
-          console.error('[Sweetlink] Error: fill requires a target (@ref or --selector)');
-          process.exit(1);
-        }
-        if (fillValue === undefined) {
-          console.error('[Sweetlink] Error: fill requires a value (--value or positional arg)');
-          process.exit(1);
-        }
-        if (/^@e\d+$/.test(fillTarget)) {
-          const projRoot = findProjectRoot();
-          const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-          const state = await ensureDaemon(projRoot, targetUrl);
-          await daemonRequest(state, 'fill-ref', { ref: fillTarget, value: fillValue });
-          console.log(`[Sweetlink] Filled ${fillTarget} with "${fillValue}"`);
-          result = { clicked: fillTarget, found: 1, index: 0 } satisfies ClickData;
-        } else {
-          console.error(
-            '[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.'
-          );
-          process.exit(1);
-        }
+      case 'fill':
+        result = await handleFillCmd();
         break;
-      }
 
-      case 'snapshot': {
-        const projRoot = findProjectRoot();
-        const targetUrl = getArg('--url') ?? 'http://localhost:3000';
-        const interactive = hasFlag('-i') || hasFlag('--interactive');
-        const doDiff = hasFlag('-D') || hasFlag('--diff');
-        const doAnnotate = hasFlag('-a') || hasFlag('--annotate');
-        const state = await ensureDaemon(projRoot, targetUrl);
-        const resp = await daemonRequest(state, 'snapshot', {
-          interactive,
-          diff: doDiff,
-          annotate: doAnnotate,
-        });
-        const data = resp.data as {
-          tree: string;
-          diff?: string;
-          screenshot?: string;
-          refs: Array<{ ref: string; role: string; name: string }>;
-          count: number;
-        };
-
-        if (doDiff && data.diff) {
-          console.log(data.diff);
-        } else if (doAnnotate && data.screenshot) {
-          const outputPath = getArg('--output') ?? getArg('-o') ?? 'annotated-snapshot.png';
-          fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
-          console.log(`[Sweetlink] Annotated screenshot saved: ${outputPath}`);
-        } else {
-          console.log(data.tree);
-        }
-        console.log(`\n${data.count} elements found`);
-        result = {
-          tree: data.tree,
-          refs: data.refs,
-          diff: data.diff,
-        } satisfies SnapshotData;
+      case 'snapshot':
+        result = await handleSnapshotCmd();
         break;
-      }
 
       default:
         console.error(`[Sweetlink] Unknown command: ${commandType}`);

@@ -13,11 +13,11 @@ vi.mock('../accessibility.js', () => ({
 vi.mock('../lazy/lazyHtml2Canvas.js', () => ({
   getHtml2Canvas: vi.fn(),
 }));
-vi.mock('../outline.js', () => ({
+vi.mock('@ytspar/sweetlink/browser/commands/outline', () => ({
   extractDocumentOutline: vi.fn(() => []),
   outlineToMarkdown: vi.fn(() => ''),
 }));
-vi.mock('../schema.js', () => ({
+vi.mock('@ytspar/sweetlink/browser/commands/schema', () => ({
   extractPageSchema: vi.fn(() => ({})),
   schemaToMarkdown: vi.fn(() => ''),
 }));
@@ -1228,8 +1228,8 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles get-outline command successfully', async () => {
-    const { extractDocumentOutline } = await import('../outline.js');
-    const { outlineToMarkdown } = await import('../outline.js');
+    const { extractDocumentOutline } = await import('@ytspar/sweetlink/browser/commands/outline');
+    const { outlineToMarkdown } = await import('@ytspar/sweetlink/browser/commands/outline');
     vi.mocked(extractDocumentOutline).mockReturnValue([
       { tag: 'h1', text: 'Title', level: 1 },
     ] as any);
@@ -1248,7 +1248,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles get-outline command with error', async () => {
-    const { extractDocumentOutline } = await import('../outline.js');
+    const { extractDocumentOutline } = await import('@ytspar/sweetlink/browser/commands/outline');
     vi.mocked(extractDocumentOutline).mockImplementation(() => {
       throw new Error('outline fail');
     });
@@ -1266,8 +1266,8 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles get-schema command successfully', async () => {
-    const { extractPageSchema } = await import('../schema.js');
-    const { schemaToMarkdown } = await import('../schema.js');
+    const { extractPageSchema } = await import('@ytspar/sweetlink/browser/commands/schema');
+    const { schemaToMarkdown } = await import('@ytspar/sweetlink/browser/commands/schema');
     vi.mocked(extractPageSchema).mockReturnValue({ title: 'Test' } as any);
     vi.mocked(schemaToMarkdown).mockReturnValue('## Schema');
 
@@ -1284,7 +1284,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles get-schema command with error', async () => {
-    const { extractPageSchema } = await import('../schema.js');
+    const { extractPageSchema } = await import('@ytspar/sweetlink/browser/commands/schema');
     vi.mocked(extractPageSchema).mockImplementation(() => {
       throw new Error('schema fail');
     });

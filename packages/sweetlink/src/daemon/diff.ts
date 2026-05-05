@@ -14,12 +14,28 @@ import type { RefMap } from './refs.js';
 // ============================================================================
 
 /**
+ * LCS allocates an (m+1)×(n+1) integer matrix. Cap the budget so a
+ * pathologically large accessibility tree (virtualized list rendered all
+ * at once) cannot freeze the daemon by allocating gigabytes of memory.
+ * 4M cells ≈ 16MB at 4 bytes/int — well within memory budget for any
+ * realistic page.
+ */
+const LCS_CELL_BUDGET = 4_000_000;
+
+/**
  * Produce a unified diff between baseline and current accessibility snapshots.
  * Shows added (+), removed (-), and unchanged lines.
  */
 export function diffSnapshots(baseline: RefMap, current: RefMap): string {
   const baseLines = baseline.rawSnapshot.split('\n');
   const currLines = current.rawSnapshot.split('\n');
+
+  if ((baseLines.length + 1) * (currLines.length + 1) > LCS_CELL_BUDGET) {
+    return (
+      `(snapshots too large for line-by-line diff: ` +
+      `${baseLines.length} → ${currLines.length} lines exceeds ${LCS_CELL_BUDGET}-cell budget)`
+    );
+  }
 
   // Simple line-by-line diff using LCS (longest common subsequence)
   const lcs = computeLCS(baseLines, currLines);
@@ -155,7 +171,17 @@ export async function annotateScreenshot(page: Page, refMap: RefMap): Promise<Bu
             (refEntry.role === 'img' && el.tagName === 'IMG') ||
             (refEntry.role === 'checkbox' && el.getAttribute('type') === 'checkbox');
 
-          if (roleMatch && name.includes(refEntry.name.substring(0, 20))) {
+          // Anchor the comparison to the start of the snapshot's name. Truncating
+          // textContent at 50 chars and matching `includes(refName.substring(0,20))`
+          // can match the wrong element if the truncated text shares a 20-char
+          // substring with another element on the page. Compare against a window
+          // capped to the actual length we captured.
+          const matchLen = Math.min(20, refEntry.name.length, name.length);
+          if (
+            roleMatch &&
+            matchLen > 0 &&
+            name.substring(0, matchLen) === refEntry.name.substring(0, matchLen)
+          ) {
             element = el;
             break;
           }

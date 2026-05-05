@@ -55,7 +55,12 @@ export interface DevBarState {
 
   // Console
   consoleLogs: ConsoleLog[];
-  consoleFilter: 'error' | 'warn' | 'info' | null;
+  // Subset of ConsoleLogLevel — kept aligned via Extract<> so a future
+  // change to the canonical level union is picked up here automatically.
+  consoleFilter: Extract<
+    import('@ytspar/sweetlink/types').ConsoleLogLevel,
+    'error' | 'warn' | 'info'
+  > | null;
 
   // Screenshot / Design Review
   capturing: boolean;

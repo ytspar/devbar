@@ -1,5 +1,10 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { ensureDir } from './daemon/utils.js';
+import {
+  HIDE_DEVBAR_CSS,
+  HIDE_DEVBAR_STYLE_ID,
+  HOVER_TRANSITION_DELAY_MS,
+  SELECTOR_TIMEOUT_MS,
+} from './screenshotConstants.js';
 import { DEFAULT_VIEWPORT, parseViewport } from './viewportUtils.js';
 
 // ============================================================================
@@ -10,18 +15,7 @@ const DEFAULT_DEV_URL = process.env.SWEETLINK_DEV_URL || 'http://localhost:3000'
 const CDP_URL = process.env.CHROME_CDP_URL || 'http://localhost:9222';
 const CDP_CONNECTION_TIMEOUT_MS = 2000;
 const NAVIGATION_TIMEOUT_MS = 30000;
-const SELECTOR_TIMEOUT_MS = 5000;
-const HOVER_TRANSITION_DELAY_MS = 300;
 const HIDE_DEVBAR_SETTLE_MS = 50;
-const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
-const HIDE_DEVBAR_CSS = `
-[data-devbar],
-[data-devbar-overlay],
-[data-devbar-tooltip] {
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-`;
 
 /** Hard timeout for the entire screenshot operation (browser launch + navigate + capture).
  *  Prevents orphaned Playwright processes when the dev server dies mid-operation.
@@ -79,15 +73,7 @@ async function getPlaywright(): Promise<{ chromium: Chromium }> {
   }
 }
 
-/**
- * Ensure the directory for a file path exists
- */
-function ensureDir(filePath: string): void {
-  const dir = path.dirname(filePath);
-  if (dir && dir !== '.' && !fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+// ensureDir lives in daemon/utils.ts — single source of truth.
 
 /**
  * Get a Playwright browser instance
@@ -265,7 +251,7 @@ export async function screenshotViaPlaywright(options: {
   selector?: string;
   output?: string;
   fullPage?: boolean;
-  viewport?: string;
+  viewport?: import('./viewportUtils.js').ViewportName | string;
   hover?: boolean;
   hideDevbar?: boolean;
   a11y?: boolean; // Placeholder for future
@@ -298,7 +284,7 @@ async function screenshotViaPlaywrightCore(options: {
   selector?: string;
   output?: string;
   fullPage?: boolean;
-  viewport?: string;
+  viewport?: import('./viewportUtils.js').ViewportName | string;
   hover?: boolean;
   hideDevbar?: boolean;
   a11y?: boolean;

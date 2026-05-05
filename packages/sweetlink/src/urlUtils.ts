@@ -98,11 +98,23 @@ export function formatTimestampForFilename(timestamp: number): string {
  */
 export function generateBaseFilename(type: string, timestamp: number, slug?: string): string {
   const dateStr = formatTimestampForFilename(timestamp);
+  const safeType = sanitizeFilenamePart(type);
 
   if (slug) {
-    return `${type}-${slug}-${dateStr}`;
+    const safeSlug = sanitizeFilenamePart(slug);
+    if (safeSlug) {
+      return `${safeType}-${safeSlug}-${dateStr}`;
+    }
   }
-  return `${type}-${dateStr}`;
+  return `${safeType}-${dateStr}`;
+}
+
+// Drop any character that could escape the filename — slashes, dots, and
+// non-printable bytes — so a browser-supplied slug or trigger cannot push
+// the path outside the intended directory. Matches the existing regex used
+// by generateSlugFromUrl above.
+function sanitizeFilenamePart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9-]/g, '').slice(0, MAX_SLUG_LENGTH);
 }
 
 // ============================================================================

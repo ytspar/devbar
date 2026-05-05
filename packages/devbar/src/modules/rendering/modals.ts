@@ -2,7 +2,7 @@
  * Modal rendering for the DevBar: outline, schema, a11y, and design review modals.
  */
 
-import type { AxeViolation } from '../../accessibility.js';
+import type { AxeImpact, AxeViolation } from '../../accessibility.js';
 import {
   a11yToMarkdown,
   getImpactColor,
@@ -17,14 +17,17 @@ import {
   FONT_MONO,
   withAlpha,
 } from '../../constants.js';
-import { extractDocumentOutline, outlineToMarkdown } from '../../outline.js';
+import {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
 import {
   checkMissingTags,
   extractFavicons,
   extractPageSchema,
   isImageKey,
   schemaToMarkdown,
-} from '../../schema.js';
+} from '@ytspar/sweetlink/browser/commands/schema';
 import type { OutlineNode } from '../../types.js';
 import {
   createEmptyMessage,
@@ -1156,7 +1159,7 @@ function createViolationCard(violation: AxeViolation, impactColor: string): HTML
 
 function renderA11yViolationGroup(
   container: HTMLElement,
-  impact: string,
+  impact: AxeImpact,
   violations: AxeViolation[]
 ): void {
   const impactColor = getImpactColor(impact);

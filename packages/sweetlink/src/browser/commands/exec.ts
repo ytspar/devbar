@@ -129,7 +129,11 @@ export async function handleExecJS(command: ExecJsCommand): Promise<SweetlinkRes
     return {
       success: true,
       data: {
-        result: typeof result === 'object' ? JSON.parse(JSON.stringify(result)) : result,
+        // JSON.parse(JSON.stringify(...)) throws on circular refs, BigInt,
+        // Error instances, DOM nodes, etc. — common shapes for things like
+        // Promise.allSettled results or thrown errors. Walk the value once
+        // and produce a JSON-safe form ourselves.
+        result: toJsonSafe(result),
         type: typeof result,
       },
       timestamp: Date.now(),
@@ -137,4 +141,45 @@ export async function handleExecJS(command: ExecJsCommand): Promise<SweetlinkRes
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : 'Execution failed');
   }
+}
+
+function toJsonSafe(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+  if (value === null || value === undefined) return value;
+  const t = typeof value;
+  if (t === 'string' || t === 'number' || t === 'boolean') return value;
+  if (t === 'bigint') return `${(value as bigint).toString()}n`;
+  if (t === 'function') return `[Function${value && (value as Function).name ? `: ${(value as Function).name}` : ''}]`;
+  if (t === 'symbol') return (value as symbol).toString();
+  if (value instanceof Error) {
+    return {
+      __error: true,
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+  if (typeof Element !== 'undefined' && value instanceof Element) {
+    return {
+      __element: true,
+      tag: (value as Element).tagName.toLowerCase(),
+      id: (value as Element).id || undefined,
+      className: (value as Element).className || undefined,
+    };
+  }
+  if (typeof Node !== 'undefined' && value instanceof Node) {
+    return { __node: true, nodeName: (value as Node).nodeName };
+  }
+  if (t !== 'object') return String(value);
+  if (seen.has(value as object)) return '[Circular]';
+  seen.add(value as object);
+  if (Array.isArray(value)) return value.map((v) => toJsonSafe(v, seen));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    try {
+      out[k] = toJsonSafe(v, seen);
+    } catch {
+      out[k] = '[Unserializable]';
+    }
+  }
+  return out;
 }

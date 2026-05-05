@@ -54,18 +54,66 @@ export type DaemonAction =
   | 'sessions-list'
   | 'generate-viewer';
 
-/** Request body for daemon HTTP POST */
-export interface DaemonRequest {
-  action: DaemonAction;
-  params?: Record<string, unknown>;
+/**
+ * Per-action params shape. Adding a new action means extending this map
+ * with the action's required params; the discriminated `DaemonRequest`
+ * union then forces every caller to supply the right payload at compile
+ * time. Actions not listed here implicitly accept no params.
+ */
+export interface DaemonActionParams {
+  ping: undefined;
+  shutdown: undefined;
+  screenshot: ScreenshotParams | undefined;
+  'screenshot-responsive': ResponsiveScreenshotParams | undefined;
+  snapshot: { diff?: boolean } | undefined;
+  inspect: { selector?: string } | undefined;
+  'click-ref': { ref: string };
+  'click-css': { selector?: string; text?: string; index?: number };
+  'fill-ref': { ref: string; value: string };
+  'hover-ref': { ref: string };
+  'press-key': { key: string };
+  'console-read': { errors?: boolean; last?: number } | undefined;
+  'network-read': { last?: number; status?: number } | undefined;
+  'dialog-read': { last?: number } | undefined;
+  'screenshot-devices': Record<string, unknown> | undefined;
+  'visual-diff': {
+    baseline: string;
+    current: string;
+    threshold?: number;
+    outputPath?: string;
+  };
+  'record-start': { url?: string; label?: string; trace?: boolean } | undefined;
+  'record-stop': undefined;
+  'record-status': undefined;
+  'record-pause': undefined;
+  'record-resume': undefined;
+  'sessions-list': undefined;
+  'generate-viewer': { sessionDir: string; outputPath?: string };
 }
 
-/** Response from daemon HTTP server */
-export interface DaemonResponse {
-  ok: boolean;
-  data?: Record<string, unknown>;
-  error?: string;
-}
+/**
+ * Request body for daemon HTTP POST. Discriminated on `action` so each
+ * variant carries only the params shape that action accepts.
+ *
+ * The dispatch surface (`DAEMON_HANDLERS` in server.ts) still receives
+ * `params: Record<string, unknown>` because the wire format is JSON —
+ * but on the producing side, callers that build a typed DaemonRequest
+ * get compile-time checking.
+ */
+export type DaemonRequest = {
+  [A in DaemonAction]: { action: A; params: DaemonActionParams[A] };
+}[DaemonAction];
+
+/**
+ * Response from the daemon HTTP server. Discriminated by `ok`:
+ * a successful response is `{ ok: true; data?: ... }` (no `error`),
+ * a failure is `{ ok: false; error: string; data?: ... }`. Some failure
+ * paths still attach a `data` payload with diagnostic context (e.g. a
+ * failure screenshot path) so we keep `data` optional on both branches.
+ */
+export type DaemonResponse =
+  | { ok: true; data?: Record<string, unknown>; error?: never }
+  | { ok: false; error: string; data?: Record<string, unknown> };
 
 // ============================================================================
 // Screenshot Params
@@ -74,7 +122,8 @@ export interface DaemonResponse {
 export interface ScreenshotParams {
   selector?: string;
   fullPage?: boolean;
-  viewport?: string;
+  /** Named preset, `WxH` string, or arbitrary string for back-compat. */
+  viewport?: import('../viewportUtils.js').ViewportName | string;
   output?: string;
   hideDevbar?: boolean;
 }

@@ -13,6 +13,7 @@ import { setHeadedMode } from './browser.js';
 import { startServer } from './server.js';
 import { extractPort, releaseLock, removeDaemonState, writeDaemonState } from './stateFile.js';
 import { DAEMON_PORT_MAX, DAEMON_PORT_MIN } from './types.js';
+import { registerGracefulShutdown } from './utils.js';
 
 // ============================================================================
 // Parse CLI Arguments
@@ -58,6 +59,23 @@ async function main(): Promise<void> {
         port,
         token,
         url,
+        projectRoot,
+        // Write state file synchronously inside the listen callback so the
+        // CLI never observes "port open, state missing".
+        onListening: () => {
+          writeDaemonState(
+            projectRoot,
+            {
+              pid: process.pid,
+              port,
+              token,
+              startedAt: new Date().toISOString(),
+              url,
+              lastActivity: new Date().toISOString(),
+            },
+            appPort
+          );
+        },
         onShutdown: () => {
           console.error('[Daemon] Cleaning up state...');
           removeDaemonState(projectRoot, appPort);
@@ -65,20 +83,6 @@ async function main(): Promise<void> {
           process.exit(0);
         },
       });
-
-      // Write state file so the CLI can find us (scoped by app port)
-      writeDaemonState(
-        projectRoot,
-        {
-          pid: process.pid,
-          port,
-          token,
-          startedAt: new Date().toISOString(),
-          url,
-          lastActivity: new Date().toISOString(),
-        },
-        appPort
-      );
 
       const stateFileName = appPort ? `daemon-${appPort}.json` : 'daemon.json';
       console.error(`[Daemon] Started on port ${port} (PID: ${process.pid})`);
@@ -98,16 +102,9 @@ async function main(): Promise<void> {
   throw new Error(`Failed to find available port after ${maxRetries} attempts`);
 }
 
-// Handle graceful shutdown signals
-process.on('SIGTERM', () => {
-  console.error('[Daemon] Received SIGTERM');
-  removeDaemonState(projectRoot, appPort);
-  releaseLock(projectRoot, appPort);
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.error('[Daemon] Received SIGINT');
+// Handle graceful shutdown signals — same cleanup for SIGTERM and SIGINT.
+registerGracefulShutdown(() => {
+  console.error('[Daemon] Received shutdown signal');
   removeDaemonState(projectRoot, appPort);
   releaseLock(projectRoot, appPort);
   process.exit(0);

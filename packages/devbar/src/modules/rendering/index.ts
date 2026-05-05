@@ -9,6 +9,7 @@
 
 import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
 import { clearAllTooltips } from '../tooltips.js';
+import type { DevBarControl } from '../../types.js';
 import { closeAllModals, type DevBarState } from '../types.js';
 import { renderCollapsed } from './collapsed.js';
 import { renderGuard, setRenderGuard } from './common.js';
@@ -60,15 +61,7 @@ function renderOverlays(state: DevBarState, consoleCaptureSingleton: ConsoleCapt
 export function render(
   state: DevBarState,
   consoleCaptureSingleton: ConsoleCapture,
-  customControls: {
-    id: string;
-    label: string;
-    onClick?: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    variant?: 'default' | 'warning' | 'info';
-    group?: string;
-  }[]
+  customControls: DevBarControl[]
 ): void {
   if (state.destroyed) return;
   if (typeof document === 'undefined') return;

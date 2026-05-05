@@ -163,6 +163,28 @@ describe('generateBaseFilename', () => {
       expect(result).toMatch(new RegExp(`^${type}-`));
     }
   });
+
+  // Browser-supplied slugs (e.g. HMR `trigger`) must not be able to escape
+  // the screenshots directory via path separators or NUL bytes.
+  it('strips path traversal characters from the slug', () => {
+    const evil = '../../../etc/passwd';
+    const result = generateBaseFilename('hmr', fixedTimestamp, evil);
+    expect(result).not.toContain('/');
+    expect(result).not.toContain('..');
+    expect(result).toBe(`hmr-etcpasswd-${expectedDate}`);
+  });
+
+  it('strips path traversal characters from the type', () => {
+    const result = generateBaseFilename('../etc', fixedTimestamp);
+    expect(result).not.toContain('/');
+    expect(result).not.toContain('..');
+    expect(result).toBe(`etc-${expectedDate}`);
+  });
+
+  it('drops a slug that becomes empty after sanitization', () => {
+    const result = generateBaseFilename('hmr', fixedTimestamp, '../');
+    expect(result).toBe(`hmr-${expectedDate}`);
+  });
 });
 
 describe('truncateMessage', () => {

@@ -17,8 +17,11 @@ import {
   SCREENSHOT_NOTIFICATION_MS,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
-import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
-import { extractPageSchema, schemaToMarkdown } from '../schema.js';
+import {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
+import { extractPageSchema, schemaToMarkdown } from '@ytspar/sweetlink/browser/commands/schema';
 import type { DevBarSettings } from '../settings.js';
 import type { SweetlinkCommand } from '../types.js';
 import type { DevBarState } from './types.js';
@@ -684,7 +687,7 @@ function handleSettingsLoadedCommand(
   state: DevBarState,
   command: SweetlinkCommand & { type: 'settings-loaded' }
 ): void {
-  handleSettingsLoaded(state, command.settings as DevBarSettings | null);
+  handleSettingsLoaded(state, (command.settings as unknown) as DevBarSettings | null);
 }
 
 function handleSettingsSavedCommand(

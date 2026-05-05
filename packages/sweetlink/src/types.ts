@@ -225,11 +225,32 @@ export interface ConsoleLog {
  * Each command type declares only the fields it actually uses.
  */
 
+/**
+ * Optional pass-through for screenshot/refresh sub-protocol. Tightened to a
+ * known shape so the WS contract is no longer an opaque escape hatch.
+ * Add fields here as new options ship; downstream callers that pass
+ * unknown keys will fail to typecheck instead of silently dropping them.
+ */
+export interface ScreenshotOptions {
+  /** Capture full page (vs viewport-only). */
+  fullPage?: boolean;
+  /** Output format. */
+  format?: 'jpeg' | 'png';
+  /** JPEG quality 0-100; ignored for PNG. */
+  quality?: number;
+  /** Device-pixel scale factor. */
+  scale?: number;
+  /** Whether to include the captured page metadata in the response. */
+  includeMetadata?: boolean;
+  /** Run an a11y audit after capturing. */
+  a11y?: boolean;
+}
+
 export interface ScreenshotCommand {
   type: 'screenshot';
   selector?: string;
   hideDevbar?: boolean;
-  options?: Record<string, unknown>;
+  options?: ScreenshotOptions;
 }
 
 export interface QueryDomCommand {
@@ -256,15 +277,26 @@ export interface BrowserClientReadyCommand {
   type: 'browser-client-ready';
 }
 
-export interface SaveScreenshotCommand {
-  type: 'save-screenshot';
-  data?: unknown;
+/**
+ * Generic "save artifact" variant.
+ *
+ * The optional second type parameter narrows the `data` payload for callers
+ * that have it. Default is `unknown` because the wire protocol delivers
+ * data as JSON — receivers still call the `is*Data` type guards. Producers
+ * (the browser building the message) get full type-checking via the
+ * payload generic.
+ */
+export interface SaveCommand<T extends string, P = unknown> {
+  type: T;
+  data?: P;
 }
 
-export interface DesignReviewScreenshotCommand {
-  type: 'design-review-screenshot';
-  data?: unknown;
-}
+export type SaveScreenshotCommand = SaveCommand<'save-screenshot', ScreenshotPayload>;
+
+export type DesignReviewScreenshotCommand = SaveCommand<
+  'design-review-screenshot',
+  ScreenshotPayload
+>;
 
 export interface CheckApiKeyCommand {
   type: 'check-api-key';
@@ -274,20 +306,20 @@ export interface ApiKeyStatusCommand {
   type: 'api-key-status';
 }
 
-export interface SaveOutlineCommand {
-  type: 'save-outline';
-  data?: unknown;
-}
+export type SaveOutlineCommand = SaveCommand<
+  'save-outline',
+  MarkdownSavePayload & { outline: unknown[] }
+>;
 
-export interface SaveSchemaCommand {
-  type: 'save-schema';
-  data?: unknown;
-}
+export type SaveSchemaCommand = SaveCommand<
+  'save-schema',
+  MarkdownSavePayload & { schema: unknown }
+>;
 
-export interface SaveSettingsCommand {
-  type: 'save-settings';
-  data?: unknown;
-}
+export type SaveSettingsCommand = SaveCommand<
+  'save-settings',
+  { settings: Record<string, unknown> }
+>;
 
 export interface LoadSettingsCommand {
   type: 'load-settings';
@@ -295,7 +327,13 @@ export interface LoadSettingsCommand {
 
 export interface SettingsLoadedCommand {
   type: 'settings-loaded';
-  settings?: unknown;
+  /**
+   * Settings payload as opaque key/value record. Receivers parse it with
+   * the SettingsManager-side validator; the type guarantees a non-string,
+   * non-null payload at compile time but does not constrain the keys
+   * (DevBar's settings shape lives in the consumer package).
+   */
+  settings?: Record<string, unknown>;
 }
 
 export interface SettingsSavedCommand {
@@ -303,14 +341,28 @@ export interface SettingsSavedCommand {
   settingsPath?: string;
 }
 
-export interface SettingsErrorCommand {
-  type: 'settings-error';
+/**
+ * Generic error variant. Every "X-error" command has the same shape — a
+ * literal `type` discriminator and an optional `error` message — so we
+ * express each one as `ErrorCommand<'X-error'>` instead of declaring six
+ * structurally identical interfaces. Adding a new error variant becomes
+ * a one-line alias.
+ */
+export interface ErrorCommand<T extends string> {
+  type: T;
   error?: string;
+}
+
+export type SettingsErrorCommand = ErrorCommand<'settings-error'>;
+
+export interface RefreshOptions {
+  /** Force a full hard reload (bypass cache). */
+  hard?: boolean;
 }
 
 export interface RefreshCommand {
   type: 'refresh';
-  options?: Record<string, unknown>;
+  options?: RefreshOptions;
 }
 
 export interface RequestScreenshotCommand {
@@ -318,11 +370,11 @@ export interface RequestScreenshotCommand {
   requestId?: string;
   selector?: string;
   hideDevbar?: boolean;
-  format?: 'jpeg' | 'png';
+  format?: ScreenshotOptions['format'];
   quality?: number;
   scale?: number;
   includeMetadata?: boolean;
-  options?: Record<string, unknown>;
+  options?: ScreenshotOptions;
 }
 
 export interface ScreenshotResponseCommand {
@@ -335,7 +387,7 @@ export interface LogSubscribeCommand {
   type: 'log-subscribe';
   subscriptionId?: string;
   filters?: {
-    levels?: ('log' | 'error' | 'warn' | 'info' | 'debug')[];
+    levels?: ConsoleLogLevel[];
     pattern?: string;
     source?: string;
   };
@@ -376,60 +428,42 @@ export interface DesignReviewSavedCommand {
   reviewPath?: string;
 }
 
-export interface DesignReviewErrorCommand {
-  type: 'design-review-error';
-  error?: string;
-}
+export type DesignReviewErrorCommand = ErrorCommand<'design-review-error'>;
 
 export interface OutlineSavedCommand {
   type: 'outline-saved';
   outlinePath?: string;
 }
 
-export interface OutlineErrorCommand {
-  type: 'outline-error';
-  error?: string;
-}
+export type OutlineErrorCommand = ErrorCommand<'outline-error'>;
 
 export interface SchemaSavedCommand {
   type: 'schema-saved';
   schemaPath?: string;
 }
 
-export interface SchemaErrorCommand {
-  type: 'schema-error';
-  error?: string;
-}
+export type SchemaErrorCommand = ErrorCommand<'schema-error'>;
 
-export interface SaveConsoleLogsCommand {
-  type: 'save-console-logs';
-  data?: unknown;
-}
+export type SaveConsoleLogsCommand = SaveCommand<
+  'save-console-logs',
+  MarkdownSavePayload & { logs: unknown[] }
+>;
 
 export interface ConsoleLogsSavedCommand {
   type: 'console-logs-saved';
   consoleLogsPath?: string;
 }
 
-export interface ConsoleLogsErrorCommand {
-  type: 'console-logs-error';
-  error?: string;
-}
+export type ConsoleLogsErrorCommand = ErrorCommand<'console-logs-error'>;
 
-export interface SaveA11yCommand {
-  type: 'save-a11y';
-  data?: unknown;
-}
+export type SaveA11yCommand = SaveCommand<'save-a11y', MarkdownSavePayload>;
 
 export interface A11ySavedCommand {
   type: 'a11y-saved';
   a11yPath?: string;
 }
 
-export interface A11yErrorCommand {
-  type: 'a11y-error';
-  error?: string;
-}
+export type A11yErrorCommand = ErrorCommand<'a11y-error'>;
 
 export interface GetSchemaCommand {
   type: 'get-schema';
@@ -588,6 +622,19 @@ export interface ServerInfo {
 // ============================================================================
 
 /**
+ * Semantic category assigned to an outline node by getSemanticCategory.
+ */
+export type OutlineCategory =
+  | 'heading'
+  | 'sectioning'
+  | 'landmark'
+  | 'grouping'
+  | 'form'
+  | 'table'
+  | 'list'
+  | 'other';
+
+/**
  * Node in the document outline tree
  */
 export interface OutlineNode {
@@ -596,13 +643,13 @@ export interface OutlineNode {
   text: string;
   id?: string;
   children: OutlineNode[];
-  category?: string;
+  category?: OutlineCategory;
 }
 
 /**
  * A single microdata item extracted from the page
  */
-interface MicrodataItem {
+export interface MicrodataItem {
   type?: string;
   properties?: Record<string, unknown>;
 }
@@ -679,7 +726,7 @@ export interface AxeResult {
 export interface LogSubscription {
   subscriptionId: string;
   filters?: {
-    levels?: string[];
+    levels?: ConsoleLogLevel[];
     pattern?: string;
     source?: string;
   };
@@ -741,13 +788,28 @@ export function isHmrScreenshotData(value: unknown): value is HmrScreenshotData 
 /**
  * Shared shape for screenshot-like command data (screenshot + url + dimensions + timestamp).
  * Used by both save-screenshot and design-review-screenshot commands.
+ *
+ * Exported so producers (the browser) can construct typed save commands
+ * instead of passing `data: unknown`. The receiver still calls the
+ * `isScreenshotPayload`-based type guard at runtime — trust between the
+ * browser and the daemon is unidirectional.
  */
-type ScreenshotPayload = {
+export type ScreenshotPayload = {
   screenshot: string;
   url: string;
   timestamp: number;
   width: number;
   height: number;
+};
+
+/**
+ * Shared shape for markdown-based save commands.
+ */
+export type MarkdownSavePayload = {
+  markdown: string;
+  url: string;
+  title: string;
+  timestamp: number;
 };
 
 function isScreenshotPayload(value: unknown): value is ScreenshotPayload {
@@ -776,11 +838,8 @@ export function isDesignReviewScreenshotData(value: unknown): value is Screensho
   return isScreenshotPayload(value);
 }
 
-/**
- * Shared shape for markdown-based save commands (markdown + url + title + timestamp).
- * Used by outline, schema, console-logs, and a11y save commands.
- */
-type MarkdownSavePayload = { markdown: string; url: string; title: string; timestamp: number };
+// MarkdownSavePayload is exported earlier alongside ScreenshotPayload so
+// producers can construct typed save commands.
 
 function isMarkdownSavePayload(value: unknown): value is MarkdownSavePayload {
   if (value === null || typeof value !== 'object') return false;

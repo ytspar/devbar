@@ -276,18 +276,35 @@ export class ConsoleCapture {
   }
 
   /**
-   * Import logs from another source (e.g., early capture)
+   * Recompute the cached counts from the current buffer. Use after any
+   * batch operation (importLogs, clear-then-add) to guarantee counts can
+   * never drift from the actual buffer contents.
+   */
+  private recomputeCounts(): void {
+    if (!this.trackCounts) return;
+    let e = 0;
+    let w = 0;
+    let i = 0;
+    for (const log of this.logs) {
+      if (log.level === 'error') e++;
+      else if (log.level === 'warn') w++;
+      else if (log.level === 'info') i++;
+    }
+    this.errorCount = e;
+    this.warningCount = w;
+    this.infoCount = i;
+  }
+
+  /**
+   * Import logs from another source (e.g., early capture).
+   * Counts are recomputed from the buffer afterward — a batch import is
+   * not subject to the same incremental accounting as the per-message
+   * capture path, so this is the safe form.
    */
   importLogs(logs: ConsoleLog[]): void {
-    if (this.trackCounts) {
-      for (const log of logs) {
-        if (log.level === 'error') this.errorCount++;
-        else if (log.level === 'warn') this.warningCount++;
-        else if (log.level === 'info') this.infoCount++;
-      }
-    }
     this.logs = [...logs, ...this.logs];
     this.trimLogs();
+    this.recomputeCounts();
   }
 
   /**
@@ -372,9 +389,24 @@ export class ConsoleCapture {
       };
       if (!target?.tagName) return;
 
-      // Skip devbar's own resources to avoid feedback loops
+      // Skip devbar's own resources to avoid feedback loops, but only
+      // when the URL plausibly belongs to one of the packages — a bare
+      // substring match silently drops legit user assets like
+      // /assets/devbar-logo.png. Match on the path, anchored to the
+      // package directory, instead.
       const url = target.src || target.href || '';
-      if (!url || url.includes('devbar') || url.includes('sweetlink')) return;
+      if (!url) return;
+      try {
+        const urlPath = new URL(url, window.location.href).pathname;
+        if (
+          /\/@ytspar\/(devbar|sweetlink)\//.test(urlPath) ||
+          /\/node_modules\/@ytspar\/(devbar|sweetlink)\//.test(urlPath)
+        ) {
+          return;
+        }
+      } catch {
+        /* malformed URL — let it through and log as a normal error */
+      }
 
       const tagName = target.tagName.toLowerCase();
       // Only track meaningful resource types

@@ -22,6 +22,7 @@
  * - Example: app on 3000 → Sweetlink on 9223
  */
 
+import { registerGracefulShutdown } from './daemon/utils.js';
 import { closeSweetlink, initSweetlink } from './server/index.js';
 import { WS_PORT_OFFSET } from './types.js';
 
@@ -94,11 +95,9 @@ export function startSweetlink(options: AutoStartOptions = {}): void {
   });
 
   // Graceful shutdown on SIGTERM and SIGINT
-  const handleShutdown = (): void => {
+  registerGracefulShutdown(() => {
     closeSweetlink();
-  };
-  process.on('SIGTERM', handleShutdown);
-  process.on('SIGINT', handleShutdown);
+  });
 }
 
 /**

@@ -81,12 +81,12 @@ vi.mock('../../accessibility.js', () => ({
   getViolationCounts: mockGetViolationCounts,
 }));
 
-vi.mock('../../outline.js', () => ({
+vi.mock('@ytspar/sweetlink/browser/commands/outline', () => ({
   extractDocumentOutline: mockExtractDocumentOutline,
   outlineToMarkdown: mockOutlineToMarkdown,
 }));
 
-vi.mock('../../schema.js', () => ({
+vi.mock('@ytspar/sweetlink/browser/commands/schema', () => ({
   extractPageSchema: mockExtractPageSchema,
   schemaToMarkdown: mockSchemaToMarkdown,
   checkMissingTags: mockCheckMissingTags,

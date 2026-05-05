@@ -175,63 +175,98 @@ describe('removeDaemonState', () => {
 describe('acquireLock', () => {
   beforeEach(() => vi.resetAllMocks());
 
+  // Lock content format is `${pid}:${token}` where token is random per
+  // call. Helper records what was written so verifyLockOwnership can read
+  // it back during the same test.
+  function trackLockWrites(): { lastContent(): string | undefined } {
+    let lastWritten: string | undefined;
+    mockFs.writeFileSync.mockImplementation((file: string, content: string) => {
+      if (typeof content === 'string' && file.endsWith('daemon.lock')) {
+        lastWritten = content;
+      }
+    });
+    mockFs.readFileSync.mockImplementation((file: string) => {
+      if (typeof file === 'string' && file.endsWith('daemon.lock') && lastWritten !== undefined) {
+        return lastWritten;
+      }
+      throw new Error('ENOENT');
+    });
+    return { lastContent: () => lastWritten };
+  }
+
   it('creates directory if it does not exist', () => {
     mockFs.existsSync.mockReturnValue(false);
-    mockFs.writeFileSync.mockImplementation(() => {}); // success
+    trackLockWrites();
     acquireLock('/project');
     expect(mockFs.mkdirSync).toHaveBeenCalledWith('/project/.sweetlink', { recursive: true });
   });
 
   it('returns true when lock is acquired', () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.writeFileSync.mockImplementation(() => {}); // wx succeeds
+    trackLockWrites();
     expect(acquireLock('/project')).toBe(true);
   });
 
-  it('writes PID to lock file with wx flag', () => {
+  it('writes PID:token content to lock file with wx flag', () => {
     mockFs.existsSync.mockReturnValue(true);
-    mockFs.writeFileSync.mockImplementation(() => {});
+    const tracker = trackLockWrites();
     acquireLock('/project');
 
+    // Token is random per call; assert format and PID prefix.
     expect(mockFs.writeFileSync).toHaveBeenCalledWith(
       '/project/.sweetlink/daemon.lock',
-      String(process.pid),
+      expect.stringMatching(new RegExp(`^${process.pid}:[a-f0-9]{32}$`)),
       { flag: 'wx', mode: 0o600 }
     );
+    expect(tracker.lastContent()).toMatch(new RegExp(`^${process.pid}:[a-f0-9]{32}$`));
   });
 
-  it('returns false when lock is held by a live process', () => {
+  it('returns false when lock is held by a live daemon (state file matches PID)', () => {
     mockFs.existsSync.mockReturnValue(true);
 
-    // First writeFileSync call (wx) fails
-    let callCount = 0;
+    // wx fails — lock exists; readFileSync returns existing lock content
+    // (PID:token from a prior process). The PID in the state file matches
+    // the lock file's PID, so we treat the daemon as alive.
     mockFs.writeFileSync.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) throw new Error('EEXIST');
+      throw new Error('EEXIST');
+    });
+    mockFs.readFileSync.mockImplementation((file: string) => {
+      if (file.endsWith('daemon.lock')) return `${process.pid}:abc`;
+      if (file.endsWith('daemon.json')) {
+        return JSON.stringify({
+          ...VALID_STATE,
+          pid: process.pid,
+        });
+      }
+      throw new Error('ENOENT');
     });
 
-    // Lock file contains current PID (a live process)
-    mockFs.readFileSync.mockReturnValue(String(process.pid));
-
-    // process.kill(pid, 0) will succeed for our own PID
     expect(acquireLock('/project')).toBe(false);
   });
 
   it('acquires stale lock from dead process', () => {
     mockFs.existsSync.mockReturnValue(true);
 
-    // First writeFileSync (wx) fails — lock exists
-    // Second writeFileSync (after stale lock removal) succeeds
+    // First wx-write throws (lock exists), subsequent writes succeed and
+    // record the content so verifyLockOwnership reads our token.
     let writeCallCount = 0;
-    mockFs.writeFileSync.mockImplementation(() => {
+    let lastWritten: string | undefined;
+    mockFs.writeFileSync.mockImplementation((file: string, content: string) => {
       writeCallCount++;
       if (writeCallCount === 1) throw new Error('EEXIST');
+      if (typeof content === 'string' && file.endsWith('daemon.lock')) {
+        lastWritten = content;
+      }
     });
 
-    // Lock file contains a PID that doesn't exist
-    mockFs.readFileSync.mockReturnValue('999999999');
+    mockFs.readFileSync.mockImplementation((file: string) => {
+      if (file.endsWith('daemon.lock')) {
+        return lastWritten ?? '999999999:dead';
+      }
+      throw new Error('ENOENT'); // no state file → recovery path
+    });
 
-    // Mock process.kill to throw (process doesn't exist)
+    // process.kill(pid, 0) throws (dead PID).
     const origKill = process.kill;
     const killMock = vi.fn().mockImplementation(() => {
       throw new Error('ESRCH');

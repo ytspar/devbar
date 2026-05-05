@@ -37,8 +37,8 @@ export {
 } from './constants.js';
 // Debug utilities
 export { DebugLogger, normalizeDebugConfig } from './debug.js';
-// Early console capture script for injection
-export { EARLY_CONSOLE_CAPTURE_SCRIPT } from './earlyConsoleCapture.js';
+// Early console capture script for injection — re-exported direct from sweetlink.
+export { EARLY_CONSOLE_CAPTURE_SCRIPT } from '@ytspar/sweetlink/browser/earlyConsoleCapture';
 // Main vanilla JS devbar
 export {
   destroyGlobalDevBar,
@@ -56,8 +56,11 @@ export {
   NetworkMonitor,
   type NetworkState,
 } from './network.js';
-// Re-export outline/schema functions
-export { extractDocumentOutline, outlineToMarkdown } from './outline.js';
+// Re-export outline/schema functions direct from sweetlink.
+export {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
 // Official plugins
 export { type AppVersionPluginOptions, appVersionPlugin } from './plugins/appVersion.js';
 export { type GitBranchPluginOptions, gitBranchPlugin } from './plugins/gitBranch.js';
@@ -74,7 +77,10 @@ export {
   PRESET_PERFORMANCE,
   PRESET_RESPONSIVE,
 } from './presets.js';
-export { extractPageSchema, schemaToMarkdown } from './schema.js';
+export {
+  extractPageSchema,
+  schemaToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/schema';
 // Settings management
 export {
   ACCENT_COLOR_PRESETS,
@@ -108,6 +114,10 @@ export type {
   DebugConfig,
   DevBarControl,
   GlobalDevBarOptions,
+  MetaImage,
+  MicrodataItem,
+  MissingTag,
+  OutlineCategory,
   OutlineNode,
   PageSchema,
   SweetlinkCommand,

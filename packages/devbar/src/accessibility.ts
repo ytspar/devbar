@@ -103,11 +103,16 @@ export async function runA11yAudit(forceRefresh = false): Promise<AxeResult> {
   return auditResult;
 }
 
+/** Narrow alias of AxeViolation['impact'] for the public API. */
+export type AxeImpact = AxeViolation['impact'];
+
 /**
  * Get violation count by impact level
  */
-export function getViolationCounts(violations: AxeViolation[]): Record<string, number> {
-  const counts: Record<string, number> = {
+export function getViolationCounts(
+  violations: AxeViolation[]
+): Record<AxeImpact | 'total', number> {
+  const counts: Record<AxeImpact | 'total', number> = {
     critical: 0,
     serious: 0,
     moderate: 0,
@@ -116,8 +121,8 @@ export function getViolationCounts(violations: AxeViolation[]): Record<string, n
   };
 
   for (const violation of violations) {
-    counts[violation.impact] = (counts[violation.impact] ?? 0) + 1;
-    counts.total = (counts.total ?? 0) + 1;
+    counts[violation.impact] += 1;
+    counts.total += 1;
   }
 
   return counts;
@@ -126,9 +131,11 @@ export function getViolationCounts(violations: AxeViolation[]): Record<string, n
 /**
  * Group violations by impact level
  */
-export function groupViolationsByImpact(violations: AxeViolation[]): Map<string, AxeViolation[]> {
-  const groups = new Map<string, AxeViolation[]>();
-  const impactOrder = ['critical', 'serious', 'moderate', 'minor'];
+export function groupViolationsByImpact(
+  violations: AxeViolation[]
+): Map<AxeImpact, AxeViolation[]> {
+  const groups = new Map<AxeImpact, AxeViolation[]>();
+  const impactOrder: AxeImpact[] = ['critical', 'serious', 'moderate', 'minor'];
 
   for (const impact of impactOrder) {
     groups.set(impact, []);
@@ -145,52 +152,18 @@ export function groupViolationsByImpact(violations: AxeViolation[]): Map<string,
 }
 
 /**
- * Get color for impact level
+ * Get color for impact level. Accepts string for runtime safety — callers
+ * should pass `AxeImpact`, but unexpected values fall back to gray rather
+ * than crashing on undefined.
  */
-export function getImpactColor(impact: string): string {
-  const colors: Record<string, string> = {
+export function getImpactColor(impact: AxeImpact | string): string {
+  const colors: Record<AxeImpact, string> = {
     critical: PALETTE.red,
     serious: PALETTE.orange,
     moderate: PALETTE.amber,
     minor: PALETTE.lime,
   };
-  return colors[impact] || PALETTE.gray;
-}
-
-/**
- * Get badge color based on worst violation impact
- */
-export function getBadgeColor(violations: AxeViolation[]): string {
-  if (violations.some((v) => v.impact === 'critical')) return getImpactColor('critical');
-  if (violations.some((v) => v.impact === 'serious')) return getImpactColor('serious');
-  if (violations.some((v) => v.impact === 'moderate')) return getImpactColor('moderate');
-  if (violations.some((v) => v.impact === 'minor')) return getImpactColor('minor');
-  return PALETTE.emerald; // green - no violations
-}
-
-/**
- * Clear cached result
- */
-export function clearA11yCache(): void {
-  cachedResult = null;
-  cacheTimestamp = null;
-}
-
-/**
- * Get cached result without running audit
- */
-export function getCachedResult(): AxeResult | null {
-  if (cachedResult && cacheTimestamp && Date.now() - cacheTimestamp < CACHE_DURATION_MS) {
-    return cachedResult;
-  }
-  return null;
-}
-
-/**
- * Format violation for display
- */
-export function formatViolation(violation: AxeViolation): string {
-  return `[${violation.impact.toUpperCase()}] ${violation.help}\n${violation.description}\n${violation.nodes.length} element(s) affected`;
+  return (colors as Record<string, string>)[impact] ?? PALETTE.gray;
 }
 
 /**

@@ -448,17 +448,29 @@ describe('showHelp', () => {
   beforeEach(setup);
   afterEach(teardown);
 
-  it('displays help when --help flag is passed', async () => {
-    await runCLI(['--help']);
-    expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
-    expect(exitSpy).toHaveBeenCalledWith(0);
-  });
+  // The help path imports the full CLI module to trigger the IIFE; that
+  // pulls dynamic imports through `daemon/utils.js` and can drift past
+  // the default 5s timeout under heavy parallel load. 15s is plenty for
+  // the actual work (~500ms in isolation).
+  it(
+    'displays help when --help flag is passed',
+    async () => {
+      await runCLI(['--help']);
+      expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    },
+    15_000
+  );
 
-  it('displays help when -h flag is passed', async () => {
-    await runCLI(['-h']);
-    expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
-    expect(exitSpy).toHaveBeenCalledWith(0);
-  });
+  it(
+    'displays help when -h flag is passed',
+    async () => {
+      await runCLI(['-h']);
+      expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    },
+    15_000
+  );
 
   it('displays help when no command is given', async () => {
     await runCLI([]);

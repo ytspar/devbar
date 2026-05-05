@@ -41,28 +41,8 @@ export interface AndroidRecordOptions {
   inheritEnv?: boolean;
 }
 
-const MINIMAL_ENV_KEYS = [
-  'PATH',
-  'HOME',
-  'USER',
-  'LANG',
-  'LC_ALL',
-  'LC_CTYPE',
-  'TERM',
-  'SHELL',
-  'TZ',
-  'TMPDIR',
-  'PWD',
-];
-
-function pickMinimalEnv(): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const key of MINIMAL_ENV_KEYS) {
-    const v = process.env[key];
-    if (typeof v === 'string') out[key] = v;
-  }
-  return out;
-}
+// MINIMAL_ENV_KEYS / pickMinimalEnv live in ./env.js — single source of truth.
+import { pickMinimalEnv } from './env.js';
 
 /**
  * Poll `adb shell stat -c %s <remotePath>` until the size is stable across

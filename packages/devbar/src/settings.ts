@@ -59,6 +59,14 @@ export function resolveSaveLocation(
 }
 
 /**
+ * Any valid CSS color value — kept as a string alias rather than a strict
+ * template literal so consumers can pass `#hex`, `rgb()`, `hsl()`, named
+ * colors, or `currentColor`. Documented here so its intent is explicit
+ * even though it's not statically validated.
+ */
+export type AccentColor = string;
+
+/**
  * Complete devbar settings schema
  */
 export interface DevBarSettings {
@@ -69,7 +77,7 @@ export interface DevBarSettings {
   position: DevBarPosition;
   themeMode: ThemeMode;
   compactMode: boolean;
-  accentColor: string;
+  accentColor: AccentColor;
 
   // Features
   showScreenshot: boolean;

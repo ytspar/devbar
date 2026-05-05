@@ -41,6 +41,10 @@ let recording = false;
 let paused = false;
 let pausedAt: number | null = null;
 let totalPausedMs = 0;
+// Counter for actions that arrived while paused — surfaced in manifest so
+// the user can see that some clicks/fills happened during their pause
+// window even though they don't appear on the timeline.
+let droppedWhilePaused = 0;
 let sessionId: string | null = null;
 let startedAt: number | null = null;
 let actions: ActionEntry[] = [];
@@ -144,8 +148,26 @@ export async function startRecording(
   recordingUrl = url;
   recordingLabel = options?.label ?? null;
 
-  // Navigate to the same URL (events from this load count toward the session)
-  await recordingPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  // Navigate to the same URL (events from this load count toward the session).
+  // If goto fails, roll back the recording state so the next record-start can
+  // succeed — otherwise the daemon stays "recording" forever with an orphan
+  // video that's still being written to disk.
+  try {
+    await recordingPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  } catch (err) {
+    recording = false;
+    startedAt = null;
+    recordingUrl = null;
+    recordingLabel = null;
+    try {
+      await recordingContext?.close();
+    } catch {
+      /* best-effort */
+    }
+    recordingPage = null;
+    recordingContext = null;
+    throw err;
+  }
 
   const git = detectGit();
   recordingGitBranch = git.branch;
@@ -178,8 +200,16 @@ export async function logAction(
 ): Promise<void> {
   if (!recording || !startedAt || !sessionDir) return;
   // Drop actions while paused — the user explicitly asked us to ignore
-  // this window. The action will appear once they resume.
-  if (paused) return;
+  // this window. The action will appear once they resume. Track and warn
+  // so a silent drop doesn't quietly corrupt the user's mental model of
+  // what's in the manifest.
+  if (paused) {
+    droppedWhilePaused++;
+    console.error(
+      `[Daemon] Recording paused — action "${action} ${args.join(' ')}" not captured (drops: ${droppedWhilePaused}).`
+    );
+    return;
+  }
 
   // Subtract the time we spent paused from the timeline so timestamps
   // stay relative to active recording.
@@ -313,18 +343,29 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     }
   }
 
-  // Move the video file to a predictable name
+  // Move the video file to a predictable name. If the rename fails (cross-
+  // device link, permission, EXDEV) fall back to copy+unlink so the video
+  // ends up at destPath either way; if both fail, unlink the source so we
+  // don't orphan a growing file in the Playwright temp dir.
   if (recordingVideoPath) {
+    const sourcePath = recordingVideoPath;
+    videoFilename = 'session.webm';
+    const destPath = path.join(sessionDir, videoFilename);
     try {
-      videoFilename = 'session.webm';
-      const destPath = path.join(sessionDir, videoFilename);
-      await fs.rename(recordingVideoPath, destPath);
+      try {
+        await fs.rename(sourcePath, destPath);
+      } catch {
+        await fs.copyFile(sourcePath, destPath);
+        await fs.unlink(sourcePath).catch(() => {});
+      }
       recordingVideoPath = destPath;
       const stat = await fs.stat(destPath);
       console.error(`[Daemon] Video saved: ${destPath} (${(stat.size / 1024).toFixed(0)}KB)`);
     } catch (e) {
       console.error('[Daemon] Failed to save video:', e);
       videoFilename = undefined;
+      // Best-effort cleanup — leave nothing growing in the temp dir.
+      await fs.unlink(sourcePath).catch(() => {});
     }
   }
 
@@ -375,6 +416,7 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   paused = false;
   pausedAt = null;
   totalPausedMs = 0;
+  droppedWhilePaused = 0;
 
   return result;
 }

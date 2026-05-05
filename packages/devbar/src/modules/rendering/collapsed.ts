@@ -2,7 +2,7 @@
  * Collapsed state rendering for the DevBar.
  */
 
-import { CSS_COLORS, DEVBAR_THEME, withAlpha } from '../../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, PALETTE, withAlpha } from '../../constants.js';
 import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
@@ -139,7 +139,7 @@ export function renderCollapsed(state: DevBarState): void {
     wrapper.appendChild(
       state.createCollapsedBadge(
         errorCount,
-        'rgba(239, 68, 68, 0.95)',
+        withAlpha(PALETTE.red, 95),
         warningCount > 0 ? '12px' : '-6px'
       )
     );
@@ -148,7 +148,7 @@ export function renderCollapsed(state: DevBarState): void {
   // Warning badge (absolute, top-right)
   if (warningCount > 0) {
     wrapper.appendChild(
-      state.createCollapsedBadge(warningCount, 'rgba(245, 158, 11, 0.95)', '-6px')
+      state.createCollapsedBadge(warningCount, withAlpha(PALETTE.amber, 95), '-6px')
     );
   }
 }

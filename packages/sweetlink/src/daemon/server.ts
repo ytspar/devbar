@@ -7,6 +7,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
+import * as path from 'path';
 import {
   closeBrowser,
   getBrowserInstance,
@@ -91,6 +92,30 @@ let httpServer: ReturnType<typeof createServer> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let shutdownCallback: (() => void) | null = null;
 let daemonPort: number | null = null;
+// Filesystem confinement boundary for paths supplied via the daemon API.
+// Set when startServer runs; every browser-influenced path (sessionDir,
+// outputPath, etc.) must resolve inside this directory.
+let projectRoot: string = process.cwd();
+
+// Resolve a user-supplied path and verify it falls within projectRoot.
+// Returns the resolved absolute path. Throws if the path escapes the root —
+// the caller surfaces this as a 400 to the client.
+function confinePath(input: string): string {
+  const resolved = path.resolve(projectRoot, input);
+  const rel = path.relative(projectRoot, resolved);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Path escapes project root: ${input}`);
+  }
+  return resolved;
+}
+
+// Detect whether a page has navigated between two URL captures. Used by
+// ref-based handlers to abort if the page navigates between checkRefStale
+// and the actual action — otherwise a click can land on a wrong element
+// with the same role/name on the new page.
+function pageNavigatedBetween(beforeUrl: string, afterUrl: string): boolean {
+  return Boolean(beforeUrl && afterUrl && beforeUrl !== afterUrl);
+}
 
 // ============================================================================
 // Idle Timer
@@ -289,18 +314,27 @@ async function handleSnapshot(
 async function captureFailure(page: Page, reason: string): Promise<string | undefined> {
   try {
     const { promises: fsp } = await import('fs');
-    const dir = '.sweetlink/failures';
+    // Resolve against projectRoot (not CWD) — captureFailure is also a
+    // browser-influenced path source via `reason`, so anchor it.
+    const dir = path.join(projectRoot, '.sweetlink/failures');
     await fsp.mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const slug = reason
       .replace(/[^a-z0-9]/gi, '-')
       .slice(0, 40)
       .toLowerCase();
-    const filePath = `${dir}/${stamp}-${slug}.png`;
+    const filePath = path.join(dir, `${stamp}-${slug}.png`);
     const buf = await page.screenshot({ fullPage: false });
     await fsp.writeFile(filePath, buf);
     return filePath;
-  } catch {
+  } catch (err) {
+    // Surface the inner failure so a read-only filesystem, quota, or
+    // missing perms doesn't leave CI users guessing why their action
+    // failure has no screenshot.
+    console.error(
+      `[Daemon] captureFailure(${reason}) failed:`,
+      err instanceof Error ? err.message : err
+    );
     return undefined;
   }
 }
@@ -740,6 +774,11 @@ async function handleClickRef(
 
   if (!ref) return { ok: false, error: 'Missing ref parameter' };
 
+  // Capture page URL at start so we can detect mid-action navigation. If
+  // the page navigates between this point and the click, the click could
+  // hit an element on a different page with the same role/name.
+  const startUrl = page.url();
+
   const stale = await checkRefStale(page, ref);
   if (stale) {
     const failureScreenshot = await captureFailure(page, `stale-ref-${ref}`);
@@ -781,6 +820,17 @@ async function handleClickRef(
         },
         failureScreenshot
       ),
+    };
+  }
+
+  // Last chance to bail before the click: if the page navigated since we
+  // captured startUrl, our resolved locator now points into a stale frame
+  // and the click would target the wrong element on the new page.
+  if (pageNavigatedBetween(startUrl, page.url())) {
+    return {
+      ok: false,
+      error: `Page navigated during click-ref (${startUrl} → ${page.url()}). Run \`snapshot\` for fresh refs.`,
+      data: { staleRef: true },
     };
   }
 
@@ -828,6 +878,7 @@ async function handleFillRef(
   if (!ref) return { ok: false, error: 'Missing ref parameter' };
   if (value === undefined) return { ok: false, error: 'Missing value parameter' };
 
+  const startUrl = page.url();
   const stale = await checkRefStale(page, ref);
   if (stale) {
     const failureScreenshot = await captureFailure(page, `stale-fill-ref-${ref}`);
@@ -869,6 +920,14 @@ async function handleFillRef(
         },
         failureScreenshot
       ),
+    };
+  }
+
+  if (pageNavigatedBetween(startUrl, page.url())) {
+    return {
+      ok: false,
+      error: `Page navigated during fill-ref (${startUrl} → ${page.url()}). Run \`snapshot\` for fresh refs.`,
+      data: { staleRef: true },
     };
   }
 
@@ -1054,6 +1113,7 @@ async function handleHoverRef(
 
   if (!ref) return { ok: false, error: 'Missing ref parameter' };
 
+  const startUrl = page.url();
   const stale = await checkRefStale(page, ref);
   if (stale) {
     return {
@@ -1063,6 +1123,13 @@ async function handleHoverRef(
   }
 
   const locator = resolveRef(page, ref);
+  if (pageNavigatedBetween(startUrl, page.url())) {
+    return {
+      ok: false,
+      error: `Page navigated during hover-ref (${startUrl} → ${page.url()}). Run \`snapshot\` for fresh refs.`,
+      data: { staleRef: true },
+    };
+  }
   await locator.hover();
   return { ok: true, data: { hovered: ref } };
 }
@@ -1407,14 +1474,19 @@ a{text-decoration:none;color:#222}
 // escapeHtml moved to ./utils.ts
 
 async function handleGenerateViewer(params: Record<string, unknown>): Promise<DaemonResponse> {
-  const sessionDir = params.sessionDir as string;
-  const outputPath = params.outputPath as string | undefined;
+  const sessionDirIn = params.sessionDir as string;
+  const outputPathIn = params.outputPath as string | undefined;
 
-  if (!sessionDir) return { ok: false, error: 'Missing sessionDir parameter' };
+  if (!sessionDirIn) return { ok: false, error: 'Missing sessionDir parameter' };
 
   try {
+    // Both paths come from API params (callable by anyone with the bearer
+    // token) — confine them to the project root before any fs operation.
+    const sessionDir = confinePath(sessionDirIn);
+    const outputPath = outputPathIn ? confinePath(outputPathIn) : undefined;
+
     const { promises: fsp } = await import('fs');
-    const manifestRaw = await fsp.readFile(`${sessionDir}/sweetlink-session.json`, 'utf-8');
+    const manifestRaw = await fsp.readFile(path.join(sessionDir, 'sweetlink-session.json'), 'utf-8');
     const manifest = JSON.parse(manifestRaw);
     const viewerPath = await generateViewer(manifest, {
       sessionDir,
@@ -1440,7 +1512,15 @@ async function handleVisualDiff(params: Record<string, unknown>): Promise<Daemon
     return { ok: false, error: 'Missing baseline or current parameter (base64 encoded PNG)' };
   }
 
-  const outputPath = params.outputPath as string | undefined;
+  const outputPathIn = params.outputPath as string | undefined;
+  let outputPath: string | undefined;
+  if (outputPathIn) {
+    try {
+      outputPath = confinePath(outputPathIn);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
   const baselineBuffer = Buffer.from(baseline, 'base64');
   const currentBuffer = Buffer.from(current, 'base64');
   const result = await visualDiff(baselineBuffer, currentBuffer, { threshold, outputPath });
@@ -1532,7 +1612,19 @@ export interface StartServerOptions {
   port: number;
   token: string;
   url: string;
+  /**
+   * Absolute path to the project directory. Used as the confinement boundary
+   * for any browser-supplied path passed through the daemon API. Defaults to
+   * `process.cwd()` for back-compat with existing callers.
+   */
+  projectRoot?: string;
   onShutdown: () => void;
+  /**
+   * Synchronous hook fired inside the listen() callback BEFORE the start
+   * promise resolves. Use this to write the daemon state file so it is
+   * durable before any external client can find the listening port.
+   */
+  onListening?: () => void;
 }
 
 /**
@@ -1543,6 +1635,7 @@ export function startServer(options: StartServerOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     shutdownCallback = options.onShutdown;
     daemonPort = options.port;
+    if (options.projectRoot) projectRoot = path.resolve(options.projectRoot);
 
     httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       // CORS preflight
@@ -1560,11 +1653,16 @@ export function startServer(options: StartServerOptions): Promise<void> {
       if (req.method === 'GET') {
         const urlPath = req.url ?? '/';
         const viewerMatch = urlPath.match(/^\/viewer\/([a-z0-9-]+)$/);
-        if (viewerMatch) {
+        if (viewerMatch && viewerMatch[1]) {
           const sid = viewerMatch[1];
           try {
             const { promises: fsp } = await import('fs');
-            const viewerHtml = await fsp.readFile(`.sweetlink/${sid}/viewer.html`, 'utf-8');
+            // Resolve against projectRoot (not CWD) so the daemon can be
+            // forked from any working directory and still find the session.
+            const viewerHtml = await fsp.readFile(
+              path.join(projectRoot, '.sweetlink', sid, 'viewer.html'),
+              'utf-8'
+            );
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(viewerHtml);
           } catch {
@@ -1577,7 +1675,9 @@ export function startServer(options: StartServerOptions): Promise<void> {
         if (urlPath === '/viewers') {
           try {
             const { promises: fsp } = await import('fs');
-            const entries = await fsp.readdir('.sweetlink', { withFileTypes: true });
+            const entries = await fsp.readdir(path.join(projectRoot, '.sweetlink'), {
+              withFileTypes: true,
+            });
             const sessions = entries
               .filter((e) => e.isDirectory() && e.name.startsWith('session-'))
               .map((e) => e.name)
@@ -1643,6 +1743,15 @@ export function startServer(options: StartServerOptions): Promise<void> {
 
     // Bind to localhost only
     httpServer.listen(options.port, '127.0.0.1', () => {
+      // Write state BEFORE resolving so any client polling for the daemon
+      // sees a complete state file the moment the port is open. The idle
+      // timer also waits until state is durable.
+      try {
+        options.onListening?.();
+      } catch (err) {
+        reject(err);
+        return;
+      }
       console.error(`[Daemon] HTTP server listening on http://127.0.0.1:${options.port}`);
       resetIdleTimer();
       resolve();

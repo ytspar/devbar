@@ -13,13 +13,16 @@ import {
   SCREENSHOT_SCALE,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
-import { extractDocumentOutline, outlineToMarkdown } from '../outline.js';
+import {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
 import {
   checkMissingTags,
   extractFavicons,
   extractPageSchema,
   schemaToMarkdown,
-} from '../schema.js';
+} from '@ytspar/sweetlink/browser/commands/schema';
 import { resolveSaveLocation } from '../settings.js';
 import {
   canvasToDataUrl,

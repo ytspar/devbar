@@ -15,7 +15,7 @@ import {
   readDaemonState,
   releaseLock,
 } from './stateFile.js';
-import type { DaemonResponse, DaemonState } from './types.js';
+import type { DaemonAction, DaemonResponse, DaemonState } from './types.js';
 import { DAEMON_POLL_INTERVAL_MS, DAEMON_SPAWN_TIMEOUT_MS } from './types.js';
 
 export class DaemonRequestError extends Error {
@@ -130,7 +130,7 @@ async function waitForDaemon(projectRoot: string, appPort?: number): Promise<Dae
  */
 export async function daemonRequest(
   state: DaemonState,
-  action: string,
+  action: DaemonAction,
   params?: Record<string, unknown>
 ): Promise<DaemonResponse> {
   const response = await fetch(`http://127.0.0.1:${state.port}/api/${action}`, {

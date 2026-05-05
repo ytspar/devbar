@@ -4,7 +4,6 @@
  * Utilities for inspecting and managing browser storage (localStorage, sessionStorage, cookies).
  */
 
-import { formatBytes } from './utils.js';
 
 /**
  * Storage item with parsed value
@@ -162,52 +161,3 @@ export function deleteCookie(name: string): void {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 
-/**
- * Clear all localStorage
- */
-export function clearLocalStorage(): void {
-  if (typeof localStorage === 'undefined') return;
-  localStorage.clear();
-}
-
-/**
- * Clear all sessionStorage
- */
-export function clearSessionStorage(): void {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.clear();
-}
-
-/**
- * Format storage size summary
- */
-export function formatStorageSummary(data: StorageData): string {
-  const localSize = data.localStorage.reduce((sum, item) => sum + item.size, 0);
-  const sessionSize = data.sessionStorage.reduce((sum, item) => sum + item.size, 0);
-  const cookieSize = data.cookies.reduce((sum, item) => sum + item.size, 0);
-
-  const parts: string[] = [];
-  if (data.localStorage.length > 0) {
-    parts.push(`localStorage: ${data.localStorage.length} items (${formatBytes(localSize)})`);
-  }
-  if (data.sessionStorage.length > 0) {
-    parts.push(`sessionStorage: ${data.sessionStorage.length} items (${formatBytes(sessionSize)})`);
-  }
-  if (data.cookies.length > 0) {
-    parts.push(`cookies: ${data.cookies.length} (${formatBytes(cookieSize)})`);
-  }
-
-  return parts.join(' | ') || 'No storage data';
-}
-
-/**
- * Beautify JSON string for display
- */
-export function beautifyJson(value: string): string {
-  try {
-    const parsed = JSON.parse(value);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return value;
-  }
-}

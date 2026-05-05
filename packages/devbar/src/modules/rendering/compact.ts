@@ -6,9 +6,14 @@ import { BUTTON_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../../constan
 import type { DevBarControl } from '../../types.js';
 import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { attachTextTooltip } from '../tooltips.js';
-import type { DevBarState, PositionStyle } from '../types.js';
+import type { DevBarState } from '../types.js';
 import { createConsoleBadge, createScreenshotButton, createSettingsButton } from './buttons.js';
-import { captureDotPosition, createConnectionIndicator, createControlElement } from './common.js';
+import {
+  captureDotPosition,
+  createConnectionIndicator,
+  createControlElement,
+  TOOLBAR_POSITIONS,
+} from './common.js';
 
 export function renderCompact(state: DevBarState, customControls: DevBarControl[] = []): void {
   if (!state.container) return;
@@ -16,15 +21,8 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
   const { position, accentColor } = state.options;
   const { errorCount, warningCount, infoCount } = state.getLogCounts();
 
-  // Simple position styles - same anchor points as expanded mode
-  const positionStyles: Record<string, PositionStyle> = {
-    'bottom-left': { bottom: '20px', left: '80px' },
-    'bottom-right': { bottom: '20px', right: '16px' },
-    'top-left': { top: '20px', left: '80px' },
-    'top-right': { top: '20px', right: '16px' },
-    'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
-  };
-  const posStyle = positionStyles[position] ?? positionStyles['bottom-left'];
+  // Position styles live in common.ts so compact and expanded stay in lockstep.
+  const posStyle = TOOLBAR_POSITIONS[position] ?? TOOLBAR_POSITIONS['bottom-left'];
 
   const wrapper = state.container;
   if (customControls.length > 0) {
@@ -98,7 +96,6 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
 
   // Custom controls (registered by host applications)
   if (customControls.length > 0) {
-    const accentColor = state.options.accentColor;
     for (const control of customControls) {
       wrapper.appendChild(createControlElement(control, accentColor));
     }

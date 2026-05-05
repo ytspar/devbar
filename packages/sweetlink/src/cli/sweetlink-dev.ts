@@ -21,6 +21,7 @@ import { join } from 'path';
 // Load .env from the project directory (cwd)
 config({ path: join(process.cwd(), '.env') });
 
+import { registerGracefulShutdown } from '../daemon/utils.js';
 import { closeSweetlink, initSweetlink } from '../server.js';
 import {
   parsePortNumber,
@@ -42,15 +43,9 @@ console.log(`[Sweetlink] Project directory: ${process.cwd()}`);
 
 initSweetlink({ port, appPort });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('[Sweetlink] SIGTERM signal received: closing WebSocket server');
-  closeSweetlink();
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('[Sweetlink] SIGINT signal received: closing WebSocket server');
+// Graceful shutdown — same handler for SIGTERM and SIGINT.
+registerGracefulShutdown(() => {
+  console.log('[Sweetlink] Shutdown signal received: closing WebSocket server');
   closeSweetlink();
   process.exit(0);
 });

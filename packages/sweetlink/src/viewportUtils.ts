@@ -29,6 +29,16 @@ export interface ViewportConfig {
   isMobile: boolean;
 }
 
+/**
+ * Accepted viewport input shapes:
+ *   - 'mobile' | 'tablet' | 'desktop' — named preset
+ *   - `${number}x${number}` — explicit pixel dimensions, e.g. '1920x1080'
+ * The bare `string` fallback stays for back-compat (parseViewport still
+ * tolerates unknown values by falling back to the default), but new code
+ * should use this narrower union to surface bad inputs at compile time.
+ */
+export type ViewportName = 'mobile' | 'tablet' | 'desktop' | `${number}x${number}`;
+
 // ============================================================================
 // Functions
 // ============================================================================
@@ -46,7 +56,7 @@ export interface ViewportConfig {
  * @returns Parsed viewport configuration
  */
 export function parseViewport(
-  viewportName?: string,
+  viewportName?: ViewportName | string,
   defaultViewport: { width: number; height: number } = VIEWPORT_PRESETS.default
 ): ViewportConfig {
   if (!viewportName) {

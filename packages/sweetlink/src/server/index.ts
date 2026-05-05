@@ -4,8 +4,8 @@
  * Main server module that handles WebSocket connections and message routing.
  */
 
-import { execFileSync } from 'child_process';
 import * as fs from 'fs';
+import { detectGit } from '../daemon/utils.js';
 import {
   createServer,
   type Server as HttpServer,
@@ -108,22 +108,12 @@ export type { ConsoleLog, HmrScreenshotData, SweetlinkCommand, SweetlinkResponse
 // ============================================================================
 
 /**
- * Detect the current git branch name.
- * Works for both regular repos and git worktrees.
- * Uses execFileSync (no shell) to prevent command injection.
+ * Detect the current git branch name. Single source of truth lives in
+ * daemon/utils.ts — kept as a thin local function so existing call sites
+ * that just want the branch don't need to destructure `{ branch, commit }`.
  */
 function detectGitBranch(cwd: string): string | undefined {
-  try {
-    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
-      cwd,
-      encoding: 'utf-8',
-      timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    return branch && branch !== 'HEAD' ? branch : undefined;
-  } catch {
-    return undefined;
-  }
+  return detectGit(cwd).branch ?? undefined;
 }
 
 /**
@@ -155,8 +145,12 @@ let gitBranch: string | undefined;
 let appName: string | undefined;
 const clients = new Map<WebSocket, { type: 'browser' | 'cli'; id: string; origin?: string }>();
 
-// WeakMap for CLI client references (prevents memory leaks)
-const cliClientMap = new WeakMap<WebSocket, WebSocket>();
+// FIFO queue of CLI clients waiting for a response from a given browser.
+// Keyed by browser WS; the head of the queue receives the next response.
+// Without queueing, two concurrent CLI clients sending forwarded commands to
+// the same browser had the second overwrite the first, hanging the first
+// CLI until timeout.
+const cliClientQueues = new WeakMap<WebSocket, WebSocket[]>();
 
 // HMR screenshot sequence counter
 let hmrSequenceNumber = 0;
@@ -176,8 +170,9 @@ function safeRegex(pattern: string): RegExp {
   const dangerousPatterns = [
     /\(\.\*\)\+/, // (.*)+
     /\(\.\+\)\+/, // (.+)+
-    /\([^)]*\+\)\+/, // (a+)+
-    /\([^)]*\*\)\+/, // (a*)+
+    /\([^)]*\+\)\+/, // (a+)+, (\w+)+, ([a-z]+)+, …
+    /\([^)]*\*\)\+/, // (a*)+, (\w*)+, …
+    /\([^)]*\|[^)]*\)[+*]/, // alternation under a quantifier: (a|aa)+, (foo|bar)*
   ];
   for (const dangerous of dangerousPatterns) {
     if (dangerous.test(pattern)) {
@@ -780,6 +775,63 @@ function handleLogEvent(command: LogEventCommand, ctx: MessageHandlerContext): b
 // Recording Proxy (Browser → Daemon)
 // ============================================================================
 
+interface ProxyDaemonState {
+  port: number;
+  token: string;
+}
+
+/**
+ * Find a usable daemon state file under .sweetlink/. Tries the canonical
+ * `daemon.json` first, then any port-scoped `daemon-{port}.json`. Returns
+ * null if nothing valid is on disk. Centralizes the validation that was
+ * inlined three different ways across the proxy handlers.
+ */
+function findAnyDaemonState(): ProxyDaemonState | null {
+  const stateDir = path.join(getProjectRoot(), '.sweetlink');
+  const candidates = [path.join(stateDir, 'daemon.json')];
+  try {
+    for (const f of fs.readdirSync(stateDir)) {
+      if (f.startsWith('daemon-') && f.endsWith('.json')) {
+        candidates.push(path.join(stateDir, f));
+      }
+    }
+  } catch {
+    /* dir may not exist */
+  }
+  for (const file of candidates) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      if (typeof parsed?.port === 'number' && typeof parsed?.token === 'string') {
+        return { port: parsed.port, token: parsed.token };
+      }
+    } catch {
+      /* try next candidate */
+    }
+  }
+  return null;
+}
+
+/**
+ * Forward a browser-side request to the daemon's HTTP API and return the
+ * parsed JSON body. Bearer auth is read from `state` and never sent to
+ * the browser. Callers must validate origin first via
+ * isOriginAllowedForDaemonProxy before invoking this.
+ */
+async function proxyToDaemon(
+  state: ProxyDaemonState,
+  action: string
+): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  const response = await fetch(`http://127.0.0.1:${state.port}/api/${action}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${state.token}`,
+    },
+    body: '{}',
+  });
+  return (await response.json()) as { ok: boolean; data?: unknown; error?: string };
+}
+
 /**
  * Proxy record-start / record-stop from browser to daemon HTTP API.
  * Reads daemon state from .sweetlink/daemon.json to find port/token.
@@ -789,15 +841,17 @@ async function handleRecordCommand(
   ctx: MessageHandlerContext
 ): Promise<boolean> {
   if (!ctx.isBrowserClient) return false;
+  if (!isOriginAllowedForDaemonProxy(ctx)) {
+    sendError(
+      ctx.ws,
+      command.type,
+      'Recording is only available to the app the daemon was started for.'
+    );
+    return true;
+  }
 
-  const stateDir = path.join(getProjectRoot(), '.sweetlink');
-  const stateFile = path.join(stateDir, 'daemon.json');
-
-  let daemonState: { port: number; token: string } | null = null;
-  try {
-    const raw = fs.readFileSync(stateFile, 'utf-8');
-    daemonState = JSON.parse(raw);
-  } catch {
+  const daemonState = findAnyDaemonState();
+  if (!daemonState) {
     sendError(
       ctx.ws,
       command.type,
@@ -806,25 +860,16 @@ async function handleRecordCommand(
     return true;
   }
 
-  if (!daemonState) {
-    sendError(ctx.ws, command.type, 'Daemon not running');
-    return true;
-  }
-
   try {
     const action = command.type === 'record-start' ? 'record-start' : 'record-stop';
-    const response = await fetch(`http://127.0.0.1:${daemonState.port}/api/${action}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${daemonState.token}`,
-      },
-      body: '{}',
-    });
-    const body = await response.json();
+    const body = await proxyToDaemon(daemonState, action);
 
     if (body.ok) {
-      sendSuccess(ctx.ws, `${command.type}-response`, body.data ?? {});
+      sendSuccess(
+        ctx.ws,
+        `${command.type}-response`,
+        (body.data as Record<string, unknown>) ?? {}
+      );
     } else {
       sendError(ctx.ws, command.type, body.error ?? 'Daemon request failed');
     }
@@ -843,26 +888,16 @@ async function handleHifiScreenshot(
   ctx: MessageHandlerContext
 ): Promise<boolean> {
   if (!ctx.isBrowserClient) return false;
-
-  const stateDir = path.join(getProjectRoot(), '.sweetlink');
-  let daemonState: { port: number; token: string } | null = null;
-
-  // Find daemon state file (port-scoped or generic)
-  try {
-    const files = fs
-      .readdirSync(stateDir)
-      .filter((f: string) => f.startsWith('daemon') && f.endsWith('.json'));
-    for (const f of files) {
-      const candidate = JSON.parse(fs.readFileSync(path.join(stateDir, f), 'utf-8'));
-      if (candidate.port && candidate.token) {
-        daemonState = candidate;
-        break;
-      }
-    }
-  } catch {
-    /* no daemon */
+  if (!isOriginAllowedForDaemonProxy(ctx)) {
+    sendError(
+      ctx.ws,
+      'hifi-screenshot',
+      'Hi-fi screenshot is only available to the app the daemon was started for.'
+    );
+    return true;
   }
 
+  const daemonState = findAnyDaemonState();
   if (!daemonState) {
     sendError(
       ctx.ws,
@@ -873,12 +908,7 @@ async function handleHifiScreenshot(
   }
 
   try {
-    const resp = await fetch(`http://127.0.0.1:${daemonState.port}/api/screenshot`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${daemonState.token}` },
-      body: '{}',
-    });
-    const body = (await resp.json()) as {
+    const body = (await proxyToDaemon(daemonState, 'screenshot')) as {
       ok: boolean;
       data?: { screenshot: string; width: number; height: number };
     };
@@ -939,40 +969,17 @@ async function handleDemoCommand(
       const raw = fs.readFileSync(stateFile, 'utf-8');
       const demoState = JSON.parse(raw);
 
-      // Get screenshot from daemon
-      const daemonStateFile = path.join(getProjectRoot(), '.sweetlink', 'daemon.json');
-      let daemonState: { port: number; token: string } | null = null;
-      try {
-        daemonState = JSON.parse(fs.readFileSync(daemonStateFile, 'utf-8'));
-      } catch {
-        /* try port-scoped */
-      }
-      if (!daemonState) {
-        // Try to find any daemon-*.json
-        const files = fs
-          .readdirSync(path.join(getProjectRoot(), '.sweetlink'))
-          .filter((f: string) => f.startsWith('daemon-') && f.endsWith('.json'));
-        if (files[0]) {
-          daemonState = JSON.parse(
-            fs.readFileSync(path.join(getProjectRoot(), '.sweetlink', files[0]), 'utf-8')
-          );
-        }
-      }
-
+      // Get screenshot from daemon (helper handles port-scoped fallback).
+      const daemonState = findAnyDaemonState();
       if (!daemonState) {
         sendError(ctx.ws, 'demo-screenshot', 'Daemon not running');
         return true;
       }
 
-      const resp = await fetch(`http://127.0.0.1:${daemonState.port}/api/screenshot`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${daemonState.token}`,
-        },
-        body: '{}',
-      });
-      const body = (await resp.json()) as { ok: boolean; data?: { screenshot: string } };
+      const body = (await proxyToDaemon(daemonState, 'screenshot')) as {
+        ok: boolean;
+        data?: { screenshot: string };
+      };
       if (!body.ok || !body.data) {
         sendError(ctx.ws, 'demo-screenshot', 'Screenshot failed');
         return true;
@@ -1056,14 +1063,17 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
     }
 
     const browserWs = browserClients[0]!;
-    cliClientMap.set(browserWs, ctx.ws);
+    const queue = cliClientQueues.get(browserWs) ?? [];
+    queue.push(ctx.ws);
+    cliClientQueues.set(browserWs, queue);
     browserWs.send(ctx.rawMessage.toString());
   } else if (ctx.clientInfo?.type === 'browser') {
-    const cliWs = cliClientMap.get(ctx.ws);
+    const queue = cliClientQueues.get(ctx.ws);
+    const cliWs = queue?.shift();
     if (cliWs && cliWs.readyState === WebSocket.OPEN) {
       cliWs.send(ctx.rawMessage.toString());
-      cliClientMap.delete(ctx.ws);
     }
+    if (queue && queue.length === 0) cliClientQueues.delete(ctx.ws);
   }
 }
 
@@ -1104,6 +1114,24 @@ function shouldWarnAboutOriginPort(origin: string, req: IncomingMessage): boolea
   } catch {
     return false;
   }
+}
+
+// Origin-pin the daemon proxies (record-start/stop, hifi-screenshot). The
+// WS server also accepts other localhost origins (e.g. tunnel proxies, LAN
+// dev), but the daemon proxies are sensitive — they should only fire when
+// the WS client is the app the daemon was actually started against.
+// Without this, a malicious page on a different localhost port that passes
+// the broad "local development" origin check could trigger recordings or
+// screenshot capture.
+function isOriginAllowedForDaemonProxy(ctx: MessageHandlerContext): boolean {
+  const origin = ctx.clientInfo?.origin;
+  if (!origin) return false;
+  if (associatedAppPort === null) {
+    // No associated app port configured (e.g. CLI-only environment) —
+    // allow the proxy since there's no specific app to pin to.
+    return true;
+  }
+  return localOriginMatchesAppPort(origin, associatedAppPort);
 }
 
 function setupServerHandlers(server: WebSocketServer): void {
@@ -1189,14 +1217,32 @@ function setupServerHandlers(server: WebSocketServer): void {
       const clientInfo = clients.get(ws);
       console.log(`[Sweetlink] Client disconnected: ${clientInfo?.id} (${clientInfo?.type})`);
       cleanupClientSubscriptions(ws);
-      cliClientMap.delete(ws); // Explicit cleanup (WeakMap would auto-cleanup on GC)
+      // Drop this CLI from any browser queues it was waiting on, and clear
+      // any queue the browser owned (the WeakMap would auto-cleanup on GC,
+      // but we want CLIs hung waiting on a closed browser to fail fast).
+      cliClientQueues.delete(ws);
+      for (const otherWs of clients.keys()) {
+        const queue = cliClientQueues.get(otherWs);
+        if (!queue) continue;
+        const idx = queue.indexOf(ws);
+        if (idx >= 0) queue.splice(idx, 1);
+      }
       clients.delete(ws);
     });
 
     ws.on('error', (error) => {
       console.error(`[Sweetlink] WebSocket error:`, error);
       cleanupClientSubscriptions(ws);
-      cliClientMap.delete(ws); // Explicit cleanup (WeakMap would auto-cleanup on GC)
+      // Drop this CLI from any browser queues it was waiting on, and clear
+      // any queue the browser owned (the WeakMap would auto-cleanup on GC,
+      // but we want CLIs hung waiting on a closed browser to fail fast).
+      cliClientQueues.delete(ws);
+      for (const otherWs of clients.keys()) {
+        const queue = cliClientQueues.get(otherWs);
+        if (!queue) continue;
+        const idx = queue.indexOf(ws);
+        if (idx >= 0) queue.splice(idx, 1);
+      }
       clients.delete(ws);
     });
   });

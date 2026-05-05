@@ -3,7 +3,7 @@
  */
 
 import { preloadAxe } from '../../accessibility.js';
-import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
+import { BUTTON_COLORS, CSS_COLORS, PALETTE, withAlpha } from '../../constants.js';
 import { resolveSaveLocation } from '../../settings.js';
 import { createSvgIcon, getButtonStyles } from '../../ui/index.js';
 import { getDemoArtifactWarning, isDemoArtifactPath, isSweetlinkDemoMode } from '../demoMode.js';
@@ -518,10 +518,10 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
   });
 
   Object.assign(btn.style, {
-    ...getButtonStyles('#ef4444', isActive, false),
-    borderColor: isActive ? '#ef4444' : withAlpha('#ef4444', 50),
-    backgroundColor: isActive ? withAlpha('#ef4444', 20) : 'transparent',
-    color: isActive ? '#ef4444' : withAlpha('#ef4444', 60),
+    ...getButtonStyles(PALETTE.red, isActive, false),
+    borderColor: isActive ? PALETTE.red : withAlpha(PALETTE.red, 50),
+    backgroundColor: isActive ? withAlpha(PALETTE.red, 20) : 'transparent',
+    color: isActive ? PALETTE.red : withAlpha(PALETTE.red, 60),
     ...(isActive && { animation: 'devbar-pulse 1.5s ease-in-out infinite' }),
   });
 
@@ -565,7 +565,7 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
       width: '8px',
       height: '8px',
       borderRadius: '50%',
-      backgroundColor: '#ef4444',
+      backgroundColor: PALETTE.red,
     });
     btn.appendChild(dot);
   } else {

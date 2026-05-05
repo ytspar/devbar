@@ -4,8 +4,6 @@
  * Tracks network requests using PerformanceObserver and fetch interception.
  */
 
-import { PALETTE } from './constants.js';
-
 /**
  * Network request entry
  */
@@ -187,37 +185,3 @@ export class NetworkMonitor {
   }
 }
 
-/**
- * Format bytes to human-readable string
- */
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/**
- * Format duration to human-readable string
- */
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
-
-/**
- * Get color for initiator type
- */
-export function getInitiatorColor(type: string): string {
-  const colors: Record<string, string> = {
-    script: PALETTE.amber,
-    link: PALETTE.blue,
-    css: PALETTE.purple,
-    fetch: PALETTE.emerald,
-    xmlhttprequest: PALETTE.emerald,
-    img: PALETTE.pink,
-    iframe: PALETTE.cyan,
-    other: PALETTE.gray,
-  };
-  return colors[type] ?? colors.other!;
-}

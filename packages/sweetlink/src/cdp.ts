@@ -7,6 +7,12 @@
 
 import * as fs from 'fs';
 import type { Browser, HTTPRequest, HTTPResponse, Page } from 'puppeteer-core';
+import {
+  HIDE_DEVBAR_CSS,
+  HIDE_DEVBAR_STYLE_ID,
+  HOVER_TRANSITION_DELAY_MS,
+  SELECTOR_TIMEOUT_MS,
+} from './screenshotConstants.js';
 import { parseViewport } from './viewportUtils.js';
 
 // ============================================================================
@@ -19,17 +25,6 @@ const DEFAULT_DEV_URL = process.env.SWEETLINK_DEV_URL || 'http://localhost:3000'
 /** Timeouts */
 const NETWORK_IDLE_TIMEOUT_MS = 10000;
 const NETWORK_IDLE_TIME_MS = 500;
-const SELECTOR_TIMEOUT_MS = 5000;
-const HOVER_TRANSITION_DELAY_MS = 300;
-const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
-const HIDE_DEVBAR_CSS = `
-[data-devbar],
-[data-devbar-overlay],
-[data-devbar-tooltip] {
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-`;
 const NETWORK_REQUEST_COLLECT_DELAY_MS = 2000;
 
 /**
@@ -103,7 +98,7 @@ export async function screenshotViaCDP(options: {
   output?: string;
   fullPage?: boolean;
   waitForNetwork?: boolean;
-  viewport?: string;
+  viewport?: import('./viewportUtils.js').ViewportName | string;
   hover?: boolean;
   hideDevbar?: boolean;
 }): Promise<{ buffer: Buffer; width: number; height: number }> {

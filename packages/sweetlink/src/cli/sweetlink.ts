@@ -21,6 +21,7 @@ import {
 } from '../daemon/client.js';
 import { uploadEvidence } from '../daemon/evidence.js';
 import { extractPort } from '../daemon/stateFile.js';
+import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
@@ -58,7 +59,19 @@ const COMMON_APP_PORTS = [3000, 3001, 4000, 5173, 5174, 8000, 8080];
  * 2. Script location - Fallback for edge cases
  * 3. cwd as final fallback
  */
+// Memoize findProjectRoot — its result depends only on process.cwd() and
+// the filesystem, both of which are effectively immutable for a CLI run.
+// Without this, a single CLI invocation can call findProjectRoot 5–10
+// times (assertOutputInRoot, getDefaultScreenshotPath, getRelativePath,
+// reportScreenshotSuccess, …), each walking up the directory tree.
+let cachedProjectRoot: string | null = null;
 function findProjectRoot(): string {
+  if (cachedProjectRoot !== null) return cachedProjectRoot;
+  cachedProjectRoot = findProjectRootUncached();
+  return cachedProjectRoot;
+}
+
+function findProjectRootUncached(): string {
   const debug = process.env.SWEETLINK_DEBUG === '1';
   const root = path.parse(process.cwd()).root;
   const cwd = process.cwd();
@@ -112,15 +125,7 @@ function findProjectRoot(): string {
   return cwd;
 }
 
-/**
- * Ensure the directory for a file path exists
- */
-function ensureDir(filePath: string): void {
-  const dir = path.dirname(filePath);
-  if (dir && dir !== '.' && !fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
+// ensureDir is imported from daemon/utils — single source of truth.
 
 /**
  * Find the most recent recording-session directory.

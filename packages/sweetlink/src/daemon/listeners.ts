@@ -6,6 +6,7 @@
  */
 
 type Page = import('playwright').Page;
+type PWRequest = import('playwright').Request;
 
 import { RingBuffer } from './ringBuffer.js';
 
@@ -58,9 +59,13 @@ export const consoleBuffer = new RingBuffer<ConsoleEntry>(50_000);
 export const networkBuffer = new RingBuffer<NetworkEntry>(50_000);
 export const dialogBuffer = new RingBuffer<DialogEntry>(50_000);
 
-// Track pending requests for duration calculation
-const pendingRequests = new Map<
-  string,
+// Track pending requests for duration calculation. Keyed by the Playwright
+// Request object so GC reclaims entries when the request is finalized — and
+// duplicate URLs on the same page don't overwrite each other (the previous
+// `Map<url, …>` lost timing data when a page made parallel requests to the
+// same path or navigated without seeing a matching `response`).
+const pendingRequests = new WeakMap<
+  PWRequest,
   { startTime: number; method: string; url: string; requestBody?: string }
 >();
 
@@ -101,7 +106,7 @@ export function installListeners(page: Page): void {
         /* postData may be unavailable */
       }
     }
-    pendingRequests.set(request.url(), {
+    pendingRequests.set(request, {
       startTime: Date.now(),
       method: request.method(),
       url: request.url(),
@@ -110,9 +115,10 @@ export function installListeners(page: Page): void {
   });
 
   page.on('response', async (response) => {
-    const pending = pendingRequests.get(response.url());
+    const request = response.request();
+    const pending = pendingRequests.get(request);
     const startTime = pending?.startTime ?? Date.now();
-    pendingRequests.delete(response.url());
+    pendingRequests.delete(request);
 
     let responseBody: string | undefined;
     if (captureBodies) {
@@ -140,9 +146,9 @@ export function installListeners(page: Page): void {
   });
 
   page.on('requestfailed', (request) => {
-    const pending = pendingRequests.get(request.url());
+    const pending = pendingRequests.get(request);
     const startTime = pending?.startTime ?? Date.now();
-    pendingRequests.delete(request.url());
+    pendingRequests.delete(request);
 
     networkBuffer.push({
       timestamp: Date.now(),

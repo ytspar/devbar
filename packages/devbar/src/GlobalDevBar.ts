@@ -134,7 +134,15 @@ export class GlobalDevBar {
     }
   }
 
-  // -- Public state exposed via DevBarState interface for modules --
+  // -- State shared with the rendering modules --
+  //
+  // The properties below are public *only* so the helper modules in
+  // ./modules/ can mutate them without going through getters/setters.
+  // They are otherwise considered internal to the DevBar implementation
+  // — external consumers should NOT read or write them. The genuinely
+  // public surface is registerControl / unregisterControl / destroy /
+  // getLogCounts and the static `init`/`getInstance` factory.
+  // @internal
   options: Required<
     Omit<
       GlobalDevBarOptions,
@@ -167,7 +175,12 @@ export class GlobalDevBar {
   lastSchema: string | null = null;
   savingOutline = false;
   savingSchema = false;
-  consoleFilter: 'error' | 'warn' | 'info' | null = null;
+  // Subset of ConsoleLogLevel — only the levels surfaced as filter chips.
+  // Keeping it as an Extract<> alias makes the link explicit so adding
+  // another level upstream automatically lights up here.
+  consoleFilter: import('@ytspar/sweetlink/types').ConsoleLogLevel extends infer L
+    ? Extract<L, 'error' | 'warn' | 'info'> | null
+    : never = null;
   savingConsoleLogs = false;
   lastConsoleLogs: string | null = null;
   consoleLogsTimeout: ReturnType<typeof setTimeout> | undefined;

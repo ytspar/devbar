@@ -1,11 +1,7 @@
 import type { AxeResult, AxeViolation } from '@ytspar/sweetlink/types';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   a11yToMarkdown,
-  clearA11yCache,
-  formatViolation,
-  getBadgeColor,
-  getCachedResult,
   getImpactColor,
   getViolationCounts,
   groupViolationsByImpact,
@@ -15,25 +11,9 @@ import {
 } from './accessibility.js';
 
 describe('isAxeLoaded', () => {
-  it('returns false initially', () => {
-    // Note: This test may fail if axe was loaded in a previous test
-    // Clear cache first to ensure consistent state
-    clearA11yCache();
+  it('returns a boolean', () => {
     // isAxeLoaded tracks if the import promise exists, not the cache
     expect(typeof isAxeLoaded()).toBe('boolean');
-  });
-});
-
-describe('getCachedResult', () => {
-  it('returns null when no cached result', () => {
-    clearA11yCache();
-    expect(getCachedResult()).toBeNull();
-  });
-});
-
-describe('clearA11yCache', () => {
-  it('clears the cache without error', () => {
-    expect(() => clearA11yCache()).not.toThrow();
   });
 });
 
@@ -161,123 +141,6 @@ describe('groupViolationsByImpact', () => {
   });
 });
 
-describe('getBadgeColor', () => {
-  it('returns red when critical violations exist', () => {
-    const violations: AxeViolation[] = [
-      {
-        id: 'test',
-        impact: 'critical',
-        description: '',
-        help: '',
-        helpUrl: '',
-        tags: [],
-        nodes: [],
-      },
-    ];
-    expect(getBadgeColor(violations)).toBe('#ef4444');
-  });
-
-  it('returns orange when serious is worst', () => {
-    const violations: AxeViolation[] = [
-      {
-        id: 'test',
-        impact: 'serious',
-        description: '',
-        help: '',
-        helpUrl: '',
-        tags: [],
-        nodes: [],
-      },
-    ];
-    expect(getBadgeColor(violations)).toBe('#f97316');
-  });
-
-  it('returns amber when moderate is worst', () => {
-    const violations: AxeViolation[] = [
-      {
-        id: 'test',
-        impact: 'moderate',
-        description: '',
-        help: '',
-        helpUrl: '',
-        tags: [],
-        nodes: [],
-      },
-    ];
-    expect(getBadgeColor(violations)).toBe('#f59e0b');
-  });
-
-  it('returns lime when minor is worst', () => {
-    const violations: AxeViolation[] = [
-      {
-        id: 'test',
-        impact: 'minor',
-        description: '',
-        help: '',
-        helpUrl: '',
-        tags: [],
-        nodes: [],
-      },
-    ];
-    expect(getBadgeColor(violations)).toBe('#84cc16');
-  });
-
-  it('returns green when no violations', () => {
-    expect(getBadgeColor([])).toBe('#10b981');
-  });
-});
-
-describe('formatViolation', () => {
-  it('formats violation for display', () => {
-    const violation: AxeViolation = {
-      id: 'color-contrast',
-      impact: 'serious',
-      description: 'Ensures the contrast is sufficient',
-      help: 'Elements must have sufficient color contrast',
-      helpUrl: 'https://dequeuniversity.com/rules/axe/4.4/color-contrast',
-      tags: ['wcag2aa'],
-      nodes: [
-        { html: '<div>', target: ['#element1'] },
-        { html: '<span>', target: ['#element2'] },
-      ],
-    };
-
-    const formatted = formatViolation(violation);
-
-    expect(formatted).toContain('[SERIOUS]');
-    expect(formatted).toContain('Elements must have sufficient color contrast');
-    expect(formatted).toContain('2 element(s) affected');
-  });
-
-  it('formats critical impact in uppercase', () => {
-    const violation: AxeViolation = {
-      id: 'test',
-      impact: 'critical',
-      description: 'Desc',
-      help: 'Help text',
-      helpUrl: '',
-      tags: [],
-      nodes: [{ html: '<div>', target: [] }],
-    };
-    expect(formatViolation(violation)).toContain('[CRITICAL]');
-  });
-
-  it('includes description in output', () => {
-    const violation: AxeViolation = {
-      id: 'test',
-      impact: 'minor',
-      description: 'Some description here',
-      help: 'Help',
-      helpUrl: '',
-      tags: [],
-      nodes: [],
-    };
-    const formatted = formatViolation(violation);
-    expect(formatted).toContain('Some description here');
-    expect(formatted).toContain('0 element(s) affected');
-  });
-});
-
 // ============================================================================
 // preloadAxe
 // ============================================================================
@@ -320,14 +183,6 @@ vi.mock('axe-core', () => ({
 }));
 
 describe('runA11yAudit', () => {
-  beforeEach(() => {
-    clearA11yCache();
-  });
-
-  afterEach(() => {
-    clearA11yCache();
-  });
-
   it('runs audit and returns result in expected format', async () => {
     const result = await runA11yAudit();
 
@@ -348,13 +203,6 @@ describe('runA11yAudit', () => {
     expect(result1).toBe(result2);
   });
 
-  it('getCachedResult returns result after audit', async () => {
-    await runA11yAudit();
-    const cached = getCachedResult();
-    expect(cached).not.toBeNull();
-    expect(cached!.violations).toHaveLength(1);
-  });
-
   it('forceRefresh bypasses cache', async () => {
     const result1 = await runA11yAudit();
     const result2 = await runA11yAudit(true);
@@ -362,13 +210,6 @@ describe('runA11yAudit', () => {
     // They should be different objects since forceRefresh creates a new result
     expect(result2).not.toBe(result1);
     expect(result2.violations).toHaveLength(1);
-  });
-
-  it('clearA11yCache makes getCachedResult return null', async () => {
-    await runA11yAudit();
-    expect(getCachedResult()).not.toBeNull();
-    clearA11yCache();
-    expect(getCachedResult()).toBeNull();
   });
 });
 

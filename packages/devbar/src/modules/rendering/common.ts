@@ -4,7 +4,20 @@
 
 import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
 import type { DevBarControl } from '../../types.js';
-import type { DevBarState } from '../types.js';
+import type { DevBarState, PositionStyle } from '../types.js';
+
+/**
+ * Position styles shared by both `compact` and `expanded` renderers. Both
+ * use the same anchor points so a switch between modes does not jump the
+ * toolbar to a different corner.
+ */
+export const TOOLBAR_POSITIONS: Record<string, PositionStyle> = {
+  'bottom-left': { bottom: '20px', left: '80px' },
+  'bottom-right': { bottom: '20px', right: '16px' },
+  'top-left': { top: '20px', left: '80px' },
+  'top-right': { top: '20px', right: '16px' },
+  'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
+};
 
 /**
  * Capture the center of an element's bounding rect as a dot position.

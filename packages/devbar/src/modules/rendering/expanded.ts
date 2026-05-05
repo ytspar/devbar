@@ -20,6 +20,7 @@ import {
   attachMetricTooltip,
   attachTextTooltip,
 } from '../tooltips.js';
+import type { DevBarControl } from '../../types.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 import {
   createA11yButton,
@@ -34,7 +35,12 @@ import {
   createScreenshotButton,
   createSettingsButton,
 } from './buttons.js';
-import { captureDotPosition, createConnectionIndicator, createControlElement } from './common.js';
+import {
+  captureDotPosition,
+  createConnectionIndicator,
+  createControlElement,
+  TOOLBAR_POSITIONS,
+} from './common.js';
 
 /**
  * Compute the CSS position for the expanded devbar wrapper.
@@ -73,14 +79,7 @@ function computeExpandedPosition(
     return posStyle;
   }
 
-  const positionStyles: Record<string, PositionStyle> = {
-    'bottom-left': { bottom: '20px', left: '80px' },
-    'bottom-right': { bottom: '20px', right: '16px' },
-    'top-left': { top: '20px', left: '80px' },
-    'top-right': { top: '20px', right: '16px' },
-    'bottom-center': { bottom: '12px', left: '50%', transform: 'translateX(-50%)' },
-  };
-  return positionStyles[position] ?? positionStyles['bottom-left']!;
+  return TOOLBAR_POSITIONS[position] ?? TOOLBAR_POSITIONS['bottom-left']!;
 }
 
 /**
@@ -482,15 +481,7 @@ function createActionButtonsContainer(
  * Returns null if there are no custom controls.
  */
 function createCustomControlsRow(
-  customControls: {
-    id: string;
-    label: string;
-    onClick?: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    variant?: 'default' | 'warning' | 'info';
-    group?: string;
-  }[],
+  customControls: DevBarControl[],
   accentColor: string
 ): HTMLDivElement | null {
   if (customControls.length === 0) return null;
@@ -565,18 +556,7 @@ function createCustomControlsRow(
 // Expanded State -- Orchestrator
 // ============================================================================
 
-export function renderExpanded(
-  state: DevBarState,
-  customControls: {
-    id: string;
-    label: string;
-    onClick?: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    variant?: 'default' | 'warning' | 'info';
-    group?: string;
-  }[]
-): void {
+export function renderExpanded(state: DevBarState, customControls: DevBarControl[]): void {
   if (!state.container) return;
 
   const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = state.options;

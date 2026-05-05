@@ -5,7 +5,7 @@
  * click-to-toggle tooltips for mobile, and composable hover behavior via TooltipHoverOptions.
  */
 
-import { CSS_COLORS, DEVBAR_THEME, FONT_MONO, withAlpha } from '../constants.js';
+import { CSS_COLORS, DEVBAR_THEME, FONT_MONO, TAILWIND_BREAKPOINTS, withAlpha } from '../constants.js';
 import type { DevBarState } from './types.js';
 
 /** Base styles for tooltip containers */
@@ -634,15 +634,17 @@ export function attachMetricTooltip(
   });
 }
 
-/** Tailwind CSS breakpoint definitions */
-const TAILWIND_BREAKPOINTS = [
-  { name: 'base', range: '<640px' },
-  { name: 'sm', range: '\u2265640px' },
-  { name: 'md', range: '\u2265768px' },
-  { name: 'lg', range: '\u22651024px' },
-  { name: 'xl', range: '\u22651280px' },
-  { name: '2xl', range: '\u22651536px' },
-] as const;
+/**
+ * Tooltip-shape view of Tailwind breakpoints. Single source of truth lives
+ * in `../constants.js`; this projection just adapts the label format the
+ * tooltip wants (e.g. "\u2265640px"). Adding a new breakpoint to constants
+ * automatically picks up here without a second edit.
+ */
+const TAILWIND_BREAKPOINT_ROWS = (Object.entries(TAILWIND_BREAKPOINTS) as [string, { min: number }][])
+  .map(([name, info]) => ({
+    name,
+    range: info.min === 0 ? '<640px' : `\u2265${info.min}px`,
+  }));
 
 /** Build a single breakpoint reference row, highlighting the active breakpoint */
 function buildBreakpointRow(bpName: string, bpRange: string, isActive: boolean): HTMLDivElement {
@@ -678,7 +680,7 @@ function buildBreakpointReferenceList(activeBreakpoint: string): HTMLDivElement 
     fontSize: '0.625rem',
   });
 
-  for (const bp of TAILWIND_BREAKPOINTS) {
+  for (const bp of TAILWIND_BREAKPOINT_ROWS) {
     bpContainer.appendChild(buildBreakpointRow(bp.name, bp.range, bp.name === activeBreakpoint));
   }
 

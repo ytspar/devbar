@@ -5,6 +5,7 @@
  * Uses atomic writes (tmp + rename) and lockfiles to prevent race conditions.
  */
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { DaemonState } from './types.js';
@@ -41,7 +42,8 @@ export function getLockFilePath(projectRoot: string, appPort?: number): string {
  */
 export function extractPort(url: string): number | undefined {
   try {
-    return new URL(url).port ? parseInt(new URL(url).port, 10) : undefined;
+    const port = new URL(url).port;
+    return port ? parseInt(port, 10) : undefined;
   } catch {
     return undefined;
   }
@@ -51,6 +53,11 @@ export function extractPort(url: string): number | undefined {
  * Write daemon state to .sweetlink/daemon.json (or daemon-{port}.json) atomically.
  * Creates the directory if it doesn't exist.
  * Sets file permissions to 600 (owner read/write only) for security.
+ *
+ * If the rename fails or the process crashes between the write and the
+ * rename, the stale `.tmp` file is left containing the bearer token. We
+ * unlink any pre-existing tmp before writing so a previous crash can't
+ * leak a token across daemon restarts.
  */
 export function writeDaemonState(projectRoot: string, state: DaemonState, appPort?: number): void {
   const dir = getStateDir(projectRoot);
@@ -61,9 +68,25 @@ export function writeDaemonState(projectRoot: string, state: DaemonState, appPor
   const stateFile = getStateFilePath(projectRoot, appPort);
   const tmpFile = `${stateFile}.tmp`;
 
+  try {
+    fs.unlinkSync(tmpFile);
+  } catch {
+    /* tmp does not exist — fine */
+  }
+
   // Atomic write: write to tmp, then rename
   fs.writeFileSync(tmpFile, JSON.stringify(state, null, 2), { mode: 0o600 });
-  fs.renameSync(tmpFile, stateFile);
+  try {
+    fs.renameSync(tmpFile, stateFile);
+  } catch (err) {
+    // Rename failed — clean up tmp so the token doesn't linger on disk.
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {
+      /* best-effort */
+    }
+    throw err;
+  }
 }
 
 /**
@@ -92,20 +115,17 @@ export function readDaemonState(projectRoot: string, appPort?: number): DaemonSt
 }
 
 /**
- * Remove daemon state file and lock file
+ * Remove daemon state file and lock file (and any leftover tmp).
  */
 export function removeDaemonState(projectRoot: string, appPort?: number): void {
   const stateFile = getStateFilePath(projectRoot, appPort);
   const lockFile = getLockFilePath(projectRoot, appPort);
-  try {
-    fs.unlinkSync(stateFile);
-  } catch {
-    // File may not exist
-  }
-  try {
-    fs.unlinkSync(lockFile);
-  } catch {
-    // File may not exist
+  for (const f of [stateFile, `${stateFile}.tmp`, lockFile]) {
+    try {
+      fs.unlinkSync(f);
+    } catch {
+      // File may not exist
+    }
   }
 }
 
@@ -136,6 +156,15 @@ export async function isDaemonAlive(state: DaemonState): Promise<boolean> {
 /**
  * Acquire a lockfile to prevent concurrent daemon starts.
  * Returns true if the lock was acquired, false if another process holds it.
+ *
+ * Lockfile format: `PID:TOKEN` where TOKEN is a 16-byte random hex string
+ * generated for this acquisition attempt. The token defends against PID
+ * reuse — a reincarnated PID can't impersonate the original lock-holder
+ * because it has a different token.
+ *
+ * Stale-lock recovery is made atomic by writing our token and reading it
+ * back: if two processes race on recovery, only the winner's token will
+ * be in the file.
  */
 export function acquireLock(projectRoot: string, appPort?: number): boolean {
   const dir = getStateDir(projectRoot);
@@ -144,30 +173,64 @@ export function acquireLock(projectRoot: string, appPort?: number): boolean {
   }
 
   const lockFile = getLockFilePath(projectRoot, appPort);
+  const ourToken = crypto.randomBytes(16).toString('hex');
+  const ourContent = `${process.pid}:${ourToken}`;
+
+  // Fast path: no existing lock.
   try {
-    // 'wx' flag: write exclusive — fails if file exists
-    fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx', mode: 0o600 });
-    return true;
+    fs.writeFileSync(lockFile, ourContent, { flag: 'wx', mode: 0o600 });
+    return verifyLockOwnership(lockFile, ourContent);
   } catch {
-    // Check if the lock is stale (holding process is dead)
+    // Lock exists — see if it's stale.
+  }
+
+  // Slow path: existing lock might be stale.
+  let existingPid: number | undefined;
+  try {
+    const raw = fs.readFileSync(lockFile, 'utf-8').trim();
+    const [pidPart] = raw.split(':');
+    const parsed = parseInt(pidPart ?? raw, 10);
+    if (!Number.isNaN(parsed)) existingPid = parsed;
+  } catch {
+    /* lockfile vanished or unreadable — fall through */
+  }
+
+  if (existingPid !== undefined && existingPid !== process.pid) {
     try {
-      const pid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
-      if (!Number.isNaN(pid)) {
-        try {
-          // Signal 0 checks if process exists without killing it
-          process.kill(pid, 0);
-          // Process is alive — lock is valid
-          return false;
-        } catch {
-          // Process is dead — stale lock, remove and retry
-          fs.unlinkSync(lockFile);
-          fs.writeFileSync(lockFile, String(process.pid), { flag: 'wx', mode: 0o600 });
-          return true;
-        }
+      process.kill(existingPid, 0);
+      // Process exists — but PID could have been recycled. Cross-check with
+      // the daemon state file: if the state file's PID matches AND the
+      // state was written recently, treat as live. Otherwise treat as stale.
+      const state = readDaemonState(projectRoot, appPort);
+      if (state && state.pid === existingPid) {
+        return false; // genuinely live daemon owns the lock
       }
+      // PID is alive but not our daemon — recycled. Fall through to recovery.
     } catch {
-      // Can't read lock file — another process may be writing it
+      // Process is dead — stale lock, recover.
     }
+  }
+
+  // Stale-lock recovery: try to atomically take over. Multiple racing
+  // processes all unlink + wx-write here; only one wx-write can succeed.
+  // Then verify by reading back our token.
+  try {
+    try {
+      fs.unlinkSync(lockFile);
+    } catch {
+      /* may have been unlinked by a concurrent recoverer */
+    }
+    fs.writeFileSync(lockFile, ourContent, { flag: 'wx', mode: 0o600 });
+    return verifyLockOwnership(lockFile, ourContent);
+  } catch {
+    return false;
+  }
+}
+
+function verifyLockOwnership(lockFile: string, expected: string): boolean {
+  try {
+    return fs.readFileSync(lockFile, 'utf-8').trim() === expected;
+  } catch {
     return false;
   }
 }

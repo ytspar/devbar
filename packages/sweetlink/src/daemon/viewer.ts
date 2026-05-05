@@ -36,6 +36,15 @@ export interface ViewerOptions {
 
 // escapeHtml moved to ./utils.ts
 
+// Encode a value as JSON safe to embed inside a <script> element.
+// JSON itself never produces "</script>" or "<!--", but a string value
+// might — escape every "<" so the HTML parser cannot terminate the
+// surrounding script element. The browser still parses the JSON literal
+// correctly (< decodes back to "<" at JSON.parse time).
+function jsonForScript(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 export async function generateViewer(
   manifest: SessionManifest,
   options: ViewerOptions
@@ -266,7 +275,7 @@ export async function generateViewer(
   </div>
 </div>
 <script>
-var actions = ${JSON.stringify(
+var actions = ${jsonForScript(
     manifest.commands.map((c) => ({
       timestamp: c.timestamp,
       action: c.action,
@@ -274,12 +283,12 @@ var actions = ${JSON.stringify(
       boundingBox: c.boundingBox,
     }))
   )};
-var screenshots = ${JSON.stringify(screenshots.map((s) => s.data))};
+var screenshots = ${jsonForScript(screenshots.map((s) => s.data))};
 var duration = ${manifest.duration};
 var hasVideo = ${hasVideo};
-var summaryReport = ${JSON.stringify(summaryMd)};
-var consoleEntries = ${JSON.stringify(sanitizedConsole)};
-var networkEntries = ${JSON.stringify(sanitizedNetwork)};
+var summaryReport = ${jsonForScript(summaryMd)};
+var consoleEntries = ${jsonForScript(sanitizedConsole)};
+var networkEntries = ${jsonForScript(sanitizedNetwork)};
 
 var currentAction = -1;
 var autoStepping = false;

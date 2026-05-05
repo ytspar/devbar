@@ -55,7 +55,7 @@ const headingElements = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 /**
  * Get the semantic category for an element tag
  */
-function getSemanticCategory(tag: string): string {
+function getSemanticCategory(tag: string): import('../../types.js').OutlineCategory {
   if (headingElements.has(tag)) return 'heading';
   if (['article', 'section', 'aside', 'nav'].includes(tag)) return 'sectioning';
   if (['main', 'header', 'footer'].includes(tag)) return 'landmark';

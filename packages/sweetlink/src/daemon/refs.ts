@@ -168,10 +168,14 @@ export function resolveRef(page: Page, ref: string): Locator {
     );
   }
 
-  // Build locator from role + name
+  // Build locator from role + name. Use exact match: a substring match
+  // (`exact: false`) returns the FIRST element whose accessible name
+  // *contains* the snapshot name, which silently picks the wrong element
+  // after the page adds another button starting with the same prefix.
+  // checkRefStale only verifies count > 0, so it gives a false negative.
   const locator = page.getByRole(entry.role as Parameters<Page['getByRole']>[0], {
     name: entry.name,
-    exact: false,
+    exact: true,
   });
 
   return locator;

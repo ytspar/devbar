@@ -56,6 +56,20 @@ export class RingBuffer<T> {
     return all.slice(start);
   }
 
+  /**
+   * Like since(), but also reports how many entries were dropped due to
+   * overflow between the cursor and the earliest retained entry. Callers
+   * (e.g. session manifest writers) can surface this so a "0 events" tail
+   * isn't silently misreported when the buffer wrapped mid-recording.
+   */
+  sinceWithDropped(cursor: number): { items: T[]; dropped: number } {
+    const all = this.toArray();
+    const earliestCursor = this.totalPushed - all.length;
+    const dropped = Math.max(0, earliestCursor - cursor);
+    const start = Math.min(all.length, Math.max(0, cursor - earliestCursor));
+    return { items: all.slice(start), dropped };
+  }
+
   /** Clear all items. */
   clear(): void {
     this.buffer = new Array(this.capacity);

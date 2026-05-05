@@ -120,6 +120,36 @@ export interface CreateLogoOptions {
 }
 
 /**
+ * Single descriptor of every visual element in the logo. Both the DOM
+ * and string renderers walk this list in order, so adding a new path or
+ * shape (or reordering an existing one) only requires editing this
+ * array — neither renderer needs to grow a new branch.
+ */
+type LogoChild =
+  | { kind: 'path'; d: string }
+  | { kind: 'polyline'; points: string }
+  | { kind: 'polygon'; points: string; fillNone?: boolean };
+
+const LOGO_CHILDREN: LogoChild[] = [
+  ...Object.values(DEVBAR_LOGO_PATHS).map((d): LogoChild => ({ kind: 'path', d })),
+  { kind: 'polyline', points: DEVBAR_LOGO_SHAPES.topBar },
+  { kind: 'polygon', points: DEVBAR_LOGO_SHAPES.dStep1 },
+  { kind: 'polygon', points: DEVBAR_LOGO_SHAPES.dStep2 },
+  { kind: 'polygon', points: DEVBAR_LOGO_SHAPES.dStep3 },
+  { kind: 'polygon', points: DEVBAR_LOGO_SHAPES.dCounter, fillNone: true },
+  { kind: 'polygon', points: DEVBAR_LOGO_SHAPES.eCounter, fillNone: true },
+];
+
+function buildLogoStyleBlock(): string {
+  return `<style>
+      .devbar-logo-fill { fill: ${DEVBAR_LOGO_COLORS.dark}; }
+      @media (prefers-color-scheme: light) {
+        .devbar-logo-fill { fill: ${DEVBAR_LOGO_COLORS.light}; }
+      }
+    </style>`;
+}
+
+/**
  * Create a devbar logo SVG element.
  *
  * @example
@@ -171,31 +201,15 @@ export function createDevBarLogo(options: CreateLogoOptions = {}): SVGSVGElement
     g.setAttribute('class', fillClass);
   }
 
-  // Letter paths
-  for (const d of Object.values(DEVBAR_LOGO_PATHS)) {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    g.appendChild(path);
-  }
-
-  // Top bar (polyline)
-  const topBar = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  topBar.setAttribute('points', DEVBAR_LOGO_SHAPES.topBar);
-  g.appendChild(topBar);
-
-  // Staircase steps
-  for (const key of ['dStep1', 'dStep2', 'dStep3'] as const) {
-    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    poly.setAttribute('points', DEVBAR_LOGO_SHAPES[key]);
-    g.appendChild(poly);
-  }
-
-  // Letter counters (transparent holes)
-  for (const key of ['dCounter', 'eCounter'] as const) {
-    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    poly.setAttribute('points', DEVBAR_LOGO_SHAPES[key]);
-    poly.setAttribute('fill', 'none');
-    g.appendChild(poly);
+  for (const child of LOGO_CHILDREN) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', child.kind);
+    if (child.kind === 'path') {
+      el.setAttribute('d', child.d);
+    } else {
+      el.setAttribute('points', child.points);
+      if (child.kind === 'polygon' && child.fillNone) el.setAttribute('fill', 'none');
+    }
+    g.appendChild(el);
   }
 
   svg.appendChild(g);
@@ -216,15 +230,7 @@ export function createDevBarLogo(options: CreateLogoOptions = {}): SVGSVGElement
 export function getDevBarLogoSvg(options: CreateLogoOptions = {}): string {
   const { width = 32, height = 32, fill, themed = true } = options;
 
-  const styleBlock =
-    themed && !fill
-      ? `<style>
-      .devbar-logo-fill { fill: ${DEVBAR_LOGO_COLORS.dark}; }
-      @media (prefers-color-scheme: light) {
-        .devbar-logo-fill { fill: ${DEVBAR_LOGO_COLORS.light}; }
-      }
-    </style>`
-      : '';
+  const styleBlock = themed && !fill ? buildLogoStyleBlock() : '';
 
   const gFillAttr = fill
     ? `fill="${fill}"`
@@ -232,20 +238,16 @@ export function getDevBarLogoSvg(options: CreateLogoOptions = {}): string {
       ? 'class="devbar-logo-fill"'
       : `fill="${DEVBAR_LOGO_COLORS.dark}"`;
 
-  const paths = Object.values(DEVBAR_LOGO_PATHS)
-    .map((d) => `<path d="${d}"/>`)
-    .join('\n');
+  const inner = LOGO_CHILDREN.map((child) => {
+    if (child.kind === 'path') return `<path d="${child.d}"/>`;
+    if (child.kind === 'polyline') return `<polyline points="${child.points}"/>`;
+    return `<polygon points="${child.points}"${child.fillNone ? ' fill="none"' : ''}/>`;
+  }).join('\n');
 
   return `<svg width="${width}" height="${height}" viewBox="${DEVBAR_LOGO_VIEWBOX}" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="devbar logo">
 ${styleBlock}
 <g ${gFillAttr}>
-${paths}
-<polyline points="${DEVBAR_LOGO_SHAPES.topBar}"/>
-<polygon points="${DEVBAR_LOGO_SHAPES.dStep1}"/>
-<polygon points="${DEVBAR_LOGO_SHAPES.dStep2}"/>
-<polygon points="${DEVBAR_LOGO_SHAPES.dStep3}"/>
-<polygon points="${DEVBAR_LOGO_SHAPES.dCounter}" fill="none"/>
-<polygon points="${DEVBAR_LOGO_SHAPES.eCounter}" fill="none"/>
+${inner}
 </g>
 </svg>`;
 }

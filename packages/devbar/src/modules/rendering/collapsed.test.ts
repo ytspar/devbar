@@ -307,7 +307,11 @@ describe('renderCollapsed', () => {
       getLogCounts: vi.fn(() => ({ errorCount: 5, warningCount: 0, infoCount: 0 })),
     } as any);
     renderCollapsed(state);
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(5, 'rgba(239, 68, 68, 0.95)', '-6px');
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
+      5,
+      'color-mix(in srgb, #ef4444 95%, transparent)',
+      '-6px'
+    );
   });
 
   it('shifts error badge left when warnings also exist', () => {
@@ -318,7 +322,7 @@ describe('renderCollapsed', () => {
 
     // Error badge call should use '12px' instead of '-6px' when warnings exist
     const calls = vi.mocked(state.createCollapsedBadge).mock.calls;
-    const errorCall = calls.find((c) => c[1] === 'rgba(239, 68, 68, 0.95)');
+    const errorCall = calls.find((c) => c[1] === 'color-mix(in srgb, #ef4444 95%, transparent)');
     expect(errorCall).toBeTruthy();
     expect(errorCall![2]).toBe('12px');
   });
@@ -330,7 +334,11 @@ describe('renderCollapsed', () => {
       getLogCounts: vi.fn(() => ({ errorCount: 0, warningCount: 7, infoCount: 0 })),
     } as any);
     renderCollapsed(state);
-    expect(state.createCollapsedBadge).toHaveBeenCalledWith(7, 'rgba(245, 158, 11, 0.95)', '-6px');
+    expect(state.createCollapsedBadge).toHaveBeenCalledWith(
+      7,
+      'color-mix(in srgb, #f59e0b 95%, transparent)',
+      '-6px'
+    );
   });
 
   it('shows both error and warning badges when both have counts', () => {

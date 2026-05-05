@@ -334,11 +334,18 @@ function createAccentColorPicker(state: DevBarState): HTMLDivElement {
     display: 'flex',
     gap: '6px',
     flexWrap: 'wrap',
+    alignItems: 'center',
   });
+
+  const currentAccent = state.options.accentColor;
+  // Theme-default stores the CSS variable string; visually it resolves to emerald.
+  const tracksTheme = currentAccent === CSS_COLORS.primary;
+  const matchesPreset = ACCENT_COLOR_PRESETS.some((p) => p.value === currentAccent);
+  const isCustom = !matchesPreset && !tracksTheme;
 
   ACCENT_COLOR_PRESETS.forEach(({ name, value }) => {
     const swatch = document.createElement('button');
-    const isActive = state.options.accentColor === value;
+    const isActive = currentAccent === value || (tracksTheme && name === 'Emerald');
     Object.assign(swatch.style, {
       width: '24px',
       height: '24px',
@@ -357,6 +364,33 @@ function createAccentColorPicker(state: DevBarState): HTMLDivElement {
     };
     colorSwatches.appendChild(swatch);
   });
+
+  if (isCustom) {
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.setAttribute('data-accent-reset', 'true');
+    resetBtn.title = `Custom color (${currentAccent}). Click to reset to theme default.`;
+    Object.assign(resetBtn.style, {
+      marginLeft: '4px',
+      padding: '2px 8px',
+      borderRadius: '10px',
+      border: `1px dashed ${currentAccent}`,
+      backgroundColor: 'transparent',
+      color: currentAccent,
+      fontSize: '0.625rem',
+      fontFamily: FONT_MONO,
+      cursor: 'pointer',
+      lineHeight: '1.4',
+    });
+    resetBtn.textContent = 'custom · reset';
+    resetBtn.onclick = () => {
+      const defaultValue = DEFAULT_SETTINGS.accentColor;
+      state.options.accentColor = defaultValue;
+      state.settingsManager.saveSettings({ accentColor: defaultValue });
+      state.render();
+    };
+    colorSwatches.appendChild(resetBtn);
+  }
 
   accentRow.appendChild(colorSwatches);
   return accentRow;

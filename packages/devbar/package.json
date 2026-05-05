@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/devbar",
-  "version": "1.11.1",
+  "version": "1.12.0",
   "type": "module",
   "private": false,
   "description": "Development toolbar and utilities with Sweetlink integration - pure vanilla JS, no framework dependencies",
@@ -48,6 +48,16 @@
       "types": "./dist/plugins/consentDebug.d.ts",
       "import": "./dist/plugins/consentDebug.js",
       "default": "./dist/plugins/consentDebug.js"
+    },
+    "./browser": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/browser/devbar.js",
+      "default": "./dist/browser/devbar.js"
+    },
+    "./browser/auto": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/browser/devbar.auto.js",
+      "default": "./dist/browser/devbar.auto.js"
     }
   },
   "files": [
@@ -66,8 +76,9 @@
   },
   "homepage": "https://github.com/ytspar/devbar/tree/main/packages/devbar#readme",
   "scripts": {
-    "prepublishOnly": "node ../../scripts/check-release-notes.mjs && rm -rf dist && tsc",
-    "build": "rm -rf dist && tsc",
+    "prepublishOnly": "node ../../scripts/check-release-notes.mjs && rm -rf dist && tsc && node scripts/build-browser.mjs",
+    "build": "rm -rf dist && tsc && node scripts/build-browser.mjs",
+    "build:browser": "node scripts/build-browser.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
@@ -79,6 +90,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
+    "esbuild": "^0.28.0",
     "typescript": "^5.0.0"
   }
 }

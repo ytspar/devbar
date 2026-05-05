@@ -21,7 +21,7 @@ vi.mock('../../constants.js', () => ({
     bg: '#0a0f1a',
     bgInput: 'rgba(10, 15, 26, 0.8)',
     border: 'rgba(16, 185, 129, 0.2)',
-    primary: '#10b981',
+    primary: 'var(--devbar-color-primary)',
   },
   DEVBAR_THEME: {
     shadows: {
@@ -464,6 +464,68 @@ describe('renderSettingsPopover', () => {
 
     expect(state.options.accentColor).toBe('#a855f7');
     expect(state.settingsManager.saveSettings).toHaveBeenCalledWith({ accentColor: '#a855f7' });
+    expect(state.render).toHaveBeenCalled();
+  });
+
+  it('theme-default accent (CSS variable) highlights Emerald as active', () => {
+    const state = createMockState();
+    // DEFAULT_ACCENT_COLOR is CSS_COLORS.primary, which stores the CSS variable
+    // string. It resolves to emerald visually, so Emerald should be highlighted.
+    state.options.accentColor = 'var(--devbar-color-primary)';
+    renderSettingsPopover(state);
+
+    const buttons = Array.from(state.overlayElement!.querySelectorAll('button'));
+    const emeraldSwatch = buttons.find((b) => b.title === 'Emerald');
+    expect(emeraldSwatch!.style.border).toContain('#fff');
+
+    const blueSwatch = buttons.find((b) => b.title === 'Blue');
+    expect(blueSwatch!.style.border).toContain('transparent');
+  });
+
+  it('does not render a custom-reset button for preset values', () => {
+    const state = createMockState();
+    state.options.accentColor = '#3b82f6'; // Blue preset
+    renderSettingsPopover(state);
+
+    const resetBtn = state.overlayElement!.querySelector('[data-accent-reset]');
+    expect(resetBtn).toBeNull();
+  });
+
+  it('does not render a custom-reset button for the theme-default value', () => {
+    const state = createMockState();
+    state.options.accentColor = 'var(--devbar-color-primary)';
+    renderSettingsPopover(state);
+
+    const resetBtn = state.overlayElement!.querySelector('[data-accent-reset]');
+    expect(resetBtn).toBeNull();
+  });
+
+  it('renders a custom-reset button when accent is not a preset', () => {
+    const state = createMockState();
+    state.options.accentColor = '#ef4444'; // not in presets
+    renderSettingsPopover(state);
+
+    const resetBtn = state.overlayElement!.querySelector(
+      '[data-accent-reset]'
+    ) as HTMLButtonElement | null;
+    expect(resetBtn).not.toBeNull();
+    expect(resetBtn!.title).toContain('#ef4444');
+  });
+
+  it('clicking the custom-reset button restores the default accent', () => {
+    const state = createMockState();
+    state.options.accentColor = '#ef4444';
+    renderSettingsPopover(state);
+
+    const resetBtn = state.overlayElement!.querySelector(
+      '[data-accent-reset]'
+    ) as HTMLButtonElement;
+    resetBtn.click();
+
+    // DEFAULT_SETTINGS.accentColor in the mock is '#10b981' (the resolved emerald).
+    // In real code it is CSS_COLORS.primary; either way, the persisted default wins.
+    expect(state.options.accentColor).toBe('#10b981');
+    expect(state.settingsManager.saveSettings).toHaveBeenCalledWith({ accentColor: '#10b981' });
     expect(state.render).toHaveBeenCalled();
   });
 

@@ -40,7 +40,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'happy-dom',
-    include: ['packages/**/*.test.ts'],
+    include: ['packages/**/*.test.ts', 'e2e/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     coverage: {
       provider: 'v8',

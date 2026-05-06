@@ -185,6 +185,19 @@ describe('DEVBAR_STYLES responsive custom controls', () => {
     expect(responsiveBlock).toContain('flex: 0 1 auto !important');
     expect(responsiveBlock).not.toContain('flex: 1 1 100% !important');
   });
+
+  it('uses compact simulated-mobile controls instead of touch-sized controls', () => {
+    const mobileStart = DEVBAR_STYLES.indexOf('@media (max-width: 639px)');
+    const mobileBlock = DEVBAR_STYLES.slice(mobileStart);
+
+    expect(mobileBlock).toContain('grid-template-columns: repeat(5, 32px)');
+    expect(mobileBlock).toContain('width: 32px !important');
+    expect(mobileBlock).toContain('min-height: 0 !important');
+    expect(mobileBlock).toContain('.devbar-custom-controls-inline');
+    expect(mobileBlock).toContain('padding: 0 !important');
+    expect(mobileBlock).not.toContain('grid-template-columns: repeat(5, 44px)');
+    expect(mobileBlock).not.toContain('min-height: 44px !important');
+  });
 });
 
 describe('generateBreakpointCSS', () => {

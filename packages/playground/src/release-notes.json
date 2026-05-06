@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.14.3": "Simulated-mobile toolbar density pass: action icons now use compact 32px controls instead of touch-target sizing, and inline plugin badges such as release metadata drop the extra mobile padding/min-height that created oversized whitespace.",
     "1.14.2": "Responsive layout fix for staging release badges: md and smaller toolbars now stack custom controls, status, and actions as content-sized rows instead of stretching each row to the full available toolbar width.",
     "1.14.1": "Bugfix for staging release badges: async Sweetlink settings now reinject theme CSS when a loaded setting changes light/dark mode, so the settings UI and visible toolbar no longer drift. Ungrouped plugin controls such as `releaseInfoPlugin()` now render inline with the main toolbar instead of forcing a wide, mostly empty second row.",
     "1.14.0": "Release metadata plugin and custom-control hover tooltips. New `releaseInfoPlugin()` registers a compact badge with release timestamp, optional version, and changelog hover text for staging/preview deploys. `DevBarControl` now accepts a `tooltip` string or callback so host apps can add hover detail to any custom control without writing rendering code.",

@@ -888,11 +888,11 @@ export const DEVBAR_STYLES = `
   }
   .devbar-actions {
     display: grid;
-    grid-template-columns: repeat(5, 44px);
+    grid-template-columns: repeat(5, 32px);
     justify-content: center;
     justify-items: center;
     align-items: center;
-    column-gap: 0.375rem;
+    column-gap: 0.25rem;
     row-gap: 0.25rem;
     margin-top: 0;
     flex-wrap: nowrap;
@@ -904,24 +904,29 @@ export const DEVBAR_STYLES = `
     display: none;
   }
   .devbar-actions button {
-    width: 44px !important;
-    height: 44px !important;
-    min-width: 44px !important;
-    min-height: 44px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
   }
   .devbar-actions button svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
   .devbar-custom-controls {
     justify-content: center !important;
-    gap: 0.375rem !important;
-    padding: 0.5rem !important;
+    gap: 0.25rem !important;
+    padding: 0.375rem !important;
+  }
+  .devbar-custom-controls-inline {
+    padding: 0 !important;
   }
   .devbar-custom-control {
-    min-height: 44px !important;
+    min-height: 0 !important;
     max-width: 100% !important;
-    padding: 0.5rem 0.625rem !important;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.5625rem !important;
+    line-height: 1rem !important;
   }
   .devbar-custom-group-label {
     flex-basis: 100% !important;

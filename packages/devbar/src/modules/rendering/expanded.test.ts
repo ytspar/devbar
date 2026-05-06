@@ -588,19 +588,20 @@ describe('renderExpanded', () => {
     expect(state.container!.children.length).toBe(1);
   });
 
-  it('renders custom controls row when controls are provided', () => {
+  it('renders ungrouped custom controls inline when controls are provided', () => {
     const state = createMockState();
     const onClick = vi.fn();
     renderExpanded(state, [{ id: 'test', label: 'Test Button', onClick }]);
 
-    // Main row + custom controls row
-    expect(state.container!.children.length).toBe(2);
+    // Main row only; compact plugin badges should not create a wide second row.
+    expect(state.container!.children.length).toBe(1);
     expect(state.container!.dataset.devbarCustomControls).toBe('true');
-    const customRow = state.container!.children[1] as HTMLElement;
-    expect(customRow.className).toBe('devbar-custom-controls');
-    expect(customRow.style.width).toBe('100%');
-    expect(customRow.style.maxWidth).toBe('100%');
-    expect(customRow.style.overflow).toBe('visible');
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
+    expect(customRow.className).toBe('devbar-custom-controls devbar-custom-controls-inline');
+    expect(customRow.style.width).toBe('auto');
+    expect(customRow.style.overflow).toBe('hidden');
     expect(customRow.textContent).toContain('Test Button');
   });
 
@@ -617,7 +618,9 @@ describe('renderExpanded', () => {
     const onClick = vi.fn();
     renderExpanded(state, [{ id: 'my-btn', label: 'My Action', onClick }]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
     expect(btn).toBeTruthy();
     expect(btn.className).toBe('devbar-custom-control');
@@ -633,7 +636,9 @@ describe('renderExpanded', () => {
     const onClick = vi.fn();
     renderExpanded(state, [{ id: 'disabled-btn', label: 'Disabled', onClick, disabled: true }]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     btn.click();
@@ -645,7 +650,9 @@ describe('renderExpanded', () => {
     const state = createMockState();
     renderExpanded(state, [{ id: 'active', label: 'Active', onClick: vi.fn(), active: true }]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
     // Active button should have background color set
     expect(btn.style.backgroundColor).not.toBe('transparent');
@@ -657,7 +664,9 @@ describe('renderExpanded', () => {
       { id: 'warn', label: 'Warning', onClick: vi.fn(), variant: 'warning', active: true },
     ]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
     // Active + warning: color is set directly to BUTTON_COLORS.warning
     expect(btn.style.color).toBe('#f59e0b');
@@ -671,7 +680,9 @@ describe('renderExpanded', () => {
       { id: 'btn3', label: 'Third', onClick: vi.fn() },
     ]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const buttons = customRow.querySelectorAll('button');
     expect(buttons.length).toBe(3);
   });
@@ -681,6 +692,7 @@ describe('renderExpanded', () => {
     renderExpanded(state, [{ id: 'btn1', label: 'First', group: 'Cards', onClick: vi.fn() }]);
 
     const customRow = state.container!.children[1] as HTMLElement;
+    expect(customRow.className).toBe('devbar-custom-controls devbar-custom-controls-row');
     const groupLabel = customRow.querySelector('.devbar-custom-group-label') as HTMLElement;
     expect(groupLabel).toBeTruthy();
     expect(groupLabel.textContent).toBe('Cards');
@@ -765,7 +777,9 @@ describe('renderExpanded', () => {
     const state = createMockState();
     renderExpanded(state, [{ id: 'hover', label: 'Hoverable', onClick: vi.fn() }]);
 
-    const customRow = state.container!.children[1] as HTMLElement;
+    const customRow = state.container!.querySelector(
+      '.devbar-custom-controls-inline'
+    ) as HTMLElement;
     const btn = customRow.querySelector('button') as HTMLButtonElement;
 
     btn.onmouseenter!(new MouseEvent('mouseenter'));

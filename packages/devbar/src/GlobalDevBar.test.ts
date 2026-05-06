@@ -941,6 +941,37 @@ describe('GlobalDevBar applySettings', () => {
     bar.applySettings(settings);
     expect(bar.options.screenshotQuality).toBe(0.65);
   });
+
+  it('should reinject theme CSS when settings change theme mode', () => {
+    const bar = new GlobalDevBar();
+    const settings = {
+      version: 1 as const,
+      position: 'bottom-left' as const,
+      themeMode: 'light' as const,
+      compactMode: false,
+      accentColor: '#10b981',
+      showScreenshot: true,
+      showConsoleBadges: true,
+      showTooltips: true,
+      saveLocation: 'auto' as const,
+      screenshotQuality: 0.65,
+      showMetrics: {
+        breakpoint: true,
+        fcp: true,
+        lcp: true,
+        cls: true,
+        inp: true,
+        pageSize: true,
+      },
+      debug: false,
+    };
+
+    bar.themeMode = 'dark';
+    bar.applySettings(settings);
+
+    const styleEl = document.getElementById('devbar-theme-vars');
+    expect(styleEl?.textContent).toContain('--devbar-color-bg-card: rgba(255, 255, 255, 0.85)');
+  });
 });
 
 // ============================================================================

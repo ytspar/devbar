@@ -10,6 +10,7 @@ import {
   TAILWIND_BREAKPOINTS,
   withAlpha,
 } from '../../constants.js';
+import type { DevBarControl } from '../../types.js';
 import { getSweetlinkConnectionTooltip } from '../demoMode.js';
 import { getResponsiveMetricVisibility } from '../performance.js';
 import {
@@ -20,7 +21,6 @@ import {
   attachMetricTooltip,
   attachTextTooltip,
 } from '../tooltips.js';
-import type { DevBarControl } from '../../types.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 import {
   createA11yButton,
@@ -474,13 +474,8 @@ function createActionButtonsContainer(
   return actionsContainer;
 }
 
-/**
- * Create the custom controls row for user-defined buttons.
- * Controls with a `group` field are rendered under a group header label.
- * Controls without `onClick` render as non-interactive badges (span, no hover).
- * Returns null if there are no custom controls.
- */
-function createCustomControlsRow(
+function createCustomControlsStrip(
+  className: string,
   customControls: DevBarControl[],
   accentColor: string,
   state: DevBarState
@@ -488,7 +483,80 @@ function createCustomControlsRow(
   if (customControls.length === 0) return null;
 
   const customRow = document.createElement('div');
-  customRow.className = 'devbar-custom-controls';
+  customRow.className = className;
+  Object.assign(customRow.style, {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    alignContent: 'flex-start',
+    justifyContent: 'flex-start',
+    gap: '0.5rem',
+    padding: '0 0.75rem 0.5rem 0.75rem',
+    borderTop: `1px solid ${withAlpha(accentColor, 19)}`,
+    marginTop: '0',
+    paddingTop: '0.5rem',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: '0',
+    overflow: 'visible',
+    boxSizing: 'border-box',
+    fontFamily: FONT_MONO,
+    fontSize: '0.6875rem',
+  });
+
+  for (const control of customControls) {
+    customRow.appendChild(createControlElement(control, accentColor, state));
+  }
+
+  return customRow;
+}
+
+/**
+ * Create the inline custom controls group used for compact badges such as
+ * release metadata. Controls with a `group` still render in the secondary row.
+ */
+function createInlineCustomControls(
+  customControls: DevBarControl[],
+  accentColor: string,
+  state: DevBarState
+): HTMLDivElement | null {
+  const inlineControls = customControls.filter((control) => !control.group);
+  const inlineRow = createCustomControlsStrip(
+    'devbar-custom-controls devbar-custom-controls-inline',
+    inlineControls,
+    accentColor,
+    state
+  );
+
+  if (!inlineRow) return null;
+
+  Object.assign(inlineRow.style, {
+    padding: '0',
+    borderTop: '0',
+    width: 'auto',
+    flex: '0 1 auto',
+    overflow: 'hidden',
+  });
+
+  return inlineRow;
+}
+
+/**
+ * Create the custom controls row for grouped user-defined controls.
+ * Controls with a `group` field are rendered under a group header label.
+ * Controls without `onClick` render as non-interactive badges (span, no hover).
+ * Returns null if there are no grouped controls.
+ */
+function createCustomControlsRow(
+  customControls: DevBarControl[],
+  accentColor: string,
+  state: DevBarState
+): HTMLDivElement | null {
+  const groupedControls = customControls.filter((control) => control.group);
+  if (groupedControls.length === 0) return null;
+
+  const customRow = document.createElement('div');
+  customRow.className = 'devbar-custom-controls devbar-custom-controls-row';
   Object.assign(customRow.style, {
     display: 'flex',
     flexWrap: 'wrap',
@@ -510,18 +578,12 @@ function createCustomControlsRow(
   });
 
   // Partition controls into ungrouped and grouped
-  const ungrouped = customControls.filter((c) => !c.group);
   const groups = new Map<string, typeof customControls>();
-  for (const control of customControls) {
+  for (const control of groupedControls) {
     if (!control.group) continue;
     const list = groups.get(control.group) ?? [];
     list.push(control);
     groups.set(control.group, list);
-  }
-
-  // Render ungrouped controls first
-  for (const control of ungrouped) {
-    customRow.appendChild(createControlElement(control, accentColor, state));
   }
 
   // Render each group with a small header label
@@ -539,8 +601,7 @@ function createCustomControlsRow(
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
-      marginLeft:
-        ungrouped.length > 0 || [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
+      marginLeft: [...groups.keys()].indexOf(groupName) > 0 ? '0.25rem' : '0',
     });
     groupLabel.textContent = groupName;
     customRow.appendChild(groupLabel);
@@ -589,13 +650,19 @@ export function renderExpanded(state: DevBarState, customControls: DevBarControl
   );
   mainRow.appendChild(statusRow);
 
-  // 4. Action buttons
+  // 4. Inline custom controls (release metadata, version badges, etc.)
+  const inlineControls = createInlineCustomControls(customControls, accentColor, state);
+  if (inlineControls) {
+    mainRow.appendChild(inlineControls);
+  }
+
+  // 5. Action buttons
   const actionsContainer = createActionButtonsContainer(state, showScreenshot, accentColor);
   mainRow.appendChild(actionsContainer);
 
   wrapper.appendChild(mainRow);
 
-  // 5. Custom controls row (if any)
+  // 6. Grouped custom controls row (if any)
   const customRow = createCustomControlsRow(customControls, accentColor, state);
   if (customRow) {
     wrapper.appendChild(customRow);

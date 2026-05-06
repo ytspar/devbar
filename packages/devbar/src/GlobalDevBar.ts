@@ -27,7 +27,9 @@ import {
 import {
   CSS_COLORS,
   DEVBAR_STYLES,
+  getTheme,
   getThemeColors,
+  injectThemeCSS,
   MAX_RECONNECT_ATTEMPTS,
   PALETTE,
   WS_PORT,
@@ -582,6 +584,7 @@ export class GlobalDevBar {
     const effectiveSettings = this.forcedThemeMode
       ? { ...settings, themeMode: this.forcedThemeMode }
       : settings;
+    const previousThemeMode = this.themeMode;
 
     if (this.forcedThemeMode && this.settingsManager.get('themeMode') !== this.forcedThemeMode) {
       this.settingsManager.saveSettingsNow({
@@ -602,6 +605,17 @@ export class GlobalDevBar {
     this.options.saveLocation = effectiveSettings.saveLocation;
     this.options.screenshotQuality = effectiveSettings.screenshotQuality ?? 0.65;
     this.options.showMetrics = { ...effectiveSettings.showMetrics };
+
+    injectThemeCSS(getTheme(effectiveSettings.themeMode));
+    if (previousThemeMode !== effectiveSettings.themeMode) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('devbar-theme-change', {
+            detail: { mode: effectiveSettings.themeMode },
+          })
+        );
+      }
+    }
 
     // Re-render with new settings
     this.render();

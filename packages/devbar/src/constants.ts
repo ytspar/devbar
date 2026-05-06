@@ -758,18 +758,18 @@ export const DEVBAR_STYLES = `
   opacity: 0.78;
 }
 [data-devbar-custom-controls="true"] .devbar-main {
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-wrap: nowrap;
+  align-items: center;
   overflow: visible;
 }
 [data-devbar-custom-controls="true"] .devbar-status {
-  flex: 1 1 min(34rem, 100%);
+  flex: 1 1 auto;
   max-width: 100%;
   overflow: hidden;
 }
 [data-devbar-custom-controls="true"] .devbar-actions {
-  flex: 1 1 min(28rem, 100%);
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   min-width: 0;
   max-width: 100%;
   row-gap: 0.375rem;
@@ -779,6 +779,14 @@ export const DEVBAR_STYLES = `
   min-width: 0;
   box-sizing: border-box;
   overflow: visible;
+}
+.devbar-custom-controls-inline {
+  flex-wrap: nowrap !important;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+.devbar-custom-controls-row {
+  width: 100%;
 }
 .devbar-custom-control {
   max-width: min(16rem, 100%);
@@ -797,8 +805,12 @@ export const DEVBAR_STYLES = `
     row-gap: 0.5rem;
   }
   [data-devbar-custom-controls="true"] .devbar-status,
+  [data-devbar-custom-controls="true"] .devbar-custom-controls-inline,
   [data-devbar-custom-controls="true"] .devbar-actions {
     flex: 1 1 100% !important;
+  }
+  [data-devbar-custom-controls="true"] .devbar-custom-controls-inline {
+    justify-content: center !important;
   }
   [data-devbar-custom-controls="true"] .devbar-actions {
     justify-content: center !important;

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   BUTTON_COLORS,
   CATEGORY_COLORS,
+  DEVBAR_STYLES,
   DEVBAR_THEME,
   DEVBAR_THEME_LIGHT,
   generateBreakpointCSS,
@@ -170,6 +171,19 @@ describe('injectThemeCSS', () => {
     const styles = document.querySelectorAll('#devbar-theme-vars');
     expect(styles.length).toBe(1);
     expect((styles[0] as HTMLStyleElement).textContent).toContain(DEVBAR_THEME.colors.primary);
+  });
+});
+
+describe('DEVBAR_STYLES responsive custom controls', () => {
+  it('keeps medium custom-control layouts content-sized instead of full-width rows', () => {
+    const responsiveStart = DEVBAR_STYLES.indexOf('@media (max-width: 1120px)');
+    const responsiveEnd = DEVBAR_STYLES.indexOf('@media (max-width: 860px)');
+    const responsiveBlock = DEVBAR_STYLES.slice(responsiveStart, responsiveEnd);
+
+    expect(responsiveBlock).toContain('flex-direction: column');
+    expect(responsiveBlock).toContain('width: fit-content !important');
+    expect(responsiveBlock).toContain('flex: 0 1 auto !important');
+    expect(responsiveBlock).not.toContain('flex: 1 1 100% !important');
   });
 });
 

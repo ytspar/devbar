@@ -801,13 +801,23 @@ export const DEVBAR_STYLES = `
 }
 @media (max-width: 1120px) {
   [data-devbar-custom-controls="true"] .devbar-main {
-    flex-wrap: wrap !important;
+    flex-direction: column;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
     row-gap: 0.5rem;
+    width: fit-content !important;
+    max-width: 100%;
   }
   [data-devbar-custom-controls="true"] .devbar-status,
   [data-devbar-custom-controls="true"] .devbar-custom-controls-inline,
   [data-devbar-custom-controls="true"] .devbar-actions {
-    flex: 1 1 100% !important;
+    flex: 0 1 auto !important;
+    width: fit-content !important;
+    max-width: 100%;
+  }
+  [data-devbar-custom-controls="true"] .devbar-status {
+    justify-content: center !important;
   }
   [data-devbar-custom-controls="true"] .devbar-custom-controls-inline {
     justify-content: center !important;

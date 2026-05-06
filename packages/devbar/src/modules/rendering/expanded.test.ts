@@ -600,7 +600,7 @@ describe('renderExpanded', () => {
       '.devbar-custom-controls-inline'
     ) as HTMLElement;
     expect(customRow.className).toBe('devbar-custom-controls devbar-custom-controls-inline');
-    expect(customRow.style.width).toBe('auto');
+    expect(customRow.style.width).toBe('fit-content');
     expect(customRow.style.overflow).toBe('hidden');
     expect(customRow.textContent).toContain('Test Button');
   });

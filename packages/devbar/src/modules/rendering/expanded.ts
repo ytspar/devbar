@@ -533,7 +533,7 @@ function createInlineCustomControls(
   Object.assign(inlineRow.style, {
     padding: '0',
     borderTop: '0',
-    width: 'auto',
+    width: 'fit-content',
     flex: '0 1 auto',
     overflow: 'hidden',
   });

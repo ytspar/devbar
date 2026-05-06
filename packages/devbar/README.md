@@ -190,6 +190,7 @@ import { GlobalDevBar } from '@ytspar/devbar';
 GlobalDevBar.registerControl({
   id: 'my-control',
   label: 'Reset State',
+  tooltip: 'Clears localStorage and reloads the current page',
   onClick: () => {
     localStorage.clear();
     location.reload();
@@ -200,6 +201,29 @@ GlobalDevBar.registerControl({
 // Unregister when done
 GlobalDevBar.unregisterControl('my-control');
 ```
+
+### Release Info Plugin
+
+Show release metadata without taking over the toolbar:
+
+```typescript
+import { releaseInfoPlugin } from '@ytspar/devbar/plugins/release-info';
+
+const cleanupRelease = releaseInfoPlugin({
+  version: '1.4.2',
+  releasedAt: '2026-05-06T06:21:23Z',
+  changelog: [
+    'Show DevBar on staging deploys',
+    'Expose release timestamp, version, and changelog metadata',
+  ],
+});
+
+// Unregister when done
+cleanupRelease();
+```
+
+The badge displays the version and formatted release timestamp. Hovering the
+badge shows the exact release time and changelog lines.
 
 ### Cleanup
 

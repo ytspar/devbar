@@ -4,6 +4,7 @@
 
 import { BUTTON_COLORS, CSS_COLORS, withAlpha } from '../../constants.js';
 import type { DevBarControl } from '../../types.js';
+import { attachTextTooltip } from '../tooltips.js';
 import type { DevBarState, PositionStyle } from '../types.js';
 
 /**
@@ -90,14 +91,27 @@ export function getControlColor(variant: string | undefined, accentColor: string
   return accentColor;
 }
 
+function resolveControlTooltip(control: DevBarControl): string {
+  if (typeof control.tooltip === 'function') {
+    return control.tooltip() ?? '';
+  }
+
+  return control.tooltip ?? '';
+}
+
 /**
  * Create a single custom control element (button or non-interactive badge).
  */
-export function createControlElement(control: DevBarControl, accentColor: string): HTMLElement {
+export function createControlElement(
+  control: DevBarControl,
+  accentColor: string,
+  state?: DevBarState
+): HTMLElement {
   const color = getControlColor(control.variant, accentColor);
   const isActive = control.active ?? false;
   const isDisabled = control.disabled ?? false;
   const isInteractive = !!control.onClick;
+  const hasTooltip = !!control.tooltip;
 
   const el = document.createElement(isInteractive ? 'button' : 'span');
   el.className = isInteractive
@@ -119,28 +133,45 @@ export function createControlElement(control: DevBarControl, accentColor: string
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    cursor: isInteractive ? (isDisabled ? 'not-allowed' : 'pointer') : 'default',
+    cursor: isInteractive
+      ? isDisabled
+        ? 'not-allowed'
+        : 'pointer'
+      : hasTooltip
+        ? 'help'
+        : 'default',
     opacity: isDisabled ? '0.5' : '1',
     transition: isInteractive ? 'all 150ms' : 'none',
   });
 
   el.textContent = control.label;
 
+  const onEnter = () => {
+    el.style.backgroundColor = withAlpha(color, 13);
+    el.style.borderColor = color;
+    el.style.color = color;
+  };
+  const onLeave = () => {
+    el.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
+    el.style.borderColor = isActive ? color : withAlpha(color, 38);
+    el.style.color = isActive ? color : withAlpha(color, 60);
+  };
+
   if (isInteractive) {
     (el as HTMLButtonElement).disabled = isDisabled;
     if (!isDisabled) {
-      el.onmouseenter = () => {
-        el.style.backgroundColor = withAlpha(color, 13);
-        el.style.borderColor = color;
-        el.style.color = color;
-      };
-      el.onmouseleave = () => {
-        el.style.backgroundColor = isActive ? withAlpha(color, 20) : 'transparent';
-        el.style.borderColor = isActive ? color : withAlpha(color, 38);
-        el.style.color = isActive ? color : withAlpha(color, 60);
-      };
       el.onclick = () => control.onClick!();
     }
+  }
+
+  if (state && hasTooltip) {
+    attachTextTooltip(state, el, () => resolveControlTooltip(control), {
+      onEnter: isInteractive && !isDisabled ? onEnter : undefined,
+      onLeave: isInteractive && !isDisabled ? onLeave : undefined,
+    });
+  } else if (isInteractive && !isDisabled) {
+    el.onmouseenter = onEnter;
+    el.onmouseleave = onLeave;
   }
 
   return el;

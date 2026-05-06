@@ -102,12 +102,20 @@ export interface GlobalDevBarOptions {
   debug?: boolean | DebugConfig;
 }
 
+export type DevBarControlTooltip = string | (() => string | null | undefined);
+
 /**
  * Custom control that can be registered by host applications
  */
 export interface DevBarControl {
   id: string;
   label: string;
+  /**
+   * Optional hover tooltip text. Newlines render as separate tooltip rows.
+   * Use this for compact metadata such as release notes, commit IDs, or
+   * environment details that should not permanently occupy toolbar space.
+   */
+  tooltip?: DevBarControlTooltip;
   onClick?: () => void;
   active?: boolean;
   disabled?: boolean;

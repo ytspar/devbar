@@ -482,7 +482,8 @@ function createActionButtonsContainer(
  */
 function createCustomControlsRow(
   customControls: DevBarControl[],
-  accentColor: string
+  accentColor: string,
+  state: DevBarState
 ): HTMLDivElement | null {
   if (customControls.length === 0) return null;
 
@@ -520,7 +521,7 @@ function createCustomControlsRow(
 
   // Render ungrouped controls first
   for (const control of ungrouped) {
-    customRow.appendChild(createControlElement(control, accentColor));
+    customRow.appendChild(createControlElement(control, accentColor, state));
   }
 
   // Render each group with a small header label
@@ -545,7 +546,7 @@ function createCustomControlsRow(
     customRow.appendChild(groupLabel);
 
     for (const control of controls) {
-      customRow.appendChild(createControlElement(control, accentColor));
+      customRow.appendChild(createControlElement(control, accentColor, state));
     }
   }
 
@@ -595,7 +596,7 @@ export function renderExpanded(state: DevBarState, customControls: DevBarControl
   wrapper.appendChild(mainRow);
 
   // 5. Custom controls row (if any)
-  const customRow = createCustomControlsRow(customControls, accentColor);
+  const customRow = createCustomControlsRow(customControls, accentColor, state);
   if (customRow) {
     wrapper.appendChild(customRow);
   }

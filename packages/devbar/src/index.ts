@@ -1,6 +1,17 @@
 // devbar - Development toolbar and utilities
 // Pure vanilla JavaScript - no framework dependencies
 
+// Re-export outline/schema functions direct from sweetlink.
+export {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
+export {
+  extractPageSchema,
+  schemaToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/schema';
+// Early console capture script for injection — re-exported direct from sweetlink.
+export { EARLY_CONSOLE_CAPTURE_SCRIPT } from '@ytspar/sweetlink/browser/earlyConsoleCapture';
 // Accessibility audit utilities
 export {
   type A11yState,
@@ -37,8 +48,6 @@ export {
 } from './constants.js';
 // Debug utilities
 export { DebugLogger, normalizeDebugConfig } from './debug.js';
-// Early console capture script for injection — re-exported direct from sweetlink.
-export { EARLY_CONSOLE_CAPTURE_SCRIPT } from '@ytspar/sweetlink/browser/earlyConsoleCapture';
 // Main vanilla JS devbar
 export {
   destroyGlobalDevBar,
@@ -47,7 +56,6 @@ export {
   getGlobalDevBar,
   initGlobalDevBar,
 } from './GlobalDevBar.js';
-
 // Lazy loading utilities
 export { getHtml2Canvas } from './lazy/index.js';
 // Network monitoring utilities
@@ -56,14 +64,14 @@ export {
   NetworkMonitor,
   type NetworkState,
 } from './network.js';
-// Re-export outline/schema functions direct from sweetlink.
-export {
-  extractDocumentOutline,
-  outlineToMarkdown,
-} from '@ytspar/sweetlink/browser/commands/outline';
 // Official plugins
 export { type AppVersionPluginOptions, appVersionPlugin } from './plugins/appVersion.js';
 export { type GitBranchPluginOptions, gitBranchPlugin } from './plugins/gitBranch.js';
+export {
+  type ReleaseInfo,
+  type ReleaseInfoPluginOptions,
+  releaseInfoPlugin,
+} from './plugins/releaseInfo.js';
 // Configuration presets
 export {
   initDebug,
@@ -77,10 +85,6 @@ export {
   PRESET_PERFORMANCE,
   PRESET_RESPONSIVE,
 } from './presets.js';
-export {
-  extractPageSchema,
-  schemaToMarkdown,
-} from '@ytspar/sweetlink/browser/commands/schema';
 // Settings management
 export {
   ACCENT_COLOR_PRESETS,
@@ -113,6 +117,7 @@ export type {
   ConsoleLog,
   DebugConfig,
   DevBarControl,
+  DevBarControlTooltip,
   GlobalDevBarOptions,
   MetaImage,
   MicrodataItem,

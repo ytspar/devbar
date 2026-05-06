@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/devbar",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "type": "module",
   "private": false,
   "description": "Development toolbar and utilities with Sweetlink integration - pure vanilla JS, no framework dependencies",
@@ -43,6 +43,11 @@
       "types": "./dist/plugins/appVersion.d.ts",
       "import": "./dist/plugins/appVersion.js",
       "default": "./dist/plugins/appVersion.js"
+    },
+    "./plugins/release-info": {
+      "types": "./dist/plugins/releaseInfo.d.ts",
+      "import": "./dist/plugins/releaseInfo.js",
+      "default": "./dist/plugins/releaseInfo.js"
     },
     "./plugins/consent-debug": {
       "types": "./dist/plugins/consentDebug.d.ts",

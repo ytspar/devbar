@@ -7,10 +7,17 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DevBarState } from '../types.js';
+
+vi.mock('../tooltips.js', () => ({
+  attachTextTooltip: vi.fn(),
+}));
+
+import { attachTextTooltip } from '../tooltips.js';
 import {
   captureDotPosition,
   clearChildren,
   createConnectionIndicator,
+  createControlElement,
   renderGuard,
   setRenderGuard,
 } from './common.js';
@@ -204,5 +211,39 @@ describe('clearChildren', () => {
     clearChildren(parent);
 
     expect(parent.childNodes.length).toBe(0);
+  });
+});
+
+describe('createControlElement', () => {
+  it('attaches tooltip text when a custom control defines it', () => {
+    const state = createMockState();
+    const control = {
+      id: 'release',
+      label: 'v1.0.1',
+      tooltip: 'Release notes',
+    };
+
+    const el = createControlElement(control, '#10b981', state);
+
+    expect(el.textContent).toBe('v1.0.1');
+    expect(attachTextTooltip).toHaveBeenCalledWith(
+      state,
+      el,
+      expect.any(Function),
+      expect.objectContaining({ onEnter: undefined, onLeave: undefined })
+    );
+    const getText = vi.mocked(attachTextTooltip).mock.calls[0][2] as () => string;
+    expect(getText()).toBe('Release notes');
+  });
+
+  it('uses help cursor for non-interactive tooltip badges', () => {
+    const state = createMockState();
+    const el = createControlElement(
+      { id: 'release', label: 'v1.0.1', tooltip: 'Release notes' },
+      '#10b981',
+      state
+    );
+
+    expect(el.style.cursor).toBe('help');
   });
 });

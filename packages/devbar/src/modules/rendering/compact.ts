@@ -97,7 +97,7 @@ export function renderCompact(state: DevBarState, customControls: DevBarControl[
   // Custom controls (registered by host applications)
   if (customControls.length > 0) {
     for (const control of customControls) {
-      wrapper.appendChild(createControlElement(control, accentColor));
+      wrapper.appendChild(createControlElement(control, accentColor, state));
     }
   }
 

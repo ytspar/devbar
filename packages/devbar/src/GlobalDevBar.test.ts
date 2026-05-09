@@ -576,6 +576,9 @@ vi.mock('./modules/keyboard.js', () => ({
 vi.mock('./modules/theme.js', () => ({
   setupTheme: vi.fn(),
   loadCompactMode: vi.fn(),
+  resolveCompactModeForViewport: vi.fn(
+    (compactMode: boolean) => compactMode || window.innerWidth <= 860
+  ),
   setThemeMode: vi.fn(),
 }));
 
@@ -874,6 +877,10 @@ describe('GlobalDevBar toggleCompactMode', () => {
 // ============================================================================
 
 describe('GlobalDevBar applySettings', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+  });
+
   it('should update position from settings', () => {
     const bar = new GlobalDevBar();
     const settings = {
@@ -912,6 +919,36 @@ describe('GlobalDevBar applySettings', () => {
     expect(bar.options.showMetrics.breakpoint).toBe(false);
     expect(bar.options.showMetrics.fcp).toBe(false);
     expect(bar.options.showMetrics.lcp).toBe(true);
+  });
+
+  it('should apply compact mode by default when server settings load on small screens', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 860, configurable: true });
+    const bar = new GlobalDevBar();
+    const settings = {
+      version: 1 as const,
+      position: 'bottom-left' as const,
+      themeMode: 'system' as const,
+      compactMode: false,
+      accentColor: '#10b981',
+      showScreenshot: true,
+      showConsoleBadges: true,
+      showTooltips: true,
+      saveLocation: 'auto' as const,
+      screenshotQuality: 0.65,
+      showMetrics: {
+        breakpoint: true,
+        fcp: true,
+        lcp: true,
+        cls: true,
+        inp: true,
+        pageSize: true,
+      },
+      debug: false,
+    };
+
+    bar.applySettings(settings);
+
+    expect(bar.compactMode).toBe(true);
   });
 
   it('should default screenshotQuality to 0.65 when undefined', () => {

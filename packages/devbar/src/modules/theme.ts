@@ -8,6 +8,14 @@ import { getEffectiveTheme, getTheme, injectThemeCSS, setStoredThemeMode } from 
 import type { ThemeMode } from '../types.js';
 import type { DevBarState } from './types.js';
 
+export const RESPONSIVE_COMPACT_MAX_WIDTH = 860;
+
+export function resolveCompactModeForViewport(compactMode: boolean): boolean {
+  if (compactMode) return true;
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth <= RESPONSIVE_COMPACT_MAX_WIDTH;
+}
+
 /**
  * Setup the theme system: load stored preference and listen for system changes.
  */
@@ -48,7 +56,7 @@ export function setupTheme(state: DevBarState): void {
  */
 export function loadCompactMode(state: DevBarState): void {
   const settings = state.settingsManager.getSettings();
-  state.compactMode = settings.compactMode;
+  state.compactMode = resolveCompactModeForViewport(settings.compactMode);
   state.debug.state('Compact mode loaded', { compactMode: state.compactMode });
 }
 

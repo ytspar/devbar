@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.14.7": "Small-screen toolbar default: devbar now starts in compact mode at 860px and below while keeping explicit compact preferences and wide desktop expanded mode intact. This prevents mobile/tablet layouts from booting into the denser expanded toolbar.",
     "1.14.6": "Bumps @ytspar/sweetlink to 1.24.3 so workspace:^ resolves to the latest browser bridge reconnect hardening release.",
     "1.14.5": "Plain text tooltips now follow the hovered control color after hover styling is applied, so plugin and custom-control tooltip text matches the toolbar control instead of falling back to the default primary accent.",
     "1.14.4": "Bumps @ytspar/sweetlink to 1.24.1 so workspace:^ resolves to a sweetlink that accepts Vite 8 as a peer.",

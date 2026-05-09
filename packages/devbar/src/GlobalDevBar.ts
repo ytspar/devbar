@@ -41,6 +41,7 @@ import { render as moduleRender } from './modules/rendering/index.js';
 import { handleScreenshot as moduleHandleScreenshot } from './modules/screenshot.js';
 import {
   loadCompactMode,
+  resolveCompactModeForViewport,
   setThemeMode as moduleSetThemeMode,
   setupTheme,
 } from './modules/theme.js';
@@ -594,7 +595,7 @@ export class GlobalDevBar {
 
     // Update local state
     this.themeMode = effectiveSettings.themeMode;
-    this.compactMode = effectiveSettings.compactMode;
+    this.compactMode = resolveCompactModeForViewport(effectiveSettings.compactMode);
 
     // Update options
     this.options.position = effectiveSettings.position;

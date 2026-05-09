@@ -3,7 +3,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadCompactMode, setThemeMode, setupTheme } from './theme.js';
+import {
+  loadCompactMode,
+  resolveCompactModeForViewport,
+  RESPONSIVE_COMPACT_MAX_WIDTH,
+  setThemeMode,
+  setupTheme,
+} from './theme.js';
 import type { DevBarState } from './types.js';
 
 function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
@@ -149,6 +155,10 @@ describe('setupTheme', () => {
 });
 
 describe('loadCompactMode', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+  });
+
   it('loads compact mode from settings', () => {
     const state = createMockState();
     (state.settingsManager.getSettings as any).mockReturnValue({
@@ -172,6 +182,52 @@ describe('loadCompactMode', () => {
     loadCompactMode(state);
 
     expect(state.compactMode).toBe(false);
+  });
+
+  it('defaults to compact mode on small screens when no compact preference is set', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: RESPONSIVE_COMPACT_MAX_WIDTH,
+      configurable: true,
+    });
+    const state = createMockState();
+    (state.settingsManager.getSettings as any).mockReturnValue({
+      themeMode: 'system',
+      compactMode: false,
+    });
+
+    loadCompactMode(state);
+
+    expect(state.compactMode).toBe(true);
+  });
+});
+
+describe('resolveCompactModeForViewport', () => {
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
+  });
+
+  it('keeps explicit compact mode enabled on wide screens', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true });
+
+    expect(resolveCompactModeForViewport(true)).toBe(true);
+  });
+
+  it('uses expanded mode on wide screens when compact mode is disabled', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: RESPONSIVE_COMPACT_MAX_WIDTH + 1,
+      configurable: true,
+    });
+
+    expect(resolveCompactModeForViewport(false)).toBe(false);
+  });
+
+  it('uses compact mode on small screens when compact mode is disabled', () => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: RESPONSIVE_COMPACT_MAX_WIDTH,
+      configurable: true,
+    });
+
+    expect(resolveCompactModeForViewport(false)).toBe(true);
   });
 });
 

@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.14.5": "Plain text tooltips now follow the hovered control color after hover styling is applied, so plugin and custom-control tooltip text matches the toolbar control instead of falling back to the default primary accent.",
     "1.14.4": "Bumps @ytspar/sweetlink to 1.24.1 so workspace:^ resolves to a sweetlink that accepts Vite 8 as a peer.",
     "1.14.3": "Simulated-mobile toolbar density pass: action icons now use compact 32px controls instead of touch-target sizing, and inline plugin badges such as release metadata drop the extra mobile padding/min-height that created oversized whitespace.",
     "1.14.2": "Responsive layout fix for staging release badges: md and smaller toolbars now stack custom controls, status, and actions as content-sized rows instead of stretching each row to the full available toolbar width.",

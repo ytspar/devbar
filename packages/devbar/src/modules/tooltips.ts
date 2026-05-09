@@ -5,7 +5,13 @@
  * click-to-toggle tooltips for mobile, and composable hover behavior via TooltipHoverOptions.
  */
 
-import { CSS_COLORS, DEVBAR_THEME, FONT_MONO, TAILWIND_BREAKPOINTS, withAlpha } from '../constants.js';
+import {
+  CSS_COLORS,
+  DEVBAR_THEME,
+  FONT_MONO,
+  TAILWIND_BREAKPOINTS,
+  withAlpha,
+} from '../constants.js';
 import type { DevBarState } from './types.js';
 
 /** Base styles for tooltip containers */
@@ -191,6 +197,15 @@ type TooltipHoverOptions = {
   onLeave?: () => void;
 };
 
+function getTextTooltipColor(state: DevBarState, element: HTMLElement): string {
+  return (
+    element.style.color ||
+    getComputedStyle(element).color ||
+    state.settingsManager.get('accentColor') ||
+    CSS_COLORS.primary
+  );
+}
+
 /** Attach a plain-text tooltip to an element (evaluated at hover time) */
 export function attachTextTooltip(
   state: DevBarState,
@@ -204,10 +219,11 @@ export function attachTextTooltip(
     (tooltip) => {
       const text = getText();
       const lines = text.split('\n');
+      const tooltipColor = getTextTooltipColor(state, element);
       for (const line of lines) {
         const div = document.createElement('div');
         Object.assign(div.style, {
-          color: CSS_COLORS.primary,
+          color: tooltipColor,
           lineHeight: '1.4',
         });
         div.textContent = line;
@@ -251,6 +267,7 @@ export function attachHtmlTooltip(
     // Suppress tooltips while a modal overlay is open
     if (state.overlayElement) return;
     cancelHide();
+    hoverOptions?.onEnter?.();
     // Clear any existing tooltip for this element first
     if (tooltipEl) {
       removeTooltip(state, tooltipEl);
@@ -262,7 +279,6 @@ export function attachHtmlTooltip(
     tooltipEl.onmouseleave = scheduleHide;
     buildContent(tooltipEl);
     positionTooltip(tooltipEl, element);
-    hoverOptions?.onEnter?.();
   };
 
   element.onmouseleave = () => {
@@ -640,11 +656,12 @@ export function attachMetricTooltip(
  * tooltip wants (e.g. "\u2265640px"). Adding a new breakpoint to constants
  * automatically picks up here without a second edit.
  */
-const TAILWIND_BREAKPOINT_ROWS = (Object.entries(TAILWIND_BREAKPOINTS) as [string, { min: number }][])
-  .map(([name, info]) => ({
-    name,
-    range: info.min === 0 ? '<640px' : `\u2265${info.min}px`,
-  }));
+const TAILWIND_BREAKPOINT_ROWS = (
+  Object.entries(TAILWIND_BREAKPOINTS) as [string, { min: number }][]
+).map(([name, info]) => ({
+  name,
+  range: info.min === 0 ? '<640px' : `\u2265${info.min}px`,
+}));
 
 /** Build a single breakpoint reference row, highlighting the active breakpoint */
 function buildBreakpointRow(bpName: string, bpRange: string, isActive: boolean): HTMLDivElement {

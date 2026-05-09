@@ -504,6 +504,60 @@ describe('attachTextTooltip', () => {
     expect(tooltip.textContent).toBe('Tooltip text');
   });
 
+  it('uses the trigger element color for plain-text tooltip lines', () => {
+    const state = createMockState();
+    const element = document.createElement('div');
+    element.style.color = '#2563eb';
+
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      value: () => ({
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
+      }),
+    });
+    document.body.appendChild(element);
+
+    attachTextTooltip(state, element, () => 'Tooltip text');
+
+    element.onmouseenter!(new MouseEvent('mouseenter'));
+
+    const tooltip = Array.from(state.activeTooltips)[0];
+    expect((tooltip.children[0] as HTMLElement).style.color).toBe('#2563eb');
+  });
+
+  it('reads the trigger color after hover styling runs', () => {
+    const state = createMockState();
+    const element = document.createElement('div');
+    element.style.color = '#92400e';
+
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      value: () => ({
+        left: 100,
+        right: 200,
+        top: 500,
+        bottom: 530,
+        width: 100,
+        height: 30,
+      }),
+    });
+    document.body.appendChild(element);
+
+    attachTextTooltip(state, element, () => 'Tooltip text', {
+      onEnter: () => {
+        element.style.color = '#f59e0b';
+      },
+    });
+
+    element.onmouseenter!(new MouseEvent('mouseenter'));
+
+    const tooltip = Array.from(state.activeTooltips)[0];
+    expect((tooltip.children[0] as HTMLElement).style.color).toBe('#f59e0b');
+  });
+
   it('handles multiline text', () => {
     const state = createMockState();
     const element = document.createElement('div');

@@ -13,6 +13,7 @@ import {
 } from '../constants.js';
 import { resolveSaveLocation } from '../settings.js';
 import { createCloseButton, createStyledButton } from './buttons.js';
+import { copyTextToClipboard } from './clipboard.js';
 
 /**
  * Configuration for creating a modal
@@ -279,7 +280,7 @@ function createEvidenceContextBox(
     });
     copyBtn.onclick = async () => {
       try {
-        await navigator.clipboard.writeText(evidenceContext.copyText ?? '');
+        await copyTextToClipboard(evidenceContext.copyText ?? '');
         copyBtn.textContent = 'Copied!';
         setTimeout(() => {
           copyBtn.textContent = 'Copy Context';

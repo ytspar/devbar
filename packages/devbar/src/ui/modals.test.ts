@@ -3,6 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { copyTextToClipboard } from './clipboard.js';
 import {
   createEmptyMessage,
   createInfoBox,
@@ -11,6 +12,10 @@ import {
   createModalHeader,
   createModalOverlay,
 } from './modals.js';
+
+vi.mock('./clipboard.js', () => ({
+  copyTextToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe('createModalOverlay', () => {
   afterEach(() => {
@@ -322,6 +327,27 @@ describe('createModalHeader', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(onCopyMd).toHaveBeenCalledTimes(1);
+  });
+
+  it('Copy Context button copies evidence context text', async () => {
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      sweetlinkConnected: false,
+      evidenceContext: {
+        title: 'Agent Context',
+        items: [{ label: 'URL', value: 'http://localhost:5173' }],
+        copyText: '# Context',
+      },
+    });
+
+    const buttons = header.querySelectorAll('button');
+    const copyBtn = Array.from(buttons).find((btn) => btn.textContent === 'Copy Context')!;
+    copyBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(copyTextToClipboard).toHaveBeenCalledWith('# Context');
   });
 });
 

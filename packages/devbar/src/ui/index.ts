@@ -5,6 +5,7 @@
  */
 
 export { createCloseButton, createStyledButton, getButtonStyles } from './buttons.js';
+export { copyTextToClipboard } from './clipboard.js';
 export { createSvgIcon, type SvgChild } from './icons.js';
 export {
   createEmptyMessage,

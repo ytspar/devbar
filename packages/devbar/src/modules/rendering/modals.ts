@@ -37,6 +37,7 @@ import {
   createModalHeader,
   createModalOverlay,
   createStyledButton,
+  copyTextToClipboard,
 } from '../../ui/index.js';
 import { focusModal } from '../../ui/modals.js';
 import {
@@ -73,7 +74,7 @@ export function renderOutlineModal(state: DevBarState): void {
     onClose: closeModal,
     onCopyMd: async () => {
       const markdown = outlineToMarkdown(outline);
-      await navigator.clipboard.writeText(markdown);
+      await copyTextToClipboard(markdown);
     },
     onSave: () => handleSaveOutline(state),
     sweetlinkConnected: state.sweetlinkConnected,
@@ -210,7 +211,7 @@ export function renderSchemaModal(state: DevBarState): void {
     onClose: closeModal,
     onCopyMd: async () => {
       const markdown = schemaToMarkdown(schema, { missingTags, favicons });
-      await navigator.clipboard.writeText(markdown);
+      await copyTextToClipboard(markdown);
     },
     onSave: () => handleSaveSchema(state),
     sweetlinkConnected: state.sweetlinkConnected,
@@ -878,7 +879,7 @@ export function renderA11yModal(state: DevBarState): void {
         title: titleText,
         onClose: closeModal,
         onCopyMd: async () => {
-          await navigator.clipboard.writeText(markdown);
+          await copyTextToClipboard(markdown);
         },
         onSave: () => handleSaveA11yAudit(state, result),
         sweetlinkConnected: state.sweetlinkConnected,

@@ -11,6 +11,7 @@ import {
   createModalContent,
   createModalHeader,
   createModalOverlay,
+  copyTextToClipboard,
   focusModal,
 } from '../../ui/index.js';
 import { consoleLogsToMarkdown, handleSaveConsoleLogs } from '../screenshot.js';
@@ -49,7 +50,7 @@ export function renderConsolePopup(
     title: `Console ${label} (${logs.length})`,
     onClose: closeModal,
     onCopyMd: async () => {
-      await navigator.clipboard.writeText(consoleLogsToMarkdown(logs));
+      await copyTextToClipboard(consoleLogsToMarkdown(logs));
     },
     onSave: () => handleSaveConsoleLogs(state, logs),
     onClear: () => state.clearConsoleLogs(),

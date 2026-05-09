@@ -186,6 +186,15 @@ describe('DEVBAR_STYLES responsive custom controls', () => {
     expect(responsiveBlock).not.toContain('flex: 1 1 100% !important');
   });
 
+  it('keeps the top-row status cluster content-sized when grouped controls widen the wrapper', () => {
+    const customStart = DEVBAR_STYLES.indexOf('[data-devbar-custom-controls="true"] .devbar-status');
+    const customEnd = DEVBAR_STYLES.indexOf('[data-devbar-custom-controls="true"] .devbar-actions');
+    const customStatusBlock = DEVBAR_STYLES.slice(customStart, customEnd);
+
+    expect(customStatusBlock).toContain('flex: 0 1 auto');
+    expect(customStatusBlock).not.toContain('flex: 1 1 auto');
+  });
+
   it('uses compact simulated-mobile controls instead of touch-sized controls', () => {
     const mobileStart = DEVBAR_STYLES.indexOf('@media (max-width: 639px)');
     const mobileBlock = DEVBAR_STYLES.slice(mobileStart);

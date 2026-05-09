@@ -763,7 +763,7 @@ export const DEVBAR_STYLES = `
   overflow: visible;
 }
 [data-devbar-custom-controls="true"] .devbar-status {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   max-width: 100%;
   overflow: hidden;
 }

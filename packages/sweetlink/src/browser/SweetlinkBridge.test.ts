@@ -360,6 +360,17 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
     vi.useRealTimers();
   });
 
+  it('does not log expected WebSocket connection failures as console errors', () => {
+    const errorSpy = vi.fn();
+    console.error = errorSpy;
+    bridge.init();
+    const ws = MockWebSocket.instances[0];
+
+    ws.onerror?.({ isTrusted: true });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
   it('tries next port on origin mismatch close code 4001', () => {
     vi.useFakeTimers();
     bridge.init();
@@ -373,6 +384,19 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
 
     expect(MockWebSocket.instances.length).toBeGreaterThan(1);
     expect(MockWebSocket.instances[1].url).toBe('ws://localhost:9001');
+    vi.useRealTimers();
+  });
+
+  it('does not reconnect after destroy cancels a pending target switch', () => {
+    vi.useFakeTimers();
+    bridge.init();
+    const ws = MockWebSocket.instances[0];
+
+    ws.onclose?.({ code: 4001 });
+    bridge.destroy();
+    vi.advanceTimersByTime(200);
+
+    expect(MockWebSocket.instances).toHaveLength(1);
     vi.useRealTimers();
   });
 

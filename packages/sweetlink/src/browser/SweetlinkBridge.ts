@@ -81,6 +81,7 @@ export class SweetlinkBridge {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private savedScreenshotTimeout: ReturnType<typeof setTimeout> | null = null;
   private savedReviewTimeout: ReturnType<typeof setTimeout> | null = null;
+  private active = false;
 
   // HMR tracking
   private hmrState: HmrCaptureState = {
@@ -154,6 +155,7 @@ export class SweetlinkBridge {
   init(): void {
     if (typeof window === 'undefined') return;
 
+    this.active = true;
     this.capture.importEarlyLogs();
     this.capture.start();
     this.consoleLogs = this.capture.getLogs();
@@ -185,6 +187,8 @@ export class SweetlinkBridge {
    * Clean up and disconnect
    */
   destroy(): void {
+    this.active = false;
+
     // Clear timeouts
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     if (this.savedScreenshotTimeout) clearTimeout(this.savedScreenshotTimeout);
@@ -285,10 +289,21 @@ export class SweetlinkBridge {
     }
   }
 
+  private scheduleConnect(target: number | string, delayMs: number): void {
+    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
+    this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
+      if (!this.active) return;
+      this.connectWebSocket(target);
+    }, delayMs);
+  }
+
   private connectNextTarget(targetUrl: string, delayMs: number = PORT_RETRY_DELAY_MS): boolean {
+    if (!this.active) return false;
+
     const candidateIndex = this.wsUrlCandidates.indexOf(targetUrl);
     if (candidateIndex >= 0 && candidateIndex + 1 < this.wsUrlCandidates.length) {
-      setTimeout(() => this.connectWebSocket(this.wsUrlCandidates[candidateIndex + 1]!), delayMs);
+      this.scheduleConnect(this.wsUrlCandidates[candidateIndex + 1]!, delayMs);
       return true;
     }
 
@@ -296,7 +311,7 @@ export class SweetlinkBridge {
     if (targetPort !== null) {
       const nextPort = targetPort + 1;
       if (nextPort < this.basePort + this.maxPortRetries) {
-        setTimeout(() => this.connectWebSocket(nextPort), delayMs);
+        this.scheduleConnect(nextPort, delayMs);
         return true;
       }
     }
@@ -305,6 +320,8 @@ export class SweetlinkBridge {
   }
 
   private connectWebSocket(target: number | string): void {
+    if (!this.active) return;
+
     const wsUrl = this.getWsUrlForTarget(target);
     const ws = new WebSocket(wsUrl);
     let switchingTargets = false;
@@ -363,7 +380,7 @@ export class SweetlinkBridge {
                 this.log(
                   `[Sweetlink] No matching server found for port ${this.currentAppPort}. Will retry...`
                 );
-                setTimeout(() => this.connectWebSocket(this.basePort), PORT_SEARCH_FAIL_RETRY_MS);
+                this.scheduleConnect(this.basePort, PORT_SEARCH_FAIL_RETRY_MS);
               }
               return;
             }
@@ -421,15 +438,16 @@ export class SweetlinkBridge {
       }
 
       // Try to reconnect
-      this.reconnectTimeout = setTimeout(() => {
-        this.log('[Sweetlink] Attempting to reconnect...');
-        this.connectWebSocket(this.basePort);
-      }, RECONNECT_DELAY_MS);
+      this.scheduleConnect(this.basePort, RECONNECT_DELAY_MS);
     };
 
     ws.onerror = (error) => {
       clearTimeout(verificationTimeout);
-      console.error('[Sweetlink] WebSocket error:', error);
+      this.log('[Sweetlink] WebSocket connection error:', {
+        url: wsUrl,
+        readyState: ws.readyState,
+        error,
+      });
     };
   }
 

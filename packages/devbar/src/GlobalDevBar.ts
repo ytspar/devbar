@@ -160,6 +160,7 @@ export class GlobalDevBar {
   ws: WebSocket | null = null;
   consoleLogs: ConsoleLog[] = [];
   sweetlinkConnected = false;
+  sweetlinkAutoConnect = true;
   collapsed = false;
   capturing = false;
   copiedToClipboard = false;
@@ -317,6 +318,7 @@ export class GlobalDevBar {
         wsPath: sweetlinkOptions?.wsPath ?? runtimeConfig.wsPath,
         fallbackPort: this.baseWsPort,
       });
+      this.sweetlinkAutoConnect = sweetlinkOptions?.autoConnect ?? true;
     } else {
       this.currentAppPort = 0;
       this.baseWsPort = WS_PORT;
@@ -470,8 +472,12 @@ export class GlobalDevBar {
     // Load compact mode from storage
     loadCompactMode(this as DevBarState);
 
-    // Setup WebSocket connection
-    this.connectWebSocket();
+    // Setup WebSocket connection (skipped when sweetlink.autoConnect === false)
+    if (this.sweetlinkAutoConnect) {
+      this.connectWebSocket();
+    } else {
+      this.debug.ws('Sweetlink autoConnect disabled; skipping initial WebSocket connect');
+    }
 
     // Setup breakpoint detection
     setupBreakpointDetection(this as DevBarState);

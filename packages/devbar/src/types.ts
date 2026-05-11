@@ -97,6 +97,16 @@ export interface GlobalDevBarOptions {
     wsUrl?: string;
     /** Same-origin WebSocket path exposed by framework integrations. */
     wsPath?: string;
+    /**
+     * Whether to automatically attempt the WebSocket connection to the
+     * Sweetlink CLI on startup. Default: true.
+     *
+     * Set to false in projects that load DevBar but don't run the Sweetlink
+     * CLI — this silences the `WebSocket connection to 'ws://...' failed:
+     * ECONNREFUSED` noise the browser logs on every page load. The user can
+     * still opt in at runtime by calling `globalDevBar.connectWebSocket()`.
+     */
+    autoConnect?: boolean;
   };
   /** Enable debug logging. Pass true for all options, or an object for specific options. */
   debug?: boolean | DebugConfig;

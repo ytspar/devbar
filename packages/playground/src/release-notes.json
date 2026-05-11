@@ -1,5 +1,6 @@
 {
   "devbar": {
+    "1.15.1": "Republish of 1.15.0 with the actual `dist/` build of the autoConnect change. 1.15.0 was published from a stale local `dist/` that pre-dated the source edits, so it shipped with the version bump but no runtime/type changes. Use `1.15.1` (or higher); `1.15.0` is deprecated. No source change beyond the rebuild.",
     "1.15.0": "New `sweetlink.autoConnect` option (defaults to `true`). When set to `false`, devbar skips the initial WebSocket connection attempt to the Sweetlink CLI on startup — useful for projects that load devbar but don't run the Sweetlink daemon, where the unsuppressible browser-level `WebSocket connection to 'ws://...' failed: ECONNREFUSED` log on every page load is otherwise pure noise. Apps can still opt in at runtime by calling `globalDevBar.connectWebSocket()`. No behavior change for existing setups (autoConnect defaults to true).",
     "1.14.7": "Small-screen toolbar default: devbar now starts in compact mode at 860px and below while keeping explicit compact preferences and wide desktop expanded mode intact. This prevents mobile/tablet layouts from booting into the denser expanded toolbar.",
     "1.14.6": "Bumps @ytspar/sweetlink to 1.24.3 so workspace:^ resolves to the latest browser bridge reconnect hardening release.",

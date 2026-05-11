@@ -62,3 +62,4 @@ e2e/screenshots/
 
 # Root working copies
 /public/
+.npmrc.publish

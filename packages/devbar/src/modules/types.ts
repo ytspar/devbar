@@ -42,6 +42,12 @@ export interface DevBarState {
   // WebSocket
   ws: WebSocket | null;
   sweetlinkConnected: boolean;
+  /**
+   * When false, the initial connectWebSocket() call from setup is skipped.
+   * Sourced from `options.sweetlink.autoConnect`. Operators can still call
+   * `globalDevBar.connectWebSocket()` manually to opt in at runtime.
+   */
+  sweetlinkAutoConnect: boolean;
   wsVerified: boolean;
   serverProjectDir: string | null;
   serverGitBranch: string | null;

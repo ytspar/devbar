@@ -5,6 +5,7 @@
 import { preloadAxe } from '../../accessibility.js';
 import { BUTTON_COLORS, CSS_COLORS, PALETTE, withAlpha } from '../../constants.js';
 import { resolveSaveLocation } from '../../settings.js';
+import { copyTextToClipboard } from '../../ui/clipboard.js';
 import { createSvgIcon, getButtonStyles } from '../../ui/index.js';
 import { getDemoArtifactWarning, isDemoArtifactPath, isSweetlinkDemoMode } from '../demoMode.js';
 import { activateRulerMode } from '../ruler.js';
@@ -140,7 +141,7 @@ export function createScreenshotButton(state: DevBarState, accentColor: string):
         copyLink.onclick = async (e) => {
           e.stopPropagation();
           try {
-            await navigator.clipboard.writeText(screenshotPath);
+            await copyTextToClipboard(screenshotPath);
             copyLink.textContent = '\u2713 copied!';
             copyLink.style.cursor = 'default';
             copyLink.onclick = null;

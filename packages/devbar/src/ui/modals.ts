@@ -146,6 +146,10 @@ export function createModalHeader(config: ModalConfig): HTMLDivElement {
           copyBtn.textContent = 'Copy MD';
         }, 1500);
       } catch {
+        copyBtn.textContent = 'Copy Failed';
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy MD';
+        }, 1500);
         console.error('[GlobalDevBar] Failed to copy to clipboard');
       }
     };

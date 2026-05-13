@@ -74,6 +74,7 @@ describe('createCloseButton', () => {
     const btn = createCloseButton(() => {});
 
     expect(btn.tagName).toBe('BUTTON');
+    expect(btn.type).toBe('button');
   });
 
   it('uses multiplication sign as default text', () => {
@@ -138,6 +139,7 @@ describe('createStyledButton', () => {
     const btn = createStyledButton({ color: '#10b981', text: 'Test' });
 
     expect(btn.tagName).toBe('BUTTON');
+    expect(btn.type).toBe('button');
   });
 
   it('sets the button text', () => {

@@ -4,7 +4,7 @@
  */
 export async function copyTextToClipboard(text: string): Promise<void> {
   try {
-    if (navigator.clipboard?.writeText) {
+    if (canUseAsyncClipboard()) {
       await navigator.clipboard.writeText(text);
       return;
     }
@@ -16,26 +16,39 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   throw new Error('Clipboard write failed');
 }
 
+function canUseAsyncClipboard(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator.clipboard?.writeText !== 'function') return false;
+  if (typeof window === 'undefined') return true;
+  return window.isSecureContext !== false;
+}
+
 function copyTextWithTextarea(text: string): boolean {
   if (typeof document.execCommand !== 'function') return false;
+  if (!document.body) return false;
 
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
-  textarea.style.top = '-1000px';
-  textarea.style.left = '-1000px';
+  textarea.style.top = '0';
+  textarea.style.left = '0';
+  textarea.style.width = '1px';
+  textarea.style.height = '1px';
   textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
 
   document.body.appendChild(textarea);
 
   const selection = document.getSelection();
   const previousRange =
     selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   textarea.focus();
   textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
 
   let copied = false;
   try {

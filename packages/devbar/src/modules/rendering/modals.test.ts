@@ -522,6 +522,14 @@ describe('renderA11yModal', () => {
     expect(findTitle(overlay)).toBe('Accessibility Audit');
   });
 
+  it('does not show Copy MD while audit content is still loading', () => {
+    mockRunA11yAudit.mockReturnValue(new Promise(() => {}));
+    const state = createMockState();
+    renderA11yModal(state);
+
+    expect(document.body.textContent).not.toContain('Copy MD');
+  });
+
   it('shows success message when audit finds no violations', async () => {
     const auditResult = {
       violations: [],
@@ -730,6 +738,7 @@ describe('renderA11yModal', () => {
     await vi.waitFor(() => {
       expect(document.body.textContent).toContain('Audit Failed');
       expect(document.body.textContent).toContain('axe-core failed to load');
+      expect(document.body.textContent).not.toContain('Copy MD');
     });
   });
 

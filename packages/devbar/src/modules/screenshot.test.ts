@@ -232,6 +232,21 @@ describe('copyPathToClipboard', () => {
     );
     consoleError.mockRestore();
   });
+
+  it('falls back to textarea copy when async clipboard rejects', async () => {
+    mockWriteText.mockRejectedValue(new Error('denied'));
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn().mockReturnValue(true),
+    });
+
+    const state = createMockState();
+    await copyPathToClipboard(state, '/path');
+
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+    expect(state.copiedPath).toBe(true);
+    expect(state.render).toHaveBeenCalled();
+  });
 });
 
 describe('handleScreenshot', () => {

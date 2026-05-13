@@ -47,6 +47,7 @@ function applyButtonHoverEffects(
 export function createCloseButton(onClick: () => void, text = '\u00D7'): HTMLButtonElement {
   const color = CSS_COLORS.textMuted;
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.setAttribute('aria-label', text === '\u00D7' ? 'Close' : text);
   Object.assign(btn.style, {
     padding: '2px 6px',
@@ -96,6 +97,7 @@ export function createStyledButton(options: {
   } = options;
 
   const btn = document.createElement('button');
+  btn.type = 'button';
   Object.assign(btn.style, {
     padding: width ? undefined : padding,
     width,

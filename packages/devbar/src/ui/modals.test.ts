@@ -329,6 +329,26 @@ describe('createModalHeader', () => {
     expect(onCopyMd).toHaveBeenCalledTimes(1);
   });
 
+  it('Copy MD button shows failure state when copy rejects', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const header = createModalHeader({
+      color: '#10b981',
+      title: 'Title',
+      onClose: vi.fn(),
+      onCopyMd: vi.fn().mockRejectedValue(new Error('denied')),
+      sweetlinkConnected: false,
+    });
+
+    const copyBtn = Array.from(header.querySelectorAll('button')).find(
+      (btn) => btn.textContent === 'Copy MD'
+    )!;
+    copyBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(copyBtn.textContent).toBe('Copy Failed');
+    consoleError.mockRestore();
+  });
+
   it('Copy Context button copies evidence context text', async () => {
     const header = createModalHeader({
       color: '#10b981',

@@ -623,10 +623,11 @@ export function renderExpanded(state: DevBarState, customControls: DevBarControl
 
   const { position, accentColor, showMetrics, showScreenshot, showConsoleBadges } = state.options;
   const { errorCount, warningCount, infoCount } = state.getLogCounts();
+  const hasGroupedControls = customControls.some((control) => control.group);
 
   const isCentered = position === 'bottom-center';
   const wrapper = state.container;
-  if (customControls.length > 0) {
+  if (hasGroupedControls) {
     wrapper.dataset.devbarCustomControls = 'true';
   } else {
     delete wrapper.dataset.devbarCustomControls;

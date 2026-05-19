@@ -595,7 +595,7 @@ describe('renderExpanded', () => {
 
     // Main row only; compact plugin badges should not create a wide second row.
     expect(state.container!.children.length).toBe(1);
-    expect(state.container!.dataset.devbarCustomControls).toBe('true');
+    expect(state.container!.dataset.devbarCustomControls).toBeUndefined();
     const customRow = state.container!.querySelector(
       '.devbar-custom-controls-inline'
     ) as HTMLElement;
@@ -609,6 +609,14 @@ describe('renderExpanded', () => {
     const state = createMockState();
     state.container!.dataset.devbarCustomControls = 'true';
     renderExpanded(state, []);
+
+    expect(state.container!.dataset.devbarCustomControls).toBeUndefined();
+  });
+
+  it('removes grouped-control layout marker when only inline controls remain', () => {
+    const state = createMockState();
+    state.container!.dataset.devbarCustomControls = 'true';
+    renderExpanded(state, [{ id: 'release', label: 'v1.3.0 May 20, 2026', variant: 'info' }]);
 
     expect(state.container!.dataset.devbarCustomControls).toBeUndefined();
   });
@@ -691,6 +699,7 @@ describe('renderExpanded', () => {
     const state = createMockState();
     renderExpanded(state, [{ id: 'btn1', label: 'First', group: 'Cards', onClick: vi.fn() }]);
 
+    expect(state.container!.dataset.devbarCustomControls).toBe('true');
     const customRow = state.container!.children[1] as HTMLElement;
     expect(customRow.className).toBe('devbar-custom-controls devbar-custom-controls-row');
     const groupLabel = customRow.querySelector('.devbar-custom-group-label') as HTMLElement;

@@ -10,6 +10,28 @@ After implementing any visual/UI changes, you MUST:
 2. **Compare before/after** when making layout or styling changes
 3. **Verify at multiple viewports** for responsive design changes (mobile, tablet, desktop)
 
+## Coverage — scale verification to the change
+
+Screenshots must show the change **where it actually appears in the running
+app, in context** — verifying a component only in isolation (a component
+library / gallery view) is a *secondary* source, never the only proof. Scale
+coverage to the change:
+
+- **New or edited page / view** → capture it **in context** in the running app.
+- **Interactive element** → capture each meaningful **state** (default, hover,
+  focus, validation-error, empty, loading, disabled) as a named shot.
+- **Multi-step or branching element** (wizard, stepper, multi-stage modal,
+  branching form) → walk and capture **every step and every branch** ("all
+  paths"), not just the entry state. Use Playwright MCP to drive each path.
+- **New feature with a complex multi-stage process** → produce a **storyboard**:
+  an ordered screenshot sequence documenting the whole journey end to end.
+- **Reuse before create** → before adding an e2e spec for an affected area,
+  search the existing test suite and **expand or improve** a spec that already
+  covers it rather than writing a duplicate. Add a new spec only when none exists.
+- **Specs are durable, reusable assets** → capture specs are committed to the
+  project's e2e suite (not one-off throwaways), named by the affected area, and
+  runnable standalone so they re-verify in CI and on every future change.
+
 ## Tools
 
 ### Sweetlink (Quick Verification)

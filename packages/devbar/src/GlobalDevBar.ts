@@ -522,6 +522,15 @@ export class GlobalDevBar {
     if (this.schemaTimeout) clearTimeout(this.schemaTimeout);
     if (this.consoleLogsTimeout) clearTimeout(this.consoleLogsTimeout);
     if (this.a11yTimeout) clearTimeout(this.a11yTimeout);
+    if (this.designReviewErrorTimeout) clearTimeout(this.designReviewErrorTimeout);
+    // Recording render-interval leaks if the bar is destroyed mid-recording.
+    if (this.recordingTimer) clearInterval(this.recordingTimer);
+    // Ruler overlay leaves document listeners + an injected <style> + a body
+    // attribute if it's active at destroy; invoke its cleanup.
+    if (this.rulerCleanup) {
+      this.rulerCleanup();
+      this.rulerCleanup = null;
+    }
 
     // Remove event listeners
     if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);

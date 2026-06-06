@@ -2,6 +2,17 @@
  * Modal rendering for the DevBar: outline, schema, a11y, and design review modals.
  */
 
+import {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
+import {
+  checkMissingTags,
+  extractFavicons,
+  extractPageSchema,
+  isImageKey,
+  schemaToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/schema';
 import type { AxeImpact, AxeViolation } from '../../accessibility.js';
 import {
   a11yToMarkdown,
@@ -17,19 +28,9 @@ import {
   FONT_MONO,
   withAlpha,
 } from '../../constants.js';
-import {
-  extractDocumentOutline,
-  outlineToMarkdown,
-} from '@ytspar/sweetlink/browser/commands/outline';
-import {
-  checkMissingTags,
-  extractFavicons,
-  extractPageSchema,
-  isImageKey,
-  schemaToMarkdown,
-} from '@ytspar/sweetlink/browser/commands/schema';
 import type { OutlineNode } from '../../types.js';
 import {
+  copyTextToClipboard,
   createEmptyMessage,
   createInfoBox,
   createModalBox,
@@ -37,7 +38,6 @@ import {
   createModalHeader,
   createModalOverlay,
   createStyledButton,
-  copyTextToClipboard,
 } from '../../ui/index.js';
 import { focusModal } from '../../ui/modals.js';
 import {

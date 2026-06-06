@@ -1451,6 +1451,18 @@ describe('Convenience Functions', () => {
     expect(instance).toBeInstanceOf(GlobalDevBar);
   });
 
+  it('registers the annotate control by default (DEV-4516)', () => {
+    GlobalDevBar.clearControls();
+    initGlobalDevBar();
+    expect(GlobalDevBar.getControls().some((c) => c.id === 'annotate')).toBe(true);
+  });
+
+  it('annotate.enabled:false suppresses the annotate control', () => {
+    GlobalDevBar.clearControls();
+    initGlobalDevBar({ annotate: { enabled: false } });
+    expect(GlobalDevBar.getControls().some((c) => c.id === 'annotate')).toBe(false);
+  });
+
   it('getGlobalDevBar should return null when no instance exists', () => {
     expect(getGlobalDevBar()).toBeNull();
   });

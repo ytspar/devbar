@@ -5,8 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   loadCompactMode,
-  resolveCompactModeForViewport,
   RESPONSIVE_COMPACT_MAX_WIDTH,
+  resolveCompactModeForViewport,
   setThemeMode,
   setupTheme,
 } from './theme.js';

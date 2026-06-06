@@ -8,8 +8,8 @@
  */
 
 import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
-import { clearAllTooltips } from '../tooltips.js';
 import type { DevBarControl } from '../../types.js';
+import { clearAllTooltips } from '../tooltips.js';
 import { closeAllModals, type DevBarState } from '../types.js';
 import { renderCollapsed } from './collapsed.js';
 import { renderGuard, setRenderGuard } from './common.js';

@@ -27,6 +27,23 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Whether a URL is safe to navigate to (`location.href =` / `window.open`).
+ * Allows http/https absolute URLs and same-origin relative paths; rejects
+ * `javascript:`, `data:`, and other script-bearing schemes. Used to gate
+ * viewer URLs that arrive over the (untrusted) Sweetlink WebSocket — a
+ * `javascript:` URL would otherwise be DOM-XSS.
+ */
+export function isSafeNavigationUrl(url: string): boolean {
+  if (typeof url !== 'string' || url.trim() === '') return false;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Trigger a browser file download from a string content. */
 export function downloadFile(filename: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });

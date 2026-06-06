@@ -43,6 +43,7 @@
     "1.0.0": "Initial release — breakpoints, vitals, console, screenshots"
   },
   "sweetlink": {
+    "1.24.4": "UI Verification Mandate: add a 'Coverage — scale verification to the change' section. Visual evidence must show the change in context in the running app (component-library/gallery views are secondary), scaled to the change: in-context page capture, per-state frames for interactive elements, all-path frames for multi-step/branching elements, and a process storyboard for complex multi-stage features. Reuse-before-create (expand an existing e2e spec instead of duplicating) and durable, CI-runnable specs committed to the e2e suite.",
     "1.24.3": "Browser bridge reconnect hardening republish. Expected local WebSocket connection failures are debug-only instead of console.error spam, and pending reconnect or port-scan timers are cancelled on destroy so unmounted bridges cannot open new sockets later.",
     "1.24.2": "Browser bridge reconnect hardening. Expected local WebSocket connection failures are now debug-only instead of console.error spam, and pending reconnect/port-scan timers are cancelled on destroy so unmounted bridges cannot open new sockets later.",
     "1.24.1": "Widens the `vite` peer-dependency range to include `^8.0.0` (was `^5 || ^6 || ^7`). Vite 8 is GA (8.0.10 latest) and consumers on Vite 8 were hitting peer-conflict errors on install. Sweetlink does not import from vite at runtime — the peer is for the optional vite plugin / dev integration only — so the broader range is safe.",

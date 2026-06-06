@@ -29,7 +29,7 @@ export interface DevBarState {
   options: Required<
     Omit<
       GlobalDevBarOptions,
-      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode'
+      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode' | 'annotate'
     >
   > &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;

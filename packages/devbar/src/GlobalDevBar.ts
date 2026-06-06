@@ -35,18 +35,19 @@ import {
   WS_PORT,
 } from './constants.js';
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
+// Import module functions
+import { registerAnnotateControl } from './modules/annotate.js';
 import { setupKeyboardShortcuts } from './modules/keyboard.js';
 import { setupBreakpointDetection, setupPerformanceMonitoring } from './modules/performance.js';
 import { render as moduleRender } from './modules/rendering/index.js';
 import { handleScreenshot as moduleHandleScreenshot } from './modules/screenshot.js';
 import {
   loadCompactMode,
-  resolveCompactModeForViewport,
   setThemeMode as moduleSetThemeMode,
+  resolveCompactModeForViewport,
   setupTheme,
 } from './modules/theme.js';
 import type { DevBarState } from './modules/types.js';
-// Import module functions
 import { connectWebSocket, handleNotification } from './modules/websocket.js';
 import { type DevBarSettings, getSettingsManager, type SettingsManager } from './settings.js';
 import type {
@@ -149,7 +150,7 @@ export class GlobalDevBar {
   options: Required<
     Omit<
       GlobalDevBarOptions,
-      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode'
+      'defaultThemeMode' | 'sizeOverrides' | 'debug' | 'sweetlink' | 'themeMode' | 'annotate'
     >
   > &
     Pick<GlobalDevBarOptions, 'sizeOverrides'>;
@@ -725,6 +726,12 @@ export function initGlobalDevBar(options?: GlobalDevBarOptions): GlobalDevBar {
   const instance = new GlobalDevBar(options);
   instance.init();
   setGlobalInstance(instance);
+  // DEV-4516 — register the live-annotation control unless disabled. Injected
+  // via the static registerControl so the annotate module stays GlobalDevBar-free.
+  if (options?.annotate?.enabled !== false) {
+    const annotateOpts = options?.annotate?.endpoint ? { endpoint: options.annotate.endpoint } : {};
+    registerAnnotateControl((control) => GlobalDevBar.registerControl(control), annotateOpts);
+  }
   return instance;
 }
 

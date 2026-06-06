@@ -70,6 +70,18 @@ export interface GlobalDevBarOptions {
   };
   /** Whether to show the screenshot button. Default: true */
   showScreenshot?: boolean;
+  /**
+   * Live visual-feedback annotation (DEV-4516). Adds an "Annotate" control that
+   * lets you pin region comments onto the running page; each pin POSTs to the
+   * `el-visual-evidence review-ui --listen` server's feedback endpoint.
+   * Default: enabled, endpoint http://localhost:3846/api/feedback.
+   */
+  annotate?: {
+    /** Default: true. Set false to hide the Annotate control. */
+    enabled?: boolean;
+    /** Override the review-ui feedback endpoint. */
+    endpoint?: string;
+  };
   /** Whether to show console error/warning badges. Default: true */
   showConsoleBadges?: boolean;
   /** Whether to show tooltips on hover. Default: true */

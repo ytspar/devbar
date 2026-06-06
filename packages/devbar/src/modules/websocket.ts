@@ -389,13 +389,17 @@ function handleGetLogsCommand(
 }
 
 function handleQueryDomCommand(
+  state: DevBarState,
   ws: WebSocket,
   command: SweetlinkCommand & { type: 'query-dom' }
 ): void {
   if (command.selector) {
     const elements = Array.from(document.querySelectorAll(command.selector));
     const results = elements.map((el: Element) => {
-      if (command.property)
+      // DEV-4521 — arbitrary property reflection can exfiltrate non-public DOM
+      // properties; gate it behind the same opt-in as exec-js. The safe summary
+      // (tag/class/id/text) stays available without opt-in.
+      if (command.property && state.allowRemoteExec)
         return (el as unknown as Record<string, unknown>)[command.property] ?? null;
       return {
         tagName: el.tagName,
@@ -414,7 +418,26 @@ function handleQueryDomCommand(
   }
 }
 
-function handleExecJsCommand(ws: WebSocket, command: SweetlinkCommand & { type: 'exec-js' }): void {
+function handleExecJsCommand(
+  state: DevBarState,
+  ws: WebSocket,
+  command: SweetlinkCommand & { type: 'exec-js' }
+): void {
+  // DEV-4521 — remote code execution is OFF unless explicitly opted in. The WS
+  // has no origin/auth model, so honoring exec-js by default is an
+  // unauthenticated RCE. Refuse (don't eval) when not opted in.
+  if (!state.allowRemoteExec) {
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error:
+          'exec-js is disabled (DEV-4521): remote code execution over the Sweetlink WebSocket is off by default. ' +
+          'Enable with initGlobalDevBar({ sweetlink: { allowRemoteExec: true } }) only if you trust everything that can reach the WS port.',
+        timestamp: Date.now(),
+      })
+    );
+    return;
+  }
   if (command.code && typeof command.code === 'string' && command.code.length <= 10000) {
     try {
       // Use indirect eval to avoid strict mode issues
@@ -733,10 +756,10 @@ async function handleSweetlinkCommand(
       handleGetLogsCommand(state, ws, command);
       break;
     case 'query-dom':
-      handleQueryDomCommand(ws, command);
+      handleQueryDomCommand(state, ws, command);
       break;
     case 'exec-js':
-      handleExecJsCommand(ws, command);
+      handleExecJsCommand(state, ws, command);
       break;
     case 'get-a11y':
       await handleGetA11yCommand(ws, command);

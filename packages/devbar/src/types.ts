@@ -119,6 +119,20 @@ export interface GlobalDevBarOptions {
      * still opt in at runtime by calling `globalDevBar.connectWebSocket()`.
      */
     autoConnect?: boolean;
+    /**
+     * Whether to honor the `exec-js` command — remote JavaScript execution in
+     * the page's origin — from the Sweetlink WebSocket. **Default: false (DEV-4521).**
+     *
+     * The WebSocket has no origin/auth model, so `exec-js` is otherwise an
+     * unauthenticated RCE: any local process, or any web page that can reach
+     * `ws://localhost:<port>` (WebSocket connections are not gated by
+     * same-origin policy), could execute arbitrary code in this page. With this
+     * off (the default) `exec-js` and arbitrary `query-dom` property reflection
+     * are refused; the daemon's screenshot/recording/outline/schema/a11y
+     * features are unaffected. Enable ONLY when you trust everything that can
+     * reach the Sweetlink port (e.g. a single-user local dev box).
+     */
+    allowRemoteExec?: boolean;
   };
   /** Enable debug logging. Pass true for all options, or an object for specific options. */
   debug?: boolean | DebugConfig;

@@ -43,6 +43,7 @@ function createMockState(overrides: Partial<DevBarState> = {}): DevBarState {
     overlayElement: null,
     ws: null,
     sweetlinkConnected: false,
+    allowRemoteExec: false,
     wsVerified: false,
     serverProjectDir: null,
     serverGitBranch: null,
@@ -1134,13 +1135,14 @@ describe('connectWebSocket - command handlers', () => {
     el.remove();
   });
 
-  it('handles query-dom command with property', () => {
+  it('handles query-dom command with property (opt-in)', () => {
     const el = document.createElement('div');
     el.className = 'test-prop';
     el.textContent = 'content here';
     document.body.appendChild(el);
 
-    const state = createMockState();
+    // Arbitrary property reflection requires allowRemoteExec (DEV-4521).
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1167,7 +1169,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles exec-js command successfully', () => {
-    const state = createMockState();
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1180,7 +1182,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles exec-js command with error', () => {
-    const state = createMockState();
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1193,7 +1195,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles exec-js with non-Error throw', () => {
-    const state = createMockState();
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1206,7 +1208,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles exec-js with code exceeding 10000 chars (no-op)', () => {
-    const state = createMockState();
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1217,7 +1219,7 @@ describe('connectWebSocket - command handlers', () => {
   });
 
   it('handles exec-js with no code (no-op)', () => {
-    const state = createMockState();
+    const state = createMockState({ allowRemoteExec: true });
     const { ws } = connectAndVerify(state);
 
     ws.onmessage!({
@@ -1225,6 +1227,38 @@ describe('connectWebSocket - command handlers', () => {
     });
 
     expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('refuses exec-js by default (DEV-4521 — no unauthenticated RCE)', () => {
+    const state = createMockState(); // allowRemoteExec defaults to false
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'exec-js', code: '2 + 2' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(false);
+    expect(sent.error).toMatch(/exec-js is disabled/i);
+    // Crucially: the code was NOT evaluated (no `data: 4`).
+    expect(sent.data).toBeUndefined();
+  });
+
+  it('query-dom returns the safe summary without opt-in; refuses arbitrary property reflection', () => {
+    document.body.innerHTML = '<div id="t" data-secret="x">hi</div>';
+    const state = createMockState(); // allowRemoteExec false
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({ type: 'query-dom', selector: '#t', property: 'id' }),
+    });
+
+    const sent = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sent.success).toBe(true);
+    // Property reflection gated off → falls back to the safe summary object,
+    // not the raw `id` string value.
+    expect(sent.data.results[0]).toMatchObject({ tagName: 'DIV', id: 't' });
+    document.body.innerHTML = '';
   });
 
   it('handles get-outline command successfully', async () => {

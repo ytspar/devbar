@@ -162,6 +162,8 @@ export class GlobalDevBar {
   consoleLogs: ConsoleLog[] = [];
   sweetlinkConnected = false;
   sweetlinkAutoConnect = true;
+  // DEV-4521 — remote `exec-js` is OFF by default (unauthenticated RCE otherwise).
+  allowRemoteExec = false;
   collapsed = false;
   capturing = false;
   copiedToClipboard = false;
@@ -320,6 +322,7 @@ export class GlobalDevBar {
         fallbackPort: this.baseWsPort,
       });
       this.sweetlinkAutoConnect = sweetlinkOptions?.autoConnect ?? true;
+      this.allowRemoteExec = sweetlinkOptions?.allowRemoteExec ?? false;
     } else {
       this.currentAppPort = 0;
       this.baseWsPort = WS_PORT;

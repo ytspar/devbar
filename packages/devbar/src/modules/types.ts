@@ -48,6 +48,13 @@ export interface DevBarState {
    * `globalDevBar.connectWebSocket()` manually to opt in at runtime.
    */
   sweetlinkAutoConnect: boolean;
+  /**
+   * Whether remote `exec-js` (and arbitrary `query-dom` property reflection) is
+   * honored from the Sweetlink WebSocket. Sourced from
+   * `options.sweetlink.allowRemoteExec`; default false (DEV-4521) since the WS
+   * is unauthenticated and `exec-js` is an RCE primitive.
+   */
+  allowRemoteExec: boolean;
   wsVerified: boolean;
   serverProjectDir: string | null;
   serverGitBranch: string | null;

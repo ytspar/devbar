@@ -46,7 +46,18 @@ export { initGlobalDevBar };
   "utf8",
 );
 
-const shared = {
+// Single build with code-splitting so the two entries SHARE chunks and, more
+// importantly, the dynamic import()s of the heavy deps (axe-core ~570KB,
+// html2canvas-pro ~200KB — both already `import()`ed lazily in source) are
+// emitted as on-demand chunks instead of being inlined into the eager entry.
+// Without `splitting`, esbuild inlined them, defeating the lazy-load and leaving
+// a ~992KB eager bundle. With it, the entry drops to ~220KB and the heavy chunks
+// load only when the a11y-audit / screenshot features are invoked.
+//
+// Trade-off: dist/browser/ now ships the entry files PLUS chunks/*. No-bundler
+// consumers serving from node_modules must serve the whole dist/browser/ dir
+// (the entry fetches its chunks by relative URL), not a single copied file.
+const result = await build({
   bundle: true,
   format: "esm",
   platform: "browser",
@@ -56,27 +67,28 @@ const shared = {
   logLevel: "warning",
   metafile: true,
   conditions: ["browser", "import", "default"],
-};
-
-const apiResult = await build({
-  ...shared,
-  entryPoints: [join(pkgRoot, "dist/index.js")],
-  outfile: join(browserDir, "devbar.js"),
-});
-
-const autoResult = await build({
-  ...shared,
-  entryPoints: [autoEntry],
-  outfile: join(browserDir, "devbar.auto.js"),
+  splitting: true,
+  entryPoints: {
+    devbar: join(pkgRoot, "dist/index.js"),
+    "devbar.auto": autoEntry,
+  },
+  outdir: browserDir,
+  entryNames: "[name]",
+  chunkNames: "chunks/[name]-[hash]",
 });
 
 rmSync(autoEntry, { force: true });
 
-function size(result) {
-  const out = result.metafile?.outputs ?? {};
-  const first = Object.keys(out)[0];
-  return first ? (out[first].bytes / 1024).toFixed(1) : "?";
+function sizeOf(outputs, suffix) {
+  const key = Object.keys(outputs).find((k) => k.endsWith(suffix));
+  return key ? (outputs[key].bytes / 1024).toFixed(1) : "?";
 }
 
-console.log(`[build-browser] dist/browser/devbar.js (${size(apiResult)} KB)`);
-console.log(`[build-browser] dist/browser/devbar.auto.js (${size(autoResult)} KB)`);
+const outputs = result.metafile?.outputs ?? {};
+const chunkBytes = Object.entries(outputs)
+  .filter(([k]) => k.includes("/chunks/"))
+  .reduce((sum, [, v]) => sum + v.bytes, 0);
+
+console.log(`[build-browser] dist/browser/devbar.js (${sizeOf(outputs, "browser/devbar.js")} KB eager entry)`);
+console.log(`[build-browser] dist/browser/devbar.auto.js (${sizeOf(outputs, "browser/devbar.auto.js")} KB eager entry)`);
+console.log(`[build-browser] on-demand chunks: ${(chunkBytes / 1024).toFixed(1)} KB (loaded only when their feature runs)`);

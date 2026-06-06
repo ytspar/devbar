@@ -73,9 +73,7 @@ describe('activateRulerMode', () => {
     const cleanup = activateRulerMode(makeState());
 
     const target = document.getElementById('target')!;
-    target.dispatchEvent(
-      new MouseEvent('mousemove', { bubbles: true, clientX: 50, clientY: 15 })
-    );
+    target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 50, clientY: 15 }));
 
     // The hover overlay container should still exist.
     const overlayChildren = document.querySelectorAll('[data-devbar-ruler]');

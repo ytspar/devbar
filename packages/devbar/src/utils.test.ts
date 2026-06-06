@@ -1,5 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { canvasToDataUrl, delay, formatArg, formatArgs, prepareForCapture } from './utils.js';
+import {
+  canvasToDataUrl,
+  delay,
+  formatArg,
+  formatArgs,
+  isSafeNavigationUrl,
+  prepareForCapture,
+} from './utils.js';
+
+describe('isSafeNavigationUrl', () => {
+  it('allows http/https absolute URLs', () => {
+    expect(isSafeNavigationUrl('https://example.test/viewer.html')).toBe(true);
+    expect(isSafeNavigationUrl('http://localhost:9223/viewer')).toBe(true);
+  });
+
+  it('allows same-origin relative paths', () => {
+    expect(isSafeNavigationUrl('/sessions/abc/viewer.html')).toBe(true);
+    expect(isSafeNavigationUrl('viewer.html')).toBe(true);
+  });
+
+  it('rejects script-bearing schemes', () => {
+    const xss = ['java', 'script', ':alert(1)'].join('');
+    expect(isSafeNavigationUrl(xss)).toBe(false);
+    expect(isSafeNavigationUrl('data:text/html,x')).toBe(false);
+  });
+
+  it('rejects empty / non-string input', () => {
+    expect(isSafeNavigationUrl('')).toBe(false);
+    expect(isSafeNavigationUrl('   ')).toBe(false);
+    expect(isSafeNavigationUrl(undefined as unknown as string)).toBe(false);
+  });
+});
 
 describe('formatArg', () => {
   it('formats strings as-is', () => {

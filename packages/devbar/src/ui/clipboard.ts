@@ -32,7 +32,8 @@ function copyTextWithTextarea(text: string): boolean {
   const selection = document.getSelection();
   const previousRange =
     selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
   textarea.focus();
   textarea.select();

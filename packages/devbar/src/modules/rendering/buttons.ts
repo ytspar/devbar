@@ -6,6 +6,7 @@ import { preloadAxe } from '../../accessibility.js';
 import { BUTTON_COLORS, CSS_COLORS, PALETTE, withAlpha } from '../../constants.js';
 import { resolveSaveLocation } from '../../settings.js';
 import { createSvgIcon, getButtonStyles } from '../../ui/index.js';
+import { isSafeNavigationUrl } from '../../utils.js';
 import { getDemoArtifactWarning, isDemoArtifactPath, isSweetlinkDemoMode } from '../demoMode.js';
 import { activateRulerMode } from '../ruler.js';
 import {
@@ -527,8 +528,11 @@ export function createRecordButton(state: DevBarState): HTMLButtonElement {
 
   btn.onclick = (e) => {
     if (e.shiftKey && state.lastViewerPath && !isActive) {
-      // Open last viewer
-      window.open(state.lastViewerPath, '_blank');
+      // Open last viewer. lastViewerPath is validated at assignment, but guard
+      // here too — never window.open an unvalidated scheme (defense-in-depth).
+      if (isSafeNavigationUrl(state.lastViewerPath)) {
+        window.open(state.lastViewerPath, '_blank');
+      }
       return;
     }
 

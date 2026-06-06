@@ -14,8 +14,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createModalEvidenceContext } from './evidenceContext.js';
 import type { DevBarState } from '../types.js';
+import { createModalEvidenceContext } from './evidenceContext.js';
 
 function makeState(overrides: Partial<DevBarState> = {}): DevBarState {
   return { lastScreenshot: null, ...overrides } as DevBarState;

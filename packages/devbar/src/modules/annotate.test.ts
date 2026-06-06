@@ -106,6 +106,64 @@ describe('activateAnnotateMode', () => {
     // Idempotent — second call does not throw.
     expect(() => cleanup()).not.toThrow();
   });
+
+  it('Escape exits and fires onExit', () => {
+    let exited = 0;
+    const cleanup = activateAnnotateMode({ onExit: () => exited++ });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(exited).toBe(1);
+    expect(document.querySelector('[data-devbar="annotate-overlay"]')).toBeNull();
+    cleanup(); // no-op, already cleaned
+  });
+
+  it('clicking a target opens a popover; Pin submits a devbar pin and drops a marker', async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url, init });
+        return new Response(null, { status: 0 });
+      })
+    );
+    document.body.innerHTML = '<main><button id="cta">Buy</button></main>';
+    const cleanup = activateAnnotateMode({ endpoint: 'http://localhost:3846/api/feedback' });
+    const target = document.getElementById('cta') as HTMLElement;
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 10, clientY: 10 }));
+
+    const ta = document.querySelector('textarea');
+    expect(ta).not.toBeNull();
+    (ta as HTMLTextAreaElement).value = 'use the brand token';
+    (ta as HTMLTextAreaElement).dispatchEvent(new Event('input', { bubbles: true }));
+
+    const pinBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Pin'
+    );
+    expect(pinBtn).toBeDefined();
+    pinBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(String(calls[0].init.body));
+    expect(body.pins[0]).toMatchObject({ source: 'devbar', comment: 'use the brand token' });
+    expect(body.pins[0].domSelector).toContain('#cta');
+    vi.unstubAllGlobals();
+    cleanup();
+  });
+
+  it('empty comment does not submit', () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    document.body.innerHTML = '<button id="b">x</button>';
+    const cleanup = activateAnnotateMode();
+    document.getElementById('b')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const pinBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Pin'
+    );
+    pinBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+    cleanup();
+  });
 });
 
 describe('registerAnnotateControl', () => {
@@ -121,5 +179,21 @@ describe('registerAnnotateControl', () => {
     // Click again → exits.
     last().onClick?.();
     expect(last().active).toBe(false);
+  });
+
+  it('Escape inside annotate mode resyncs the control to inactive (no stuck-active bug)', () => {
+    document.body.innerHTML = '';
+    const registered: Array<{ id: string; active?: boolean; onClick?: () => void }> = [];
+    registerAnnotateControl((c) => registered.push(c));
+    const last = () => registered[registered.length - 1];
+    last().onClick?.(); // enter annotate mode
+    expect(last().active).toBe(true);
+    // Press Escape inside the overlay — must re-register the control as inactive.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(last().active).toBe(false);
+    // And a subsequent click re-enters (not a wasted no-op click).
+    last().onClick?.();
+    expect(last().active).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   });
 });

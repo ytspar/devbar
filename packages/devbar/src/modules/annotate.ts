@@ -42,6 +42,12 @@ export interface DevbarPin {
 export interface AnnotateOptions {
   /** review-ui --listen feedback endpoint. Default: http://localhost:3846/api/feedback. */
   endpoint?: string;
+  /**
+   * Called when annotate mode exits from *inside* the overlay (Escape key), so
+   * the owner (e.g. the toolbar control) can resync its state. Not called when
+   * the owner drives the returned cleanup itself.
+   */
+  onExit?: () => void;
 }
 
 const DEFAULT_ENDPOINT = 'http://localhost:3846/api/feedback';
@@ -152,6 +158,9 @@ export function activateAnnotateMode(opts: AnnotateOptions = {}): () => void {
   document.body.style.cursor = 'crosshair';
 
   let popoverOpen = false;
+  // Short-circuit hover work when the pointer stays within the same element —
+  // avoids a forced layout (getBoundingClientRect) on every mousemove pixel.
+  let lastTarget: Element | null = null;
 
   function isDevbarEl(el: Element): boolean {
     return !!el.closest(
@@ -164,8 +173,11 @@ export function activateAnnotateMode(opts: AnnotateOptions = {}): () => void {
     const target = e.target as Element;
     if (!target || isDevbarEl(target)) {
       hover.style.display = 'none';
+      lastTarget = null;
       return;
     }
+    if (target === lastTarget) return;
+    lastTarget = target;
     const r = target.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) {
       hover.style.display = 'none';
@@ -197,6 +209,9 @@ export function activateAnnotateMode(opts: AnnotateOptions = {}): () => void {
     if (e.key === 'Escape') {
       e.preventDefault();
       cleanup();
+      // Exit came from inside the overlay — let the owner (toolbar control)
+      // resync, so the Annotate button doesn't stay stuck in the active state.
+      opts.onExit?.();
     }
   }
 
@@ -381,7 +396,15 @@ export function registerAnnotateControl(
           cleanup();
           cleanup = null;
         } else {
-          cleanup = activateAnnotateMode(opts);
+          // onExit fires when the user presses Esc inside the overlay; resync the
+          // control so its active highlight clears without a wasted extra click.
+          cleanup = activateAnnotateMode({
+            ...opts,
+            onExit: () => {
+              cleanup = null;
+              register(build());
+            },
+          });
         }
         register(build());
       },

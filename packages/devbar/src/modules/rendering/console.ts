@@ -6,12 +6,12 @@ import type { ConsoleCapture } from '@ytspar/sweetlink/browser/consoleCapture';
 import { BUTTON_COLORS, CSS_COLORS } from '../../constants.js';
 import type { ConsoleLog } from '../../types.js';
 import {
+  copyTextToClipboard,
   createEmptyMessage,
   createModalBox,
   createModalContent,
   createModalHeader,
   createModalOverlay,
-  copyTextToClipboard,
   focusModal,
 } from '../../ui/index.js';
 import { consoleLogsToMarkdown, handleSaveConsoleLogs } from '../screenshot.js';

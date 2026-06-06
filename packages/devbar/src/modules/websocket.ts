@@ -5,6 +5,11 @@
  * DevBarState rather than referencing the class directly.
  */
 
+import {
+  extractDocumentOutline,
+  outlineToMarkdown,
+} from '@ytspar/sweetlink/browser/commands/outline';
+import { extractPageSchema, schemaToMarkdown } from '@ytspar/sweetlink/browser/commands/schema';
 import { runA11yAudit } from '../accessibility.js';
 import {
   BASE_RECONNECT_DELAY_MS,
@@ -17,13 +22,9 @@ import {
   SCREENSHOT_NOTIFICATION_MS,
 } from '../constants.js';
 import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
-import {
-  extractDocumentOutline,
-  outlineToMarkdown,
-} from '@ytspar/sweetlink/browser/commands/outline';
-import { extractPageSchema, schemaToMarkdown } from '@ytspar/sweetlink/browser/commands/schema';
 import type { DevBarSettings } from '../settings.js';
 import type { SweetlinkCommand } from '../types.js';
+import { isSafeNavigationUrl } from '../utils.js';
 import type { DevBarState } from './types.js';
 
 /**
@@ -184,17 +185,20 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
           const data = message as Record<string, unknown>;
           const viewerUrl = data.viewerUrl as string | undefined;
 
-          // Navigate the pre-opened window to the viewer
-          if (viewerUrl && state.pendingViewerWindow) {
-            state.pendingViewerWindow.location.href = viewerUrl;
+          // Navigate the pre-opened window to the viewer. The URL arrives over
+          // the (untrusted) WebSocket, so validate the scheme before navigating
+          // — a `javascript:` URL would be DOM-XSS in the opened window.
+          const safeViewerUrl = viewerUrl && isSafeNavigationUrl(viewerUrl) ? viewerUrl : undefined;
+          if (safeViewerUrl && state.pendingViewerWindow) {
+            state.pendingViewerWindow.location.href = safeViewerUrl;
             state.pendingViewerWindow = null;
           } else {
-            // No URL — close the blank tab
+            // No URL (or unsafe) — close the blank tab
             cleanupPendingWindow(state);
           }
 
-          if (viewerUrl) {
-            state.lastViewerPath = viewerUrl;
+          if (safeViewerUrl) {
+            state.lastViewerPath = safeViewerUrl;
           }
         } else {
           // Stop failed — clean up the blank tab
@@ -219,6 +223,12 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
       state.wsVerified = false;
       state.serverProjectDir = null;
       state.settingsManager.setConnected(false);
+      // If the socket drops mid-recording, the 1s render interval would run
+      // forever (its clear only happens on the record-stop response).
+      if (state.recordingTimer) {
+        clearInterval(state.recordingTimer);
+        state.recordingTimer = null;
+      }
       state.debug.ws('WebSocket disconnected');
       state.render();
 
@@ -687,7 +697,7 @@ function handleSettingsLoadedCommand(
   state: DevBarState,
   command: SweetlinkCommand & { type: 'settings-loaded' }
 ): void {
-  handleSettingsLoaded(state, (command.settings as unknown) as DevBarSettings | null);
+  handleSettingsLoaded(state, command.settings as unknown as DevBarSettings | null);
 }
 
 function handleSettingsSavedCommand(

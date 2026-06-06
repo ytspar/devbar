@@ -7,6 +7,7 @@
  */
 
 import { BUTTON_COLORS, CSS_COLORS, FONT_MONO, withAlpha } from '../constants.js';
+import { clearChildren } from './rendering/common.js';
 import type { DevBarState } from './types.js';
 
 const RULER_Z_INDEX = '10001';
@@ -68,15 +69,6 @@ function createOutlineBox(rect: DOMRect, pinned: boolean): HTMLDivElement {
   box.setAttribute('data-devbar-ruler', 'box');
 
   return box;
-}
-
-/**
- * Remove all child nodes from a container element.
- */
-function clearChildren(el: HTMLElement): void {
-  while (el.firstChild) {
-    el.removeChild(el.firstChild);
-  }
 }
 
 /**

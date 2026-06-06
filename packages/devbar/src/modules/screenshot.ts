@@ -4,15 +4,6 @@
  * Extracted from GlobalDevBar to reduce file size.
  */
 
-import type { AxeResult } from '../accessibility.js';
-import { a11yToMarkdown } from '../accessibility.js';
-import {
-  CLIPBOARD_NOTIFICATION_MS,
-  SCREENSHOT_BLUR_DELAY_MS,
-  SCREENSHOT_NOTIFICATION_MS,
-  SCREENSHOT_SCALE,
-} from '../constants.js';
-import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
 import {
   extractDocumentOutline,
   outlineToMarkdown,
@@ -23,6 +14,15 @@ import {
   extractPageSchema,
   schemaToMarkdown,
 } from '@ytspar/sweetlink/browser/commands/schema';
+import type { AxeResult } from '../accessibility.js';
+import { a11yToMarkdown } from '../accessibility.js';
+import {
+  CLIPBOARD_NOTIFICATION_MS,
+  SCREENSHOT_BLUR_DELAY_MS,
+  SCREENSHOT_NOTIFICATION_MS,
+  SCREENSHOT_SCALE,
+} from '../constants.js';
+import { getHtml2Canvas } from '../lazy/lazyHtml2Canvas.js';
 import { resolveSaveLocation } from '../settings.js';
 import {
   canvasToDataUrl,

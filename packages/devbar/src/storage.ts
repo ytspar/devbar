@@ -4,7 +4,6 @@
  * Utilities for inspecting and managing browser storage (localStorage, sessionStorage, cookies).
  */
 
-
 /**
  * Storage item with parsed value
  */
@@ -160,4 +159,3 @@ export function deleteCookie(name: string): void {
   // biome-ignore lint/suspicious/noDocumentCookie: necessary for cookie deletion
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
-

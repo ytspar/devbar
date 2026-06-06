@@ -187,7 +187,9 @@ describe('DEVBAR_STYLES responsive custom controls', () => {
   });
 
   it('keeps the top-row status cluster content-sized when grouped controls widen the wrapper', () => {
-    const customStart = DEVBAR_STYLES.indexOf('[data-devbar-custom-controls="true"] .devbar-status');
+    const customStart = DEVBAR_STYLES.indexOf(
+      '[data-devbar-custom-controls="true"] .devbar-status'
+    );
     const customEnd = DEVBAR_STYLES.indexOf('[data-devbar-custom-controls="true"] .devbar-actions');
     const customStatusBlock = DEVBAR_STYLES.slice(customStart, customEnd);
 

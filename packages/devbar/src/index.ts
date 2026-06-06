@@ -58,6 +58,17 @@ export {
 } from './GlobalDevBar.js';
 // Lazy loading utilities
 export { getHtml2Canvas } from './lazy/index.js';
+// Live visual-feedback annotation (DEV-4516)
+export {
+  type AnnotateOptions,
+  activateAnnotateMode,
+  buildSelector,
+  type DevbarPin,
+  type DevbarPinKind,
+  registerAnnotateControl,
+  submitPin,
+  viewportBucket,
+} from './modules/annotate.js';
 // Network monitoring utilities
 export {
   type NetworkEntry,
@@ -138,7 +149,6 @@ export {
   DEVBAR_LOGO_VIEWBOX,
   getDevBarLogoSvg,
 } from './ui/icons.js';
-
 // Re-export utilities for external use
 export {
   canvasToDataUrl,

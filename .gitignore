@@ -55,6 +55,12 @@ serviceAccountKey.json
 # Claude Code local settings
 .claude/
 claude-skills/
+# Carve-out: keep the sweetlink source-of-truth tracked. The bare
+# `claude-skills/` rule above is meant for consumer-project symlinks to the
+# published package; the in-repo source under packages/sweetlink/ must ship.
+# See DEV-4726 (regression from DEV-4697 PR #13).
+!packages/sweetlink/claude-skills/
+!packages/sweetlink/claude-skills/**
 
 # E2E test snapshots (platform-specific)
 e2e/*-snapshots/

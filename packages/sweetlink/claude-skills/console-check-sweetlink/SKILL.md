@@ -43,7 +43,7 @@ pnpm sweetlink console --errors
 pnpm sweetlink console --last 20
 ```
 
-Full flag reference for `logs` / `console` → see the canonical context.
+Full flag reference for `logs` / `console` → run `pnpm sweetlink <cmd> --help` (authoritative, always live).
 
 ## Zero-error policy
 

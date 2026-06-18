@@ -82,7 +82,7 @@ pnpm sweetlink fill @e5 "test@example.com"
 pnpm sweetlink screenshot --hifi --output .tmp/screenshots/after.png
 ```
 
-Full flag reference for `screenshot`, `snapshot`, `click`, `fill`, `daemon`, `console`, `record`, `proof`, etc. → see the canonical context above, or `pnpm sweetlink <cmd> --help`.
+Full flag reference for `screenshot`, `snapshot`, `click`, `fill`, `daemon`, `console`, `record`, `proof`, etc. → run `pnpm sweetlink <cmd> --help` (authoritative, always live). The canonical context covers architecture and setup but lags newer command flags.
 
 ## Agent-Browser — quick call patterns
 

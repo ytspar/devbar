@@ -51,7 +51,7 @@ pnpm sweetlink screenshot --viewport-width 1024 --viewport-height 768 --output .
 pnpm sweetlink screenshot --viewport mobile --device-scale-factor 2 --output .tmp/screenshots/mobile-retina.png
 ```
 
-`--responsive` (daemon) is the preferred one-shot. Per-breakpoint manual is fine when you want a subset or different selectors per frame. Full flag reference → canonical context.
+`--responsive` (daemon) is the preferred one-shot. Per-breakpoint manual is fine when you want a subset or different selectors per frame. Full flag reference → run `pnpm sweetlink <cmd> --help` (authoritative, always live).
 
 ## Per-breakpoint quality checklist
 

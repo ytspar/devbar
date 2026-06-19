@@ -1,36 +1,138 @@
-# Publish production releases to NPM and create GitHub releases
+# Publish npm releases through a single npm trusted-publisher workflow.
 #
-# Triggers:
-# - Manual workflow dispatch with optional per-package version inputs
+# npm allows one trusted publisher connection per package, so production and
+# canary publishing both live in this workflow. Configure each npm package to
+# trust GitHub repository ytspar/devbar and workflow release.yml.
 #
-# Provide a version for each package you want to release (leave blank to skip).
-# Examples:
-#   sweetlink_version="1.2.0"                    → publishes @ytspar/sweetlink@1.2.0
-#   devbar_version="1.3.0"                       → publishes @ytspar/devbar@1.3.0
-#   sweetlink_version="1.2.0" devbar_version="1.3.0" → publishes both
+# Keep publish steps free of NODE_AUTH_TOKEN/NPM_TOKEN. pnpm publish resolves
+# workspace:* ranges before upload, and with no static token configured it lets
+# npm's trusted-publisher OIDC exchange authenticate the publish.
 
-name: Production Release
+name: Package Release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Release mode'
+        required: true
+        type: choice
+        default: production
+        options:
+          - production
+          - canary
       sweetlink_version:
-        description: 'Sweetlink version (e.g. 1.2.0) — leave blank to skip'
+        description: 'Sweetlink production version (e.g. 1.2.0) - leave blank to skip'
         required: false
         type: string
       devbar_version:
-        description: 'Devbar version (e.g. 1.3.0) — leave blank to skip'
+        description: 'Devbar production version (e.g. 1.3.0) - leave blank to skip'
+        required: false
+        type: string
+      version_suffix:
+        description: 'Canary suffix (defaults to git short SHA)'
         required: false
         type: string
 
-# Permissions for OIDC trusted publishing to npm + creating releases
-permissions:
-  contents: write
-  id-token: write
-
 jobs:
-  release:
+  canary:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'canary')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Setup npm for trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          node --version
+          npm --version
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Get version suffix
+        id: version
+        env:
+          INPUT_SUFFIX: ${{ inputs.version_suffix }}
+        run: |
+          if [ -n "$INPUT_SUFFIX" ]; then
+            echo "suffix=$INPUT_SUFFIX" >> "$GITHUB_OUTPUT"
+          else
+            echo "suffix=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update sweetlink version for canary
+        env:
+          VERSION_SUFFIX: ${{ steps.version.outputs.suffix }}
+        run: |
+          cd packages/sweetlink
+          VERSION=$(node -p "require('./package.json').version")
+          CANARY_VERSION="${VERSION}-canary.${VERSION_SUFFIX}"
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$CANARY_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+          echo "Publishing @ytspar/sweetlink@$CANARY_VERSION"
+
+      - name: Update devbar version for canary
+        env:
+          VERSION_SUFFIX: ${{ steps.version.outputs.suffix }}
+        run: |
+          cd packages/devbar
+          VERSION=$(node -p "require('./package.json').version")
+          CANARY_VERSION="${VERSION}-canary.${VERSION_SUFFIX}"
+          node -e "const fs = require('fs'); const pkg = JSON.parse(fs.readFileSync('package.json')); pkg.version = '$CANARY_VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+          echo "Publishing @ytspar/devbar@$CANARY_VERSION"
+
+      - name: Publish sweetlink canary
+        run: |
+          cd packages/sweetlink
+          pnpm publish --tag canary --access public --provenance --no-git-checks
+
+      - name: Publish devbar canary
+        run: |
+          cd packages/devbar
+          pnpm publish --tag canary --access public --provenance --no-git-checks
+
+      - name: Summary
+        env:
+          VERSION_SUFFIX: ${{ steps.version.outputs.suffix }}
+        run: |
+          echo "## Canary Release Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version suffix: \`${VERSION_SUFFIX}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Install with:" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "npm i @ytspar/sweetlink@canary" >> "$GITHUB_STEP_SUMMARY"
+          echo "npm i @ytspar/devbar@canary" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'production'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - name: Validate inputs
         env:
@@ -61,7 +163,13 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup npm for trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          node --version
+          npm --version
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install
@@ -82,11 +190,9 @@ jobs:
           if [ -n "$DB_VERSION" ]; then ARGS="$ARGS devbar=$DB_VERSION"; fi
           node scripts/check-release-notes.mjs --check $ARGS
 
-      # ── Sweetlink ──────────────────────────────────────────────
       - name: Publish sweetlink
         if: inputs.sweetlink_version != ''
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ inputs.sweetlink_version }}
         run: |
           cd packages/sweetlink
@@ -106,11 +212,9 @@ jobs:
             --title "sweetlink v${VERSION}" \
             --generate-notes
 
-      # ── Devbar ─────────────────────────────────────────────────
       - name: Publish devbar
         if: inputs.devbar_version != ''
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           VERSION: ${{ inputs.devbar_version }}
         run: |
           cd packages/devbar
@@ -130,7 +234,6 @@ jobs:
             --title "devbar v${VERSION}" \
             --generate-notes
 
-      # ── Summary ────────────────────────────────────────────────
       - name: Summary
         env:
           SL_VERSION: ${{ inputs.sweetlink_version }}
@@ -139,8 +242,8 @@ jobs:
           echo "## Production Release Published" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$SL_VERSION" ]; then
-            echo "- \`@ytspar/sweetlink@${SL_VERSION}\` → [sweetlink-v${SL_VERSION}](https://github.com/ytspar/devbar/releases/tag/sweetlink-v${SL_VERSION})" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`@ytspar/sweetlink@${SL_VERSION}\` -> [sweetlink-v${SL_VERSION}](https://github.com/ytspar/devbar/releases/tag/sweetlink-v${SL_VERSION})" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -n "$DB_VERSION" ]; then
-            echo "- \`@ytspar/devbar@${DB_VERSION}\` → [devbar-v${DB_VERSION}](https://github.com/ytspar/devbar/releases/tag/devbar-v${DB_VERSION})" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`@ytspar/devbar@${DB_VERSION}\` -> [devbar-v${DB_VERSION}](https://github.com/ytspar/devbar/releases/tag/devbar-v${DB_VERSION})" >> "$GITHUB_STEP_SUMMARY"
           fi

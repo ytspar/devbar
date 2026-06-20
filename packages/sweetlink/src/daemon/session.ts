@@ -22,7 +22,11 @@ export type RecordedAction =
   | 'fill'
   | 'press'
   | 'hover'
-  | 'navigate';
+  | 'navigate'
+  // A discrete step in an externally-driven flow (e.g. an el-visual-evidence
+  // capture-spec). Lets non-daemon producers map named flow steps onto an
+  // ActionEntry without abusing the interaction verbs above.
+  | 'step';
 
 export interface ActionEntry {
   /** Seconds since session start */
@@ -54,6 +58,16 @@ export interface SessionManifest {
   gitBranch?: string;
   /** Git commit SHA at time of recording */
   gitCommit?: string;
+  /**
+   * Page/viewport dimensions the recording was captured at, in CSS pixels.
+   * The viewer uses these to map element bounding-box coordinates from page
+   * space into display space. Optional for back-compat; consumers fall back
+   * to 1280×720 when absent.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
   startedAt: string;
   endedAt: string;
   /** Duration in seconds */
@@ -61,6 +75,12 @@ export interface SessionManifest {
   commands: ActionEntry[];
   screenshots: string[];
   video?: string;
+  /**
+   * Count of actions that arrived while the recording was paused and were
+   * therefore not added to the timeline. Present (and > 0) only when the user
+   * paused mid-session; lets the viewer/report note the gap honestly.
+   */
+  droppedWhilePaused?: number;
   errors: {
     console: number;
     network: number;

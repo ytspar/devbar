@@ -19,7 +19,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionManifest } from './session.js';
-import { generateViewer } from './viewer.js';
+import { buildViewerFromDir, generateViewer, SESSION_MANIFEST_FILENAME } from './viewer.js';
 
 let tmp: string;
 
@@ -118,5 +118,66 @@ describe('generateViewer — </script> XSS resistance', () => {
     const html = await fsp.readFile(viewerPath, 'utf-8');
     expect(html).toContain('"action":"click"');
     expect(html).toContain('"args":["@e2"]');
+  });
+});
+
+describe('generateViewer — viewport-aware ripple scaling', () => {
+  it('emits the manifest viewport as the ripple coordinate space', async () => {
+    const manifest = manifestWith({ viewport: { width: 1512, height: 982 } });
+    const viewerPath = await generateViewer(manifest, { sessionDir: tmp });
+    const html = await fsp.readFile(viewerPath, 'utf-8');
+    expect(html).toContain('var pageWidth = 1512;');
+    expect(html).toContain('var pageHeight = 982;');
+    // The old hardcoded divisor must be gone from the ripple math.
+    expect(html).toContain('mediaRect.width / pageWidth');
+    expect(html).toContain('mediaRect.height / pageHeight');
+  });
+
+  it('falls back to 1280x720 when the manifest has no viewport (back-compat)', async () => {
+    const manifest = manifestWith();
+    const viewerPath = await generateViewer(manifest, { sessionDir: tmp });
+    const html = await fsp.readFile(viewerPath, 'utf-8');
+    expect(html).toContain('var pageWidth = 1280;');
+    expect(html).toContain('var pageHeight = 720;');
+  });
+});
+
+describe('buildViewerFromDir — daemon-free viewer from a session directory', () => {
+  it('reads the manifest off disk and writes viewer.html next to it', async () => {
+    const manifest = manifestWith({
+      label: 'flow-demo',
+      commands: [{ timestamp: 0.2, action: 'step', args: ['01-open'], duration: 0 }],
+    });
+    await fsp.writeFile(
+      path.join(tmp, SESSION_MANIFEST_FILENAME),
+      JSON.stringify(manifest, null, 2),
+      'utf-8'
+    );
+
+    const viewerPath = await buildViewerFromDir(tmp);
+
+    expect(viewerPath).toBe(path.join(tmp, 'viewer.html'));
+    const html = await fsp.readFile(viewerPath, 'utf-8');
+    expect(html).toContain(manifest.sessionId);
+    // The 'step' action (added for externally-driven flows) round-trips.
+    expect(html).toContain('"action":"step"');
+    expect(html).toContain('"args":["01-open"]');
+  });
+
+  it('honors a custom manifestPath and outputPath', async () => {
+    const manifest = manifestWith();
+    const manifestPath = path.join(tmp, 'custom-manifest.json');
+    const outputPath = path.join(tmp, 'out.html');
+    await fsp.writeFile(manifestPath, JSON.stringify(manifest), 'utf-8');
+
+    const viewerPath = await buildViewerFromDir(tmp, { manifestPath, outputPath });
+
+    expect(viewerPath).toBe(outputPath);
+    const html = await fsp.readFile(outputPath, 'utf-8');
+    expect(html).toContain('<!DOCTYPE html');
+  });
+
+  it('rejects when the manifest is missing', async () => {
+    await expect(buildViewerFromDir(tmp)).rejects.toThrow();
   });
 });

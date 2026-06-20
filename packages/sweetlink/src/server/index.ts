@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'fs';
-import { detectGit } from '../daemon/utils.js';
 import {
   createServer,
   type Server as HttpServer,
@@ -15,6 +14,7 @@ import {
 import type { Server as HttpsServer } from 'https';
 import * as path from 'path';
 import { WebSocket, WebSocketServer } from 'ws';
+import { detectGit } from '../daemon/utils.js';
 
 // Import types and type guards
 import type {
@@ -819,7 +819,8 @@ function findAnyDaemonState(): ProxyDaemonState | null {
  */
 async function proxyToDaemon(
   state: ProxyDaemonState,
-  action: string
+  action: string,
+  params?: Record<string, unknown>
 ): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   const response = await fetch(`http://127.0.0.1:${state.port}/api/${action}`, {
     method: 'POST',
@@ -827,7 +828,9 @@ async function proxyToDaemon(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${state.token}`,
     },
-    body: '{}',
+    // Forward caller params (e.g. record-start label/viewport) instead of an
+    // empty body, so options set browser-side reach the daemon.
+    body: JSON.stringify({ params: params ?? {} }),
   });
   return (await response.json()) as { ok: boolean; data?: unknown; error?: string };
 }
@@ -862,14 +865,13 @@ async function handleRecordCommand(
 
   try {
     const action = command.type === 'record-start' ? 'record-start' : 'record-stop';
-    const body = await proxyToDaemon(daemonState, action);
+    const params = (command as unknown as Record<string, unknown>).params as
+      | Record<string, unknown>
+      | undefined;
+    const body = await proxyToDaemon(daemonState, action, params);
 
     if (body.ok) {
-      sendSuccess(
-        ctx.ws,
-        `${command.type}-response`,
-        (body.data as Record<string, unknown>) ?? {}
-      );
+      sendSuccess(ctx.ws, `${command.type}-response`, (body.data as Record<string, unknown>) ?? {});
     } else {
       sendError(ctx.ws, command.type, body.error ?? 'Daemon request failed');
     }

@@ -57,7 +57,7 @@ import type {
 } from './types.js';
 import { DAEMON_IDLE_TIMEOUT_MS, DEFAULT_RESPONSIVE_VIEWPORTS } from './types.js';
 import { escapeHtml } from './utils.js';
-import { generateViewer } from './viewer.js';
+import { buildViewerFromDir, generateViewer } from './viewer.js';
 import { visualDiff } from './visualDiff.js';
 
 type Locator = import('playwright').Locator;
@@ -1485,11 +1485,9 @@ async function handleGenerateViewer(params: Record<string, unknown>): Promise<Da
     const sessionDir = confinePath(sessionDirIn);
     const outputPath = outputPathIn ? confinePath(outputPathIn) : undefined;
 
-    const { promises: fsp } = await import('fs');
-    const manifestRaw = await fsp.readFile(path.join(sessionDir, 'sweetlink-session.json'), 'utf-8');
-    const manifest = JSON.parse(manifestRaw);
-    const viewerPath = await generateViewer(manifest, {
-      sessionDir,
+    // Daemon-free core lives in viewer.ts so external tools can reuse it; the
+    // daemon just supplies the (confined) paths + its live console/network rings.
+    const viewerPath = await buildViewerFromDir(sessionDir, {
       outputPath,
       consoleEntries: consoleBuffer.toArray(),
       networkEntries: networkBuffer.toArray(),

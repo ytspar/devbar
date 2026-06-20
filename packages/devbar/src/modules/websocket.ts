@@ -166,12 +166,25 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
       }
 
       // Handle recording responses (not in SweetlinkCommand union)
-      if (message.type === 'record-start-response' && message.success) {
-        state.recordingActive = true;
-        state.recordingSessionId =
-          ((message as Record<string, unknown>).sessionId as string) ?? null;
-        state.recordingStartedAt = Date.now();
-        state.recordingTimer = setInterval(() => state.render(), 1000);
+      if (message.type === 'record-start-response') {
+        // Always clear the timer the click handler started optimistically —
+        // otherwise starting a fresh interval here leaks the first one, which
+        // keeps re-rendering forever.
+        if (state.recordingTimer) clearInterval(state.recordingTimer);
+        state.recordingTimer = null;
+        if (message.success) {
+          state.recordingActive = true;
+          state.recordingSessionId =
+            ((message as Record<string, unknown>).sessionId as string) ?? null;
+          state.recordingStartedAt = Date.now();
+          state.recordingTimer = setInterval(() => state.render(), 1000);
+        } else {
+          // Start failed server-side (e.g. a recording is already in progress)
+          // — roll back the optimistic UI so the button doesn't stick on "recording".
+          state.recordingActive = false;
+          state.recordingStartedAt = null;
+          state.recordingSessionId = null;
+        }
         state.render();
         return;
       }

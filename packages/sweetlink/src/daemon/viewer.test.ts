@@ -19,7 +19,12 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SessionManifest } from './session.js';
-import { buildViewerFromDir, generateViewer, SESSION_MANIFEST_FILENAME } from './viewer.js';
+import {
+  buildViewerFromDir,
+  generateViewer,
+  MAX_INLINE_VIDEO_BYTES,
+  SESSION_MANIFEST_FILENAME,
+} from './viewer.js';
 
 let tmp: string;
 
@@ -139,6 +144,30 @@ describe('generateViewer — viewport-aware ripple scaling', () => {
     const html = await fsp.readFile(viewerPath, 'utf-8');
     expect(html).toContain('var pageWidth = 1280;');
     expect(html).toContain('var pageHeight = 720;');
+  });
+});
+
+describe('generateViewer — inline-video size guard', () => {
+  it('base64-inlines a small video when inlineVideo is set', async () => {
+    await fsp.writeFile(path.join(tmp, 'session.webm'), Buffer.from('tiny-fake-webm'));
+    const viewerPath = await generateViewer(manifestWith({ video: 'session.webm' }), {
+      sessionDir: tmp,
+      inlineVideo: true,
+    });
+    const html = await fsp.readFile(viewerPath, 'utf-8');
+    expect(html).toContain('src="data:video/webm;base64,');
+  });
+
+  it('falls back to a path reference when the video exceeds the inline cap', async () => {
+    // One byte over the cap — must NOT be base64-inlined even with inlineVideo set.
+    await fsp.writeFile(path.join(tmp, 'session.webm'), Buffer.alloc(MAX_INLINE_VIDEO_BYTES + 1));
+    const viewerPath = await generateViewer(manifestWith({ video: 'session.webm' }), {
+      sessionDir: tmp,
+      inlineVideo: true,
+    });
+    const html = await fsp.readFile(viewerPath, 'utf-8');
+    expect(html).not.toContain('data:video/webm;base64,');
+    expect(html).toContain('src="session.webm"');
   });
 });
 

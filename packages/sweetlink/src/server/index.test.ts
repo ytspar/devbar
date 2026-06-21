@@ -107,6 +107,7 @@ import {
   getProjectRoot,
   getSweetlinkPort,
   initSweetlink,
+  pickForwardableRecordParams,
 } from './index.js';
 
 // ---------------------------------------------------------------------------
@@ -679,5 +680,44 @@ describe('Sweetlink server module', () => {
 
       expect(cleanupClientSubscriptions).toHaveBeenCalledWith(ws);
     });
+  });
+});
+
+describe('pickForwardableRecordParams — browser→daemon WS param allow-list', () => {
+  it('forwards only label and viewport', () => {
+    expect(
+      pickForwardableRecordParams({
+        type: 'record-start',
+        params: { label: 'demo', viewport: 'mobile' },
+      })
+    ).toEqual({ label: 'demo', viewport: 'mobile' });
+  });
+
+  it('drops storageState and trace even when present (daemon-side / CLI-only)', () => {
+    const out = pickForwardableRecordParams({
+      type: 'record-start',
+      // Caller can put anything on the wire; the allow-list is the boundary.
+      params: {
+        label: 'x',
+        viewport: 'desktop',
+        storageState: '/etc/secrets/auth.json',
+        trace: true,
+      } as never,
+    });
+    expect(out).toEqual({ label: 'x', viewport: 'desktop' });
+    expect(out).not.toHaveProperty('storageState');
+    expect(out).not.toHaveProperty('trace');
+  });
+
+  it('returns undefined when no forwardable params are present', () => {
+    expect(pickForwardableRecordParams({ type: 'record-start' })).toBeUndefined();
+    expect(pickForwardableRecordParams({ type: 'record-start', params: {} })).toBeUndefined();
+    // Only non-forwardable keys → still nothing crosses the boundary.
+    expect(
+      pickForwardableRecordParams({
+        type: 'record-start',
+        params: { storageState: '/secret' } as never,
+      })
+    ).toBeUndefined();
   });
 });

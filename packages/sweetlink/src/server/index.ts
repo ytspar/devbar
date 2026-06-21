@@ -26,6 +26,7 @@ import type {
   LogEventCommand,
   LogSubscribeCommand,
   LogUnsubscribeCommand,
+  RecordStartCommand,
   RequestScreenshotCommand,
   ScreenshotResponseCommand,
   SweetlinkCommand,
@@ -836,6 +837,25 @@ async function proxyToDaemon(
 }
 
 /**
+ * Allow-list the record-start params that may cross the browser→daemon WS
+ * boundary. The daemon HTTP API also honors `storageState` (a daemon-side
+ * auth-replay file path) and `trace`, but those must stay CLI/HTTP-only and
+ * never be reachable from a browser origin — so only `label`/`viewport` are
+ * forwarded, even if a caller sends more. Returns `undefined` when there's
+ * nothing forwardable (so the daemon sees an empty params object).
+ */
+export function pickForwardableRecordParams(
+  command: RecordStartCommand
+): Record<string, unknown> | undefined {
+  if (!command.params) return undefined;
+  const { label, viewport } = command.params;
+  const out: Record<string, unknown> = {};
+  if (label !== undefined) out.label = label;
+  if (viewport !== undefined) out.viewport = viewport;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Proxy record-start / record-stop from browser to daemon HTTP API.
  * Reads daemon state from .sweetlink/daemon.json to find port/token.
  */
@@ -865,9 +885,8 @@ async function handleRecordCommand(
 
   try {
     const action = command.type === 'record-start' ? 'record-start' : 'record-stop';
-    const params = (command as unknown as Record<string, unknown>).params as
-      | Record<string, unknown>
-      | undefined;
+    const params =
+      command.type === 'record-start' ? pickForwardableRecordParams(command) : undefined;
     const body = await proxyToDaemon(daemonState, action, params);
 
     if (body.ok) {

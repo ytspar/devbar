@@ -291,6 +291,12 @@ export async function logAction(
     // Screenshot may fail if page is navigating
   }
 
+  // Re-check after the await above: a logAction suspended at page.screenshot()
+  // can resume *during* stopRecording's teardown. Without this guard it would
+  // append a late, screenshot-less entry to `actions` after the manifest
+  // snapshot — a benign lost-update, but cleaner to drop it outright.
+  if (stopping) return;
+
   actions.push({
     timestamp,
     action,

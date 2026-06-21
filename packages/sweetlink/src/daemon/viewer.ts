@@ -42,7 +42,7 @@ export interface ViewerOptions {
  * recording can produce an un-openable (or OOM) file. Past this size we fall
  * back to referencing the WebM by relative path even when inlineVideo is set.
  */
-const MAX_INLINE_VIDEO_BYTES = 25 * 1024 * 1024;
+export const MAX_INLINE_VIDEO_BYTES = 25 * 1024 * 1024;
 
 // Encode a value as JSON safe to embed inside a <script> element.
 // JSON itself never produces "</script>" or "<!--", but a string value

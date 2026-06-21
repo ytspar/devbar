@@ -38,6 +38,10 @@ const RECORDING_VIEWPORT = DEFAULT_VIEWPORT;
 // ============================================================================
 
 let recording = false;
+// Set at the top of stopRecording so any in-flight logAction (which may be
+// mid-screenshot against a page we're about to close) bails instead of racing
+// the teardown. Reset with the rest of the state.
+let stopping = false;
 let paused = false;
 let pausedAt: number | null = null;
 let totalPausedMs = 0;
@@ -57,6 +61,10 @@ let recordingUrl: string | null = null;
 let recordingGitBranch: string | null = null;
 let recordingGitCommit: string | null = null;
 let recordingLabel: string | null = null;
+// Viewport the recording was captured at — persisted into the manifest so the
+// viewer can map element bounding boxes from page space into display space
+// (rather than assuming a fixed 1280×720).
+let recordingViewport: { width: number; height: number } | null = null;
 // Buffer cursors snapshotted at startRecording so the manifest only counts
 // events that landed during this session (the ring buffers are global).
 let consoleStartCursor = 0;
@@ -108,6 +116,7 @@ export async function startRecording(
   await fs.mkdir(sessionDir, { recursive: true });
 
   const viewport = options?.viewport ?? RECORDING_VIEWPORT;
+  recordingViewport = viewport;
 
   // Create a new context with video recording (and optionally
   // pre-authenticated storage state for testing logged-in flows).
@@ -159,6 +168,7 @@ export async function startRecording(
     startedAt = null;
     recordingUrl = null;
     recordingLabel = null;
+    recordingViewport = null;
     try {
       await recordingContext?.close();
     } catch {
@@ -198,7 +208,7 @@ export async function logAction(
   boundingBox?: { x: number; y: number; width: number; height: number },
   durationMs?: number
 ): Promise<void> {
-  if (!recording || !startedAt || !sessionDir) return;
+  if (!recording || stopping || !startedAt || !sessionDir) return;
   // Drop actions while paused — the user explicitly asked us to ignore
   // this window. The action will appear once they resume. Track and warn
   // so a silent drop doesn't quietly corrupt the user's mental model of
@@ -281,6 +291,12 @@ export async function logAction(
     // Screenshot may fail if page is navigating
   }
 
+  // Re-check after the await above: a logAction suspended at page.screenshot()
+  // can resume *during* stopRecording's teardown. Without this guard it would
+  // append a late, screenshot-less entry to `actions` after the manifest
+  // snapshot — a benign lost-update, but cleaner to drop it outright.
+  if (stopping) return;
+
   actions.push({
     timestamp,
     action,
@@ -299,6 +315,8 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   if (!recording || !sessionId || !startedAt || !sessionDir) {
     return null;
   }
+  // Signal in-flight logAction calls to bail before we close the page/context.
+  stopping = true;
 
   const startedAtMs = startedAt;
   // If we stop while paused, finalise the pause window first.
@@ -318,6 +336,11 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     const video = recordingPage.video();
     if (video) {
       recordingVideoPath = await video.path();
+    } else {
+      console.error(
+        '[Daemon] Recording stopped but no video handle was found (recordVideo inactive?). ' +
+          'The viewer will fall back to the action screenshots.'
+      );
     }
 
     // Close the page and context to finalize the video
@@ -384,12 +407,14 @@ export async function stopRecording(): Promise<SessionManifest | null> {
     url: recordingUrl ?? undefined,
     gitBranch: recordingGitBranch ?? undefined,
     gitCommit: recordingGitCommit ?? undefined,
+    viewport: recordingViewport ?? undefined,
     startedAt: new Date(startedAtMs).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     duration,
     commands: actions,
     screenshots: screenshotPaths.map((p) => path.basename(p)),
     video: videoFilename,
+    droppedWhilePaused: droppedWhilePaused > 0 ? droppedWhilePaused : undefined,
     errors: { console: consoleErrors, network: networkFailures, server: 0 },
   };
 
@@ -413,10 +438,12 @@ export async function stopRecording(): Promise<SessionManifest | null> {
   recordingGitBranch = null;
   recordingGitCommit = null;
   recordingLabel = null;
+  recordingViewport = null;
   paused = false;
   pausedAt = null;
   totalPausedMs = 0;
   droppedWhilePaused = 0;
+  stopping = false;
 
   return result;
 }
@@ -461,10 +488,13 @@ export function getRecordingStatus(): {
   duration: number | null;
   actionCount: number;
 } {
+  // Subtract paused time (and any open pause window) so the live duration
+  // matches the manifest's active-recording duration after a pause.
+  const openPauseMs = paused && pausedAt ? Date.now() - pausedAt : 0;
   return {
     recording,
     sessionId,
-    duration: startedAt ? (Date.now() - startedAt) / 1000 : null,
+    duration: startedAt ? (Date.now() - startedAt - totalPausedMs - openPauseMs) / 1000 : null,
     actionCount: actions.length,
   };
 }

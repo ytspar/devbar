@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'fs';
-import { detectGit } from '../daemon/utils.js';
 import {
   createServer,
   type Server as HttpServer,
@@ -15,6 +14,7 @@ import {
 import type { Server as HttpsServer } from 'https';
 import * as path from 'path';
 import { WebSocket, WebSocketServer } from 'ws';
+import { detectGit } from '../daemon/utils.js';
 
 // Import types and type guards
 import type {
@@ -26,6 +26,7 @@ import type {
   LogEventCommand,
   LogSubscribeCommand,
   LogUnsubscribeCommand,
+  RecordStartCommand,
   RequestScreenshotCommand,
   ScreenshotResponseCommand,
   SweetlinkCommand,
@@ -819,7 +820,8 @@ function findAnyDaemonState(): ProxyDaemonState | null {
  */
 async function proxyToDaemon(
   state: ProxyDaemonState,
-  action: string
+  action: string,
+  params?: Record<string, unknown>
 ): Promise<{ ok: boolean; data?: unknown; error?: string }> {
   const response = await fetch(`http://127.0.0.1:${state.port}/api/${action}`, {
     method: 'POST',
@@ -827,9 +829,30 @@ async function proxyToDaemon(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${state.token}`,
     },
-    body: '{}',
+    // Forward caller params (e.g. record-start label/viewport) instead of an
+    // empty body, so options set browser-side reach the daemon.
+    body: JSON.stringify({ params: params ?? {} }),
   });
   return (await response.json()) as { ok: boolean; data?: unknown; error?: string };
+}
+
+/**
+ * Allow-list the record-start params that may cross the browser→daemon WS
+ * boundary. The daemon HTTP API also honors `storageState` (a daemon-side
+ * auth-replay file path) and `trace`, but those must stay CLI/HTTP-only and
+ * never be reachable from a browser origin — so only `label`/`viewport` are
+ * forwarded, even if a caller sends more. Returns `undefined` when there's
+ * nothing forwardable (so the daemon sees an empty params object).
+ */
+export function pickForwardableRecordParams(
+  command: RecordStartCommand
+): Record<string, unknown> | undefined {
+  if (!command.params) return undefined;
+  const { label, viewport } = command.params;
+  const out: Record<string, unknown> = {};
+  if (label !== undefined) out.label = label;
+  if (viewport !== undefined) out.viewport = viewport;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /**
@@ -862,14 +885,12 @@ async function handleRecordCommand(
 
   try {
     const action = command.type === 'record-start' ? 'record-start' : 'record-stop';
-    const body = await proxyToDaemon(daemonState, action);
+    const params =
+      command.type === 'record-start' ? pickForwardableRecordParams(command) : undefined;
+    const body = await proxyToDaemon(daemonState, action, params);
 
     if (body.ok) {
-      sendSuccess(
-        ctx.ws,
-        `${command.type}-response`,
-        (body.data as Record<string, unknown>) ?? {}
-      );
+      sendSuccess(ctx.ws, `${command.type}-response`, (body.data as Record<string, unknown>) ?? {});
     } else {
       sendError(ctx.ws, command.type, body.error ?? 'Daemon request failed');
     }

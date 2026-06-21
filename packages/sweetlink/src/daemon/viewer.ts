@@ -36,6 +36,14 @@ export interface ViewerOptions {
 
 // escapeHtml moved to ./utils.ts
 
+/**
+ * Upper bound on a video we're willing to base64-inline into the HTML.
+ * Inlining bloats by ~33% and the whole string is built in memory, so a long
+ * recording can produce an un-openable (or OOM) file. Past this size we fall
+ * back to referencing the WebM by relative path even when inlineVideo is set.
+ */
+export const MAX_INLINE_VIDEO_BYTES = 25 * 1024 * 1024;
+
 // Encode a value as JSON safe to embed inside a <script> element.
 // JSON itself never produces "</script>" or "<!--", but a string value
 // might — escape every "<" so the HTML parser cannot terminate the
@@ -60,7 +68,17 @@ export async function generateViewer(
     try {
       const buffer = await fs.readFile(videoPath);
       videoExists = true;
-      if (wantInline) videoBase64 = buffer.toString('base64');
+      if (wantInline) {
+        if (buffer.length > MAX_INLINE_VIDEO_BYTES) {
+          // Too large to inline safely — keep the path reference instead.
+          console.warn(
+            `[sweetlink] viewer: video ${manifest.video} is ${(buffer.length / 1024 / 1024).toFixed(1)}MB, ` +
+              `exceeding the ${MAX_INLINE_VIDEO_BYTES / 1024 / 1024}MB inline cap; referencing by path instead.`
+          );
+        } else {
+          videoBase64 = buffer.toString('base64');
+        }
+      }
     } catch {
       /* video file may not exist */
     }
@@ -286,6 +304,11 @@ var actions = ${jsonForScript(
 var screenshots = ${jsonForScript(screenshots.map((s) => s.data))};
 var duration = ${manifest.duration};
 var hasVideo = ${hasVideo};
+// Page-space dimensions the recording was captured at; bounding boxes are in
+// this coordinate space and get scaled to the displayed media size. Falls back
+// to 1280×720 for manifests recorded before viewport was persisted.
+var pageWidth = ${manifest.viewport?.width ?? 1280};
+var pageHeight = ${manifest.viewport?.height ?? 720};
 var summaryReport = ${jsonForScript(summaryMd)};
 var consoleEntries = ${jsonForScript(sanitizedConsole)};
 var networkEntries = ${jsonForScript(sanitizedNetwork)};
@@ -336,8 +359,8 @@ function drawClickRipple(bb) {
   // Map bounding box coordinates from page space to display space
   var mediaRect = media.getBoundingClientRect();
   var containerRect = container.getBoundingClientRect();
-  var scaleX = mediaRect.width / 1280;
-  var scaleY = mediaRect.height / 720;
+  var scaleX = mediaRect.width / pageWidth;
+  var scaleY = mediaRect.height / pageHeight;
   var offsetX = mediaRect.left - containerRect.left;
   var offsetY = mediaRect.top - containerRect.top;
 
@@ -612,4 +635,44 @@ if (actions.length > 0) goToAction(0);
   const outputPath = options.outputPath ?? path.join(options.sessionDir, 'viewer.html');
   await fs.writeFile(outputPath, html, 'utf-8');
   return outputPath;
+}
+
+/** Default manifest filename written into a session directory. */
+export const SESSION_MANIFEST_FILENAME = 'sweetlink-session.json';
+
+export interface BuildViewerFromDirOptions {
+  /** Manifest path; defaults to `<sessionDir>/sweetlink-session.json`. */
+  manifestPath?: string;
+  /** Output path; defaults to `<sessionDir>/viewer.html`. */
+  outputPath?: string;
+  consoleEntries?: ConsoleEntry[];
+  networkEntries?: NetworkEntry[];
+  inlineVideo?: boolean;
+}
+
+/**
+ * Daemon-free entry point: build a `viewer.html` from a session directory on
+ * disk that already contains a manifest (`sweetlink-session.json`), the WebM it
+ * references, and any per-action screenshots.
+ *
+ * This is the standalone core of the daemon's `generate-viewer` action — it
+ * needs no live BrowserContext, daemon, or Playwright. External tools (e.g.
+ * el-visual-evidence, which records its own Playwright session) can assemble a
+ * manifest + WebM into a directory and call this directly to reuse sweetlink's
+ * viewer rather than reimplementing it.
+ */
+export async function buildViewerFromDir(
+  sessionDir: string,
+  options: BuildViewerFromDirOptions = {}
+): Promise<string> {
+  const manifestPath = options.manifestPath ?? path.join(sessionDir, SESSION_MANIFEST_FILENAME);
+  const raw = await fs.readFile(manifestPath, 'utf-8');
+  const manifest = JSON.parse(raw) as SessionManifest;
+  return generateViewer(manifest, {
+    sessionDir,
+    outputPath: options.outputPath,
+    consoleEntries: options.consoleEntries,
+    networkEntries: options.networkEntries,
+    inlineVideo: options.inlineVideo,
+  });
 }

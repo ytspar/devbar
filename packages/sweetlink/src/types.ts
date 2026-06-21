@@ -484,6 +484,18 @@ export interface GetVitalsCommand {
 
 export interface RecordStartCommand {
   type: 'record-start';
+  /**
+   * Optional recording options forwarded browser→daemon over the WS bridge.
+   * Intentionally limited to `label`/`viewport`: the daemon's HTTP API also
+   * accepts `storageState` (a daemon-side auth-replay file path) and `trace`,
+   * but those are CLI/HTTP-only and must NOT be reachable from a browser
+   * origin — the WS proxy allow-lists to these two keys (see
+   * `handleRecordCommand` in `server/index.ts`).
+   */
+  params?: {
+    label?: string;
+    viewport?: string;
+  };
 }
 
 export interface RecordStopCommand {

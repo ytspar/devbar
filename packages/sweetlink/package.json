@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/sweetlink",
-  "version": "1.24.6",
+  "version": "1.25.0",
   "description": "Autonomous development toolkit for AI agents - screenshots, DOM queries, console logs, and JavaScript execution via WebSocket and Chrome DevTools Protocol",
   "keywords": [
     "autonomous-development",
@@ -110,6 +110,21 @@
       "types": "./dist/daemon/client.d.ts",
       "import": "./dist/daemon/client.js",
       "default": "./dist/daemon/client.js"
+    },
+    "./daemon/viewer": {
+      "types": "./dist/daemon/viewer.d.ts",
+      "import": "./dist/daemon/viewer.js",
+      "default": "./dist/daemon/viewer.js"
+    },
+    "./daemon/session": {
+      "types": "./dist/daemon/session.d.ts",
+      "import": "./dist/daemon/session.js",
+      "default": "./dist/daemon/session.js"
+    },
+    "./daemon/summary": {
+      "types": "./dist/daemon/summary.d.ts",
+      "import": "./dist/daemon/summary.js",
+      "default": "./dist/daemon/summary.js"
     }
   },
   "bin": {

@@ -25,6 +25,12 @@ coverage to the change:
   paths"), not just the entry state. Use Playwright MCP to drive each path.
 - **New feature with a complex multi-stage process** → produce a **storyboard**:
   an ordered screenshot sequence documenting the whole journey end to end.
+- **Animation or multi-screen workflow** → a still cannot prove motion. Record a
+  **demo** of the change (e.g. via the Sweetlink session recorder / devbar record
+  button → WebM + interactive viewer) so a reviewer can see the transition,
+  animation, or screen-to-screen flow actually run. Pair the recording with the
+  storyboard stills above; the stills carry the per-state review, the recording
+  carries the motion.
 - **Reuse before create** → before adding an e2e spec for an affected area,
   search the existing test suite and **expand or improve** a spec that already
   covers it rather than writing a duplicate. Add a new spec only when none exists.

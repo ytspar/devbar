@@ -1647,6 +1647,58 @@ describe('connectWebSocket - command handlers', () => {
     expect(state.render).toHaveBeenCalled();
   });
 
+  it('record-start-response clears any stale timer before setting new one (DEV-4874)', () => {
+    const state = createMockState();
+    const { ws } = connectAndVerify(state);
+
+    // Seed with a sentinel interval handle (simulating a leaked interval from a click handler)
+    const sentinelTimer = setInterval(() => {}, 1000);
+    state.recordingTimer = sentinelTimer;
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-start-response',
+        success: true,
+        sessionId: 'session-456',
+      }),
+    });
+
+    // The OLD interval should have been cleared via clearInterval
+    expect(state.recordingTimer).not.toEqual(sentinelTimer);
+    expect(state.recordingTimer).not.toBeNull();
+    // Cleanup the new timer
+    if (state.recordingTimer) clearInterval(state.recordingTimer);
+    clearInterval(sentinelTimer);
+  });
+
+  it('record-start-response with success:false rolls back optimistic UI (DEV-4874)', () => {
+    const state = createMockState({
+      recordingActive: true,
+      recordingStartedAt: Date.now(),
+      recordingSessionId: 'session-old',
+      recordingTimer: setInterval(() => {}, 1000),
+    });
+    const { ws } = connectAndVerify(state);
+
+    ws.onmessage!({
+      data: JSON.stringify({
+        type: 'record-start-response',
+        success: false,
+        error: 'Recording already in progress',
+      }),
+    });
+
+    // Optimistic state should be rolled back
+    expect(state.recordingActive).toBe(false);
+    expect(state.recordingStartedAt).toBeNull();
+    expect(state.recordingSessionId).toBeNull();
+    expect(state.recordingTimer).toBeNull();
+    expect(state.render).toHaveBeenCalled();
+
+    // Cleanup
+    vi.clearAllTimers();
+  });
+
   it('handles record-stop-response success with viewerUrl', async () => {
     const mockWindow = { location: { href: '' }, close: vi.fn() };
     const state = createMockState({

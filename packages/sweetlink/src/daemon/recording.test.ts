@@ -66,10 +66,7 @@ interface MockBundle {
   videoPath: string;
 }
 
-function makeMockBundle(opts: {
-  goto?: 'ok' | 'throws';
-  videoPath?: string;
-}): MockBundle {
+function makeMockBundle(opts: { goto?: 'ok' | 'throws'; videoPath?: string }): MockBundle {
   const videoPath = opts.videoPath ?? path.join(os.tmpdir(), `mock-video-${Date.now()}.webm`);
 
   const page: MockPage = {
@@ -374,12 +371,65 @@ describe('getRecordingStatus', () => {
     expect(status.actionCount).toBe(0);
     expect(status.sessionId).toMatch(/^session-/);
   });
+
+  it('is pause-aware: duration excludes paused time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    const recording = await import('./recording.js');
+    const m = makeMockBundle({});
+    await recording.startRecording(m.browser as never, 'http://localhost:3000/', tmpDir);
+
+    // Active for 1 second
+    vi.advanceTimersByTime(1000);
+    const statusBefore = recording.getRecordingStatus();
+    expect(statusBefore.duration).toBeCloseTo(1.0, 1);
+
+    // Pause for 3 seconds
+    recording.pauseRecording();
+    vi.advanceTimersByTime(3000);
+
+    // While paused, duration should NOT include the 3s pause window
+    const statusWhilePaused = recording.getRecordingStatus();
+    expect(statusWhilePaused.duration).toBeCloseTo(1.0, 1); // Still ~1s, not 4s
+
+    // Resume and advance 1 more second
+    recording.resumeRecording();
+    vi.advanceTimersByTime(1000);
+
+    // Final status: 1s + 1s active = 2s (the 3s pause is excluded)
+    const statusAfter = recording.getRecordingStatus();
+    expect(statusAfter.duration).toBeCloseTo(2.0, 1);
+  });
 });
 
 describe('stopRecording', () => {
   it('returns null when not recording', async () => {
     const recording = await import('./recording.js');
     expect(await recording.stopRecording()).toBeNull();
+  });
+
+  it('logs null-video warning when recordingPage.video() returns null', async () => {
+    const recording = await import('./recording.js');
+    const m = makeMockBundle({});
+    // Override video() to return null (simulating recordVideo inactive)
+    m.page.video = () => null;
+
+    await recording.startRecording(m.browser as never, 'http://localhost:3000/', tmpDir);
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const manifest = await recording.stopRecording();
+
+    // Assert the warning was logged
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[Daemon] Recording stopped but no video handle was found')
+    );
+
+    // Assert manifest.video is undefined when no video handle exists
+    expect(manifest).not.toBeNull();
+    expect(manifest!.video).toBeUndefined();
+
+    errSpy.mockRestore();
   });
 
   it('writes a manifest, resets state, allows a fresh start', async () => {

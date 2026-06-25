@@ -1,6 +1,6 @@
 {
   "name": "@ytspar/sweetlink",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "description": "Autonomous development toolkit for AI agents - screenshots, DOM queries, console logs, and JavaScript execution via WebSocket and Chrome DevTools Protocol",
   "keywords": [
     "autonomous-development",
@@ -65,6 +65,11 @@
       "types": "./dist/browser/screenshotUtils.d.ts",
       "import": "./dist/browser/screenshotUtils.js",
       "default": "./dist/browser/screenshotUtils.js"
+    },
+    "./screenshotConstants": {
+      "types": "./dist/screenshotConstants.d.ts",
+      "import": "./dist/screenshotConstants.js",
+      "default": "./dist/screenshotConstants.js"
     },
     "./urlUtils": {
       "types": "./dist/urlUtils.d.ts",

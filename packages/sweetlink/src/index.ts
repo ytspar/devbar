@@ -40,6 +40,16 @@ export type {
   MeasurementResult,
   RulerOutput,
 } from './ruler.js';
+// Shared screenshot constants — the canonical devbar-hide rule, re-exported so
+// downstream consumers (e.g. the el-visual-evidence CLI) import it instead of
+// hand-maintaining a copy that drifts. Also available via the dedicated
+// '@ytspar/sweetlink/screenshotConstants' subpath.
+export {
+  HIDE_DEVBAR_CSS,
+  HIDE_DEVBAR_STYLE_ID,
+  HOVER_TRANSITION_DELAY_MS,
+  SELECTOR_TIMEOUT_MS,
+} from './screenshotConstants.js';
 // Server types (import from '@ytspar/sweetlink/server' for value exports)
 export type { InitSweetlinkOptions } from './server.js';
 // Shared types

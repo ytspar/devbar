@@ -17,6 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import * as packageIndex from './index.js';
 import {
   HIDE_DEVBAR_CSS,
   HIDE_DEVBAR_STYLE_ID,
@@ -25,6 +26,16 @@ import {
 } from './screenshotConstants.js';
 
 describe('screenshotConstants', () => {
+  it('re-exports the canonical hide constants from the package index', () => {
+    // Downstream consumers (the el-visual-evidence CLI) import the
+    // devbar-hide rule from '@ytspar/sweetlink' instead of copying it.
+    // A regression that drops these re-exports silently lets the copy drift.
+    expect(packageIndex.HIDE_DEVBAR_CSS).toBe(HIDE_DEVBAR_CSS);
+    expect(packageIndex.HIDE_DEVBAR_STYLE_ID).toBe(HIDE_DEVBAR_STYLE_ID);
+    expect(packageIndex.SELECTOR_TIMEOUT_MS).toBe(SELECTOR_TIMEOUT_MS);
+    expect(packageIndex.HOVER_TRANSITION_DELAY_MS).toBe(HOVER_TRANSITION_DELAY_MS);
+  });
+
   it('exposes positive numeric timeouts', () => {
     expect(SELECTOR_TIMEOUT_MS).toBeGreaterThan(0);
     expect(HOVER_TRANSITION_DELAY_MS).toBeGreaterThan(0);

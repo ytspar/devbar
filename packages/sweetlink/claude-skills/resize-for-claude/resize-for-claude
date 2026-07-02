@@ -33,6 +33,13 @@ WIDTH=$(sips -g pixelWidth "$INPUT" | tail -1 | awk '{print $2}')
 HEIGHT=$(sips -g pixelHeight "$INPUT" | tail -1 | awk '{print $2}')
 FILESIZE=$(stat -f "%z" "$INPUT")
 
+# A non-image (or a format sips can't read) yields empty/zero dimensions,
+# which would otherwise surface as a cryptic arithmetic abort below.
+if ! [[ "$WIDTH" =~ ^[0-9]+$ && "$HEIGHT" =~ ^[0-9]+$ ]] || [[ "$WIDTH" -eq 0 || "$HEIGHT" -eq 0 ]]; then
+  echo "Error: Could not read image dimensions from $INPUT (not an image, or a format sips can't read)" >&2
+  exit 1
+fi
+
 echo "Input:  $INPUT"
 echo "Size:   ${WIDTH}x${HEIGHT} ($(( FILESIZE / 1024 ))KB)"
 
@@ -54,6 +61,10 @@ if [[ "$RATIO" -ge 3 ]]; then
   STEP=$(( TILE_HEIGHT - OVERLAP ))
   PART=1
   Y=0
+
+  # A re-run can produce fewer tiles than the previous run left behind;
+  # clear stale parts so the output dir never mixes runs.
+  rm -f "$OUTDIR/${NAME}-part"*."$EXT"
 
   echo ""
   echo "Image is very tall (${RATIO}:1 ratio). Splitting into tiles..."

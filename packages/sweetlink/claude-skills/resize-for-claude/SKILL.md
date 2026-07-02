@@ -20,7 +20,7 @@ Resize images to optimal dimensions for Claude's vision capabilities. Claude pro
 The `resize-for-claude` script **bundled in this skill's directory** (next to this SKILL.md):
 
 1. Reads the image dimensions
-2. If the image aspect ratio is < 3:1, resizes proportionally so the longest side = 1568px
+2. If the image aspect ratio is < 3:1, resizes proportionally so the longest side is ≤ 1568px (downscale only — already-small images are copied unchanged, never upscaled)
 3. If the image is very tall (≥ 3:1 height:width), splits into overlapping tiles before resizing each
 4. Outputs to a `<filename>-claude/` directory next to the original
 
@@ -41,6 +41,8 @@ Images exceeding these dimensions get downscaled by Claude anyway, wasting token
 # directory (announced when the skill loads). No tools-repo lookup, no
 # project-root derivation: the skill and its script are one unit, so this
 # works identically from any repo the skill is linked into.
+# Always invoke via `bash` (as below): npm packing does not preserve the
+# executable bit, so `./resize-for-claude` breaks for package consumers.
 SKILL_DIR="<this skill's base directory>"
 
 # Basic usage — resize to 1568px longest side
@@ -75,11 +77,12 @@ Input:  ~/Downloads/full-page.png
 Size:   1440x8640 (4200KB)
 
 Image is very tall (6:1 ratio). Splitting into tiles...
-  Part 1: 1440x1568 (180KB) -> ~/Downloads/full-page-claude/full-page-part1.png
-  Part 2: 1440x1568 (165KB) -> ~/Downloads/full-page-claude/full-page-part2.png
-  Part 3: 1440x1568 (172KB) -> ~/Downloads/full-page-claude/full-page-part3.png
+  Part 1: 784x1568 (180KB) -> ~/Downloads/full-page-claude/full-page-part1.png
+  Part 2: 784x1568 (165KB) -> ~/Downloads/full-page-claude/full-page-part2.png
+  Part 3: 784x1568 (172KB) -> ~/Downloads/full-page-claude/full-page-part3.png
+  Part 4: 261x1568 (48KB)  -> ~/Downloads/full-page-claude/full-page-part4.png
 
-Output: ~/Downloads/full-page-claude/ (3 parts)
+Output: ~/Downloads/full-page-claude/ (4 parts)
 ```
 
 ## Requirements

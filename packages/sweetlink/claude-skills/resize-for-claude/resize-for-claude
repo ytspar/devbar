@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Resize an image for optimal Claude vision consumption.
+# Claude works best with images where the longest side is ≤1568px.
+# For very tall images, splits into multiple parts to preserve detail.
+#
+# Usage: resize-for-claude <image-path> [max-long-side]
+#
+# Examples:
+#   resize-for-claude ~/Downloads/mockup.jpg
+#   resize-for-claude ~/Downloads/mockup.png 1200
+#
+# Requires: macOS (uses sips)
+
+set -euo pipefail
+
+if [[ "${1:-}" == "" ]]; then
+  echo "Usage: resize-for-claude <image-path> [max-long-side]" >&2
+  echo "" >&2
+  echo "  max-long-side  Maximum pixel length of longest side (default: 1568)" >&2
+  exit 1
+fi
+
+MAX_SIDE="${2:-1568}"
+INPUT="$1"
+
+if [[ ! -f "$INPUT" ]]; then
+  echo "Error: File not found: $INPUT" >&2
+  exit 1
+fi
+
+# Get image dimensions
+WIDTH=$(sips -g pixelWidth "$INPUT" | tail -1 | awk '{print $2}')
+HEIGHT=$(sips -g pixelHeight "$INPUT" | tail -1 | awk '{print $2}')
+FILESIZE=$(stat -f "%z" "$INPUT")
+
+# A non-image (or a format sips can't read) yields empty/zero dimensions,
+# which would otherwise surface as a cryptic arithmetic abort below.
+if ! [[ "$WIDTH" =~ ^[0-9]+$ && "$HEIGHT" =~ ^[0-9]+$ ]] || [[ "$WIDTH" -eq 0 || "$HEIGHT" -eq 0 ]]; then
+  echo "Error: Could not read image dimensions from $INPUT (not an image, or a format sips can't read)" >&2
+  exit 1
+fi
+
+echo "Input:  $INPUT"
+echo "Size:   ${WIDTH}x${HEIGHT} ($(( FILESIZE / 1024 ))KB)"
+
+# Determine output path
+DIR=$(dirname "$INPUT")
+BASE=$(basename "$INPUT")
+EXT="${BASE##*.}"
+NAME="${BASE%.*}"
+OUTDIR="$DIR/${NAME}-claude"
+mkdir -p "$OUTDIR"
+
+# Aspect ratio: if height > 3x width, split into tiles to preserve detail
+RATIO=$(( HEIGHT / WIDTH ))
+
+if [[ "$RATIO" -ge 3 ]]; then
+  # Very tall image — split into overlapping tiles then resize each
+  TILE_HEIGHT=$(( WIDTH * 2 ))  # Each tile is ~2:1 aspect ratio
+  OVERLAP=$(( TILE_HEIGHT / 10 ))
+  STEP=$(( TILE_HEIGHT - OVERLAP ))
+  PART=1
+  Y=0
+
+  # A re-run can produce fewer tiles than the previous run left behind;
+  # clear stale parts so the output dir never mixes runs.
+  rm -f "$OUTDIR/${NAME}-part"*."$EXT"
+
+  echo ""
+  echo "Image is very tall (${RATIO}:1 ratio). Splitting into tiles..."
+
+  while [[ "$Y" -lt "$HEIGHT" ]]; do
+    REMAINING=$(( HEIGHT - Y ))
+    CROP_H=$(( REMAINING < TILE_HEIGHT ? REMAINING : TILE_HEIGHT ))
+
+    OUTFILE="$OUTDIR/${NAME}-part${PART}.${EXT}"
+
+    # Crop tile
+    sips -c "$CROP_H" "$WIDTH" --cropOffset "$Y" 0 "$INPUT" --out "$OUTFILE" >/dev/null 2>&1 || {
+      TMPFILE=$(mktemp "/tmp/resize-claude-XXXX.$EXT")
+      cp "$INPUT" "$TMPFILE"
+      sips -c "$CROP_H" "$WIDTH" --cropOffset "$Y" 0 "$TMPFILE" --out "$OUTFILE" >/dev/null 2>&1
+      rm -f "$TMPFILE"
+    }
+
+    # Resize tile to fit within max side
+    TILE_W=$(sips -g pixelWidth "$OUTFILE" | tail -1 | awk '{print $2}')
+    TILE_H=$(sips -g pixelHeight "$OUTFILE" | tail -1 | awk '{print $2}')
+
+    if [[ "$TILE_W" -gt "$MAX_SIDE" || "$TILE_H" -gt "$MAX_SIDE" ]]; then
+      if [[ "$TILE_W" -ge "$TILE_H" ]]; then
+        sips --resampleWidth "$MAX_SIDE" "$OUTFILE" --out "$OUTFILE" >/dev/null 2>&1
+      else
+        sips --resampleHeight "$MAX_SIDE" "$OUTFILE" --out "$OUTFILE" >/dev/null 2>&1
+      fi
+    fi
+
+    NEW_W=$(sips -g pixelWidth "$OUTFILE" | tail -1 | awk '{print $2}')
+    NEW_H=$(sips -g pixelHeight "$OUTFILE" | tail -1 | awk '{print $2}')
+    NEW_SIZE=$(stat -f "%z" "$OUTFILE")
+    echo "  Part $PART: ${NEW_W}x${NEW_H} ($(( NEW_SIZE / 1024 ))KB) -> $OUTFILE"
+
+    Y=$(( Y + STEP ))
+    PART=$(( PART + 1 ))
+  done
+
+  echo ""
+  echo "Output: $OUTDIR/ ($(( PART - 1 )) parts)"
+else
+  # Single image — just resize
+  OUTFILE="$OUTDIR/${NAME}.${EXT}"
+  cp "$INPUT" "$OUTFILE"
+
+  if [[ "$WIDTH" -ge "$HEIGHT" ]]; then
+    LONG="$WIDTH"
+  else
+    LONG="$HEIGHT"
+  fi
+
+  if [[ "$LONG" -gt "$MAX_SIDE" ]]; then
+    if [[ "$WIDTH" -ge "$HEIGHT" ]]; then
+      sips --resampleWidth "$MAX_SIDE" "$OUTFILE" --out "$OUTFILE" >/dev/null 2>&1
+    else
+      sips --resampleHeight "$MAX_SIDE" "$OUTFILE" --out "$OUTFILE" >/dev/null 2>&1
+    fi
+  fi
+
+  NEW_W=$(sips -g pixelWidth "$OUTFILE" | tail -1 | awk '{print $2}')
+  NEW_H=$(sips -g pixelHeight "$OUTFILE" | tail -1 | awk '{print $2}')
+  NEW_SIZE=$(stat -f "%z" "$OUTFILE")
+
+  echo ""
+  echo "Output: $OUTFILE"
+  echo "Size:   ${NEW_W}x${NEW_H} ($(( NEW_SIZE / 1024 ))KB)"
+fi

@@ -62,4 +62,18 @@ describe('screenshotConstants', () => {
     expect(HIDE_DEVBAR_CSS).toContain('visibility: hidden !important');
     expect(HIDE_DEVBAR_CSS).toContain('pointer-events: none !important');
   });
+
+  it('CSS uses opacity:0 and descendant selectors so an EXPANDED devbar cannot leak', () => {
+    // When the devbar is expanded, its toolbar buttons are descendants that set
+    // their own `visibility`, escaping a container-level `visibility: hidden`.
+    // `opacity: 0` compounds down the subtree and cannot be overridden by a
+    // descendant, and the ` *` selectors are belt-and-suspenders.
+    expect(HIDE_DEVBAR_CSS).toContain('opacity: 0 !important');
+    expect(HIDE_DEVBAR_CSS).toContain('[data-devbar] *');
+  });
+
+  it('CSS also hides third-party dev overlays that pollute screenshots', () => {
+    expect(HIDE_DEVBAR_CSS).toContain('[class*="tsqd-"]'); // TanStack Query Devtools
+    expect(HIDE_DEVBAR_CSS).toContain('[data-nextjs-dev-tools-button]'); // Next.js dev indicator
+  });
 });

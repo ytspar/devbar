@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    "packages/sweetlink": {
+      "release-type": "node",
+      "package-name": "@ytspar/sweetlink",
+      "component": "sweetlink"
+    },
+    "packages/devbar": {
+      "release-type": "node",
+      "package-name": "@ytspar/devbar",
+      "component": "devbar"
+    }
+  },
+  "separate-pull-requests": true,
+  "include-component-in-tag": true
+}

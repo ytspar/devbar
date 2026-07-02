@@ -1,0 +1,43 @@
+# release-please — automated release PRs for the two published packages.
+#
+# On push to main, release-please scans conventional commits since each
+# package's last release and opens (or updates) a per-package "Release"
+# PR with the version bump + CHANGELOG entry. Merging that PR creates the
+# per-package tag (sweetlink-vX.Y.Z / devbar-vX.Y.Z — the repo's existing
+# tag scheme) and a GitHub release; the tag push then triggers the
+# `tag-release` job in release.yml, which publishes to npm via the
+# trusted-publisher OIDC exchange.
+#
+# Token: authenticate with a fine-grained PAT (`RELEASE_PLEASE_TOKEN`) so
+# the tag push fires release.yml. GitHub's automatic `GITHUB_TOKEN` is
+# intentionally muted on tag pushes it creates — with only the fallback
+# token, the tag → publish chain needs a manual nudge (delete + re-push
+# the tag). Setup (one-time, same as enrichlayer/el-linear):
+#   1. Fine-grained PAT scoped to this repo with Contents: R/W,
+#      Pull requests: R/W, Workflows: R/W.
+#   2. Add as repo secret `RELEASE_PLEASE_TOKEN`.
+#
+# Manual trigger kept for credential-rotation / one-off catch-up;
+# release-please is idempotent (no-op when nothing new to release).
+
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}

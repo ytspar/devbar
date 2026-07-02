@@ -1,0 +1,71 @@
+# Release-notes gate for release-please Release PRs (verticalint DEV-5362).
+#
+# release-please bumps package versions but never writes the hand-maintained
+# packages/playground/src/release-notes.json entry that the publish-time guard
+# (scripts/check-release-notes.mjs, wired into each package's prepublishOnly)
+# requires. Without this gate the missing note surfaces only at publish time,
+# after merge, when the author has moved on — exactly the forgotten-step
+# failure the automation was meant to remove.
+#
+# This job runs on the Release PR itself: it diffs .release-please-manifest.json
+# against main to learn which package/version is being released, then fails the
+# PR unless release-notes.json already carries that entry. Fix is to add the
+# note to the Release PR branch before merging.
+#
+# Injection hygiene: no untrusted ${{ }} interpolation inside run: blocks — all
+# dynamic values (branch ref, computed check args) are passed via env:.
+
+name: release-notes-gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release-notes:
+    # Only release-please's Release PRs (branch prefix release-please--).
+    if: startsWith(github.head_ref, 'release-please--')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Read base (main) manifest
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git show "origin/${BASE_REF}:.release-please-manifest.json" > base-manifest.json
+          echo "Base manifest:"
+          cat base-manifest.json
+
+      - name: Determine released package versions
+        id: released
+        run: |
+          CHECK_ARGS="$(node scripts/released-versions.mjs base-manifest.json)"
+          echo "args=${CHECK_ARGS}" >> "$GITHUB_OUTPUT"
+          echo "Releasing: ${CHECK_ARGS:-<none>}"
+
+      - name: Verify release notes exist for released versions
+        env:
+          CHECK_ARGS: ${{ steps.released.outputs.args }}
+        run: |
+          if [ -z "$CHECK_ARGS" ]; then
+            echo "No manifest version change detected — nothing to verify."
+            exit 0
+          fi
+          if ! node scripts/check-release-notes.mjs --check $CHECK_ARGS; then
+            echo "::error::This Release PR bumps a version with no matching entry in packages/playground/src/release-notes.json. Add the release note(s) for the version(s) listed above to this PR branch before merging, or the npm publish will fail after merge."
+            exit 1
+          fi

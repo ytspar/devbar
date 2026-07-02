@@ -60,11 +60,18 @@ if (args.includes('--check')) {
   const name = shortName(pkg.name);
   const version = pkg.version;
 
-  // Strip prerelease suffix for canary versions: 1.15.0-canary.abc → 1.15.0
-  const baseVersion = version.replace(/-.*$/, '');
+  // Canary / prerelease exemption (DEV-5362): a prerelease build (e.g.
+  // 1.15.0-canary.abc) publishes a not-yet-released version, so requiring a
+  // hand-written release note for it is wrong — the note is authored later,
+  // on the release-please Release PR (gated by .github/workflows/release-notes-gate.yml),
+  // before the production tag publish. Production versions stay strict below.
+  if (version.includes('-')) {
+    console.log(`  ⏭  Skipping release-note check for prerelease ${name} v${version} (canary)`);
+    process.exit(0);
+  }
 
   const notes = releaseNotes[name];
-  if (!notes || !(notes[version] || notes[baseVersion])) {
+  if (!notes || !notes[version]) {
     console.error(
       `\n  ✘ Missing release note for ${name} v${version}` +
         `\n    Add an entry to packages/playground/src/release-notes.json` +
@@ -73,6 +80,5 @@ if (args.includes('--check')) {
     process.exit(1);
   }
 
-  const matchedVersion = notes[version] ? version : baseVersion;
-  console.log(`  ✔ Release note found for ${name} v${matchedVersion}: ${notes[matchedVersion]}`);
+  console.log(`  ✔ Release note found for ${name} v${version}: ${notes[version]}`);
 }

@@ -7,6 +7,12 @@
 # Keep publish steps free of NODE_AUTH_TOKEN/NPM_TOKEN. pnpm publish resolves
 # workspace:* ranges before upload, and with no static token configured it lets
 # npm's trusted-publisher OIDC exchange authenticate the publish.
+#
+# The manual production dispatch below is EMERGENCY-ONLY now that
+# release-please owns routine releases: it writes package.json and tags
+# WITHOUT updating .release-please-manifest.json, so after any manual
+# release you must also bump that manifest to the released version or the
+# next release-please run computes from a stale baseline.
 
 name: Package Release
 
@@ -14,6 +20,12 @@ on:
   push:
     branches:
       - main
+    # release-please merge → per-package tag → npm publish (tag-release job).
+    # The publish MUST live in this file: npm trusted publishing binds the
+    # OIDC trust to (repo, workflow file), and both packages trust release.yml.
+    tags:
+      - 'sweetlink-v*'
+      - 'devbar-v*'
   workflow_dispatch:
     inputs:
       mode:
@@ -38,8 +50,92 @@ on:
         type: string
 
 jobs:
+  # Tag-triggered production publish (release-please path). The tag is
+  # created by merging a release-please Release PR, which has already
+  # bumped package.json — so this job only verifies and publishes; the
+  # GitHub release is created by release-please itself.
+  tag-release:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Parse and validate tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if echo "$TAG" | grep -qE '^sweetlink-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "package=sweetlink" >> "$GITHUB_OUTPUT"
+          elif echo "$TAG" | grep -qE '^devbar-v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "package=devbar" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unrecognized release tag: $TAG (expected sweetlink-vX.Y.Z or devbar-vX.Y.Z)" >&2
+            exit 1
+          fi
+          echo "version=${TAG##*-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Setup npm for trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          node --version
+          npm --version
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Verify package version matches tag
+        env:
+          PKG: ${{ steps.tag.outputs.package }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          cd "packages/$PKG"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "$VERSION" ]; then
+            echo "package.json version ($PKG_VERSION) does not match tag version ($VERSION) — was the release-please PR merged?" >&2
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          PKG: ${{ steps.tag.outputs.package }}
+        run: |
+          cd "packages/$PKG"
+          pnpm publish --tag latest --access public --provenance --no-git-checks
+
+      - name: Summary
+        env:
+          PKG: ${{ steps.tag.outputs.package }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          echo "## Production Release Published (release-please)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@ytspar/${PKG}@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+
   canary:
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'canary')
+    if: (github.event_name == 'push' && github.ref_type == 'branch') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'canary')
     runs-on: ubuntu-latest
     permissions:
       contents: read

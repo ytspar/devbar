@@ -7,6 +7,12 @@
 # Keep publish steps free of NODE_AUTH_TOKEN/NPM_TOKEN. pnpm publish resolves
 # workspace:* ranges before upload, and with no static token configured it lets
 # npm's trusted-publisher OIDC exchange authenticate the publish.
+#
+# The manual production dispatch below is EMERGENCY-ONLY now that
+# release-please owns routine releases: it writes package.json and tags
+# WITHOUT updating .release-please-manifest.json, so after any manual
+# release you must also bump that manifest to the released version or the
+# next release-please run computes from a stale baseline.
 
 name: Package Release
 

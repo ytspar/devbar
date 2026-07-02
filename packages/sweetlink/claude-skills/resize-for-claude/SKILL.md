@@ -17,7 +17,7 @@ Resize images to optimal dimensions for Claude's vision capabilities. Claude pro
 
 ## How It Works
 
-The script at `scripts/resize-for-claude` (in the tools repo):
+The `resize-for-claude` script **bundled in this skill's directory** (next to this SKILL.md):
 
 1. Reads the image dimensions
 2. If the image aspect ratio is < 3:1, resizes proportionally so the longest side = 1568px
@@ -37,20 +37,23 @@ Images exceeding these dimensions get downscaled by Claude anyway, wasting token
 ## Usage
 
 ```bash
-# Find the script (works from any project linked to tools)
-TOOLS_ROOT="$(readlink -f .claude/skills/../../)"
+# The script ships WITH this skill — invoke it from the skill's own base
+# directory (announced when the skill loads). No tools-repo lookup, no
+# project-root derivation: the skill and its script are one unit, so this
+# works identically from any repo the skill is linked into.
+SKILL_DIR="<this skill's base directory>"
 
 # Basic usage — resize to 1568px longest side
-"$TOOLS_ROOT/scripts/resize-for-claude" ~/Downloads/mockup.jpg
+bash "$SKILL_DIR/resize-for-claude" ~/Downloads/mockup.jpg
 
 # Custom max side
-"$TOOLS_ROOT/scripts/resize-for-claude" ~/Downloads/mockup.png 1200
+bash "$SKILL_DIR/resize-for-claude" ~/Downloads/mockup.png 1200
 ```
 
-### Direct invocation (if you know the tools path)
+### Direct invocation (absolute path)
 
 ```bash
-$TOOLS_ROOT/scripts/resize-for-claude ~/Downloads/image.jpg
+bash /path/to/<skill-dir>/resize-for-claude ~/Downloads/image.jpg
 ```
 
 ## Output

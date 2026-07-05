@@ -766,6 +766,66 @@ describe('click command', () => {
     expect(sentData.code).toContain('querySelectorAll');
     expect(sentData.code).toContain('button.primary');
   });
+
+  it("uses the '*' base selector for `click --text X` (flag is not a positional)", async () => {
+    // Regression: `click --text "Save list"` consumed the literal `--text`
+    // token as the positional selector, generating
+    // querySelectorAll("--text") — "No element found" for every documented
+    // --text invocation.
+    autoResponse.value = {
+      success: true,
+      data: { success: true, clicked: 'BUTTON.save', found: 1 },
+      timestamp: Date.now(),
+    };
+
+    await runCLI(['click', '--text', 'Save list']);
+
+    const ws = MockWebSocket.instances[0];
+    const sentData = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sentData.type).toBe('exec-js');
+    expect(sentData.code).toContain('querySelectorAll("*")');
+    expect(sentData.code).not.toContain('--text');
+    expect(sentData.code).toContain('Save list');
+  });
+
+  it('scopes `click <selector> --text X` to the positional selector', async () => {
+    autoResponse.value = {
+      success: true,
+      data: { success: true, clicked: 'BUTTON.save', found: 1 },
+      timestamp: Date.now(),
+    };
+
+    await runCLI(['click', 'button', '--text', 'Save list']);
+
+    const ws = MockWebSocket.instances[0];
+    const sentData = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sentData.code).toContain('querySelectorAll("button")');
+    expect(sentData.code).toContain('Save list');
+  });
+
+  it('never accepts a token starting with -- as the positional selector', async () => {
+    // With only a flag token after the command and no --text/--selector,
+    // click must report the missing-target error instead of trying to
+    // querySelectorAll a flag.
+    await runCLI(['click', '--index', '1']);
+
+    expect(errors.some((e) => e.includes('Either --selector or --text is required'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('fill command positional parsing', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('does not consume flag tokens as the target or value', async () => {
+    // `fill --value x` has no target; the old parsing took the literal
+    // `--value` token as the target and produced the wrong error.
+    await runCLI(['fill', '--value', 'hello']);
+
+    expect(errors.some((e) => e.includes('fill requires a target'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
 });
 
 describe('logs command', () => {

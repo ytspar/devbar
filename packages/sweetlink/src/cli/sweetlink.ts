@@ -2993,6 +2993,18 @@ function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
 
+/**
+ * Positional argument at `index`, or undefined when that token is a flag.
+ * Flags must never be consumed as positionals: `click --text "Save list"`
+ * used to take the literal `--text` as the positional selector, producing
+ * querySelectorAll("--text") and "No element found" for every documented
+ * `click --text ...` invocation.
+ */
+function getPositionalArg(index: number): string | undefined {
+  const value = args[index];
+  return value !== undefined && !value.startsWith('--') ? value : undefined;
+}
+
 // Per-command --help: `pnpm sweetlink screenshot --help`
 // Past the early-exit at the top of dispatch, commandType is non-null.
 if (hasFlag('--help') || hasFlag('-h')) {
@@ -3277,7 +3289,7 @@ async function handleExecCmd(): Promise<unknown> {
 }
 
 async function handleClickCmd(): Promise<unknown> {
-  const clickTarget = getArg('--selector') ?? args[1];
+  const clickTarget = getArg('--selector') ?? getPositionalArg(1);
   const clickText = getArg('--text');
   const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
   const projRoot = findProjectRoot();
@@ -3712,8 +3724,8 @@ async function handleDaemonCmd(): Promise<unknown> {
 }
 
 async function handleFillCmd(): Promise<unknown> {
-  const fillTarget = getArg('--selector') ?? args[1];
-  const fillValue = getArg('--value') ?? args[2];
+  const fillTarget = getArg('--selector') ?? getPositionalArg(1);
+  const fillValue = getArg('--value') ?? getPositionalArg(2);
   if (!fillTarget) {
     console.error('[Sweetlink] Error: fill requires a target (@ref or --selector)');
     process.exit(1);

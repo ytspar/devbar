@@ -674,6 +674,9 @@ async function screenshot(options: {
       const resp = await daemonRequest(daemonState, 'screenshot-responsive', {
         fullPage: options.fullPage,
         hideDevbar: options.hideDevbar,
+        // Explicit --url only: the daemon re-navigates when the live page
+        // differs (SPA routing may have moved it since the last command).
+        url: options.url,
       });
       const data = resp.data as {
         screenshots: Array<{ width: number; height: number; screenshot: string; label: string }>;
@@ -708,6 +711,9 @@ async function screenshot(options: {
       padding: (options as { padding?: number }).padding,
       theme: (options as { theme?: string }).theme,
       hideDevbar: options.hideDevbar,
+      // Explicit --url only: the daemon re-navigates when the live page
+      // differs (SPA routing may have moved it since the last command).
+      url: options.url,
     });
     const data = resp.data as {
       screenshot: string;
@@ -3068,6 +3074,9 @@ async function handleInspectCmd(): Promise<unknown> {
     expectedOutcome: getArg('--expected'),
     actionTranscript,
     includeA11y: !hasFlag('--no-a11y'),
+    // Explicit --url only: the daemon re-navigates when the live page
+    // differs (SPA routing may have moved it since the last command).
+    url: getArg('--url'),
   });
   const data = resp.data as unknown as InspectData;
   const output = getArg('--output');
@@ -3603,6 +3612,9 @@ async function handleSnapshotCmd(): Promise<unknown> {
     interactive,
     diff: doDiff,
     annotate: doAnnotate,
+    // Explicit --url only: the daemon re-navigates when the live page
+    // differs (SPA routing may have moved it since the last command).
+    url: getArg('--url'),
   });
   const data = resp.data as {
     tree: string;

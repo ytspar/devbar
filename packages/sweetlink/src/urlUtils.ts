@@ -60,6 +60,33 @@ export function generateSlugFromUrl(url: string, title?: string): string {
 }
 
 // ============================================================================
+// URL Comparison
+// ============================================================================
+
+/**
+ * Normalize a page URL for navigation comparisons: drop the hash and any
+ * trailing slash on the path, keep the query string significant. Falls back
+ * to a plain-string normalization when the input isn't an absolute URL.
+ */
+export function normalizeUrlForComparison(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.origin}${pathname}${parsed.search}`;
+  } catch {
+    return url.replace(/#.*$/, '').replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Whether two URLs point at the same page for navigation purposes
+ * (ignoring trailing slashes and hash fragments).
+ */
+export function urlsEquivalent(a: string, b: string): boolean {
+  return normalizeUrlForComparison(a) === normalizeUrlForComparison(b);
+}
+
+// ============================================================================
 // Timestamp Formatting
 // ============================================================================
 

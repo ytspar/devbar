@@ -6,9 +6,55 @@ import {
   HMR_SCREENSHOT_DIR,
   MAX_LOG_MESSAGE_LENGTH,
   MAX_SLUG_LENGTH,
+  normalizeUrlForComparison,
   SCREENSHOT_DIR,
   truncateMessage,
+  urlsEquivalent,
 } from './urlUtils.js';
+
+describe('urlsEquivalent', () => {
+  it('matches identical URLs', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/list/abc', 'https://places.localhost/list/abc')
+    ).toBe(true);
+  });
+
+  it('ignores trailing slashes', () => {
+    expect(urlsEquivalent('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(
+      true
+    );
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
+  });
+
+  it('ignores hash fragments', () => {
+    expect(
+      urlsEquivalent('http://localhost:3000/about#section', 'http://localhost:3000/about')
+    ).toBe(true);
+  });
+
+  it('keeps query strings significant', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/list/abc?v=2', 'https://places.localhost/list/abc')
+    ).toBe(false);
+    expect(
+      urlsEquivalent(
+        'https://places.localhost/list/abc?v=2',
+        'https://places.localhost/list/abc?v=2'
+      )
+    ).toBe(true);
+  });
+
+  it('distinguishes different paths (SPA navigation)', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/new?remix=abc', 'https://places.localhost/list/abc')
+    ).toBe(false);
+  });
+
+  it('falls back to string normalization for non-URLs', () => {
+    expect(urlsEquivalent('about:blank', 'about:blank')).toBe(true);
+    expect(normalizeUrlForComparison('not a url/')).toBe('not a url');
+  });
+});
 
 describe('constants', () => {
   it('MAX_SLUG_LENGTH is 50', () => {

@@ -13,6 +13,7 @@ import {
   getBrowserInstance,
   getPage,
   initBrowser,
+  navigateTo,
   takeResponsiveScreenshots,
   takeScreenshot,
 } from './browser.js';
@@ -155,8 +156,21 @@ async function handleShutdown(): Promise<DaemonResponse> {
   return { ok: true, data: { message: 'Daemon shutting down' } };
 }
 
+/**
+ * Ensure the browser is up and — when the request carries an explicit `url`
+ * param (the CLI's --url) — that the live page is actually on that URL.
+ * Commands without an explicit URL leave the page alone so ref-based flows
+ * (snapshot → click → screenshot) keep their SPA state.
+ */
+async function ensurePageAt(requestedUrl: unknown, fallbackUrl: string): Promise<void> {
+  const explicit =
+    typeof requestedUrl === 'string' && requestedUrl.length > 0 ? requestedUrl : null;
+  await initBrowser(explicit ?? fallbackUrl);
+  if (explicit) await navigateTo(explicit);
+}
+
 async function handleScreenshot(params: ScreenshotParams, url: string): Promise<DaemonResponse> {
-  await initBrowser(url);
+  await ensurePageAt(params.url, url);
 
   // During a recording, screenshots must target the recording page so the
   // captured image matches what the video shows, and the action is logged
@@ -201,7 +215,7 @@ async function handleResponsiveScreenshot(
   params: ResponsiveScreenshotParams,
   url: string
 ): Promise<DaemonResponse> {
-  await initBrowser(url);
+  await ensurePageAt(params.url, url);
   const viewports = params.viewports ?? DEFAULT_RESPONSIVE_VIEWPORTS;
   // Default to fullPage so users see the page in its entirety at each
   // breakpoint — that's the typical reason to invoke `--responsive`.
@@ -234,7 +248,7 @@ async function handleSnapshot(
   params: Record<string, unknown>,
   url: string
 ): Promise<DaemonResponse> {
-  await initBrowser(url);
+  await ensurePageAt(params.url, url);
   const recPage = getRecordingPage();
   const page = recPage ?? getPage();
   const interactive = params.interactive as boolean | undefined;
@@ -657,7 +671,7 @@ async function handleInspect(
   params: Record<string, unknown>,
   url: string
 ): Promise<DaemonResponse> {
-  await initBrowser(url);
+  await ensurePageAt(params.url, url);
   const page = getRecordingPage() ?? getPage();
   const pageInfo = await getPageInfo(page);
   const generatedAt = new Date().toISOString();

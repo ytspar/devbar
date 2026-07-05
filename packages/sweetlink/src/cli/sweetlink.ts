@@ -33,6 +33,7 @@ import {
   resolveSweetlinkWsPortForAppPort,
 } from '../types.js';
 import { SCREENSHOT_DIR, selectClientForTargetUrl, urlsEquivalent } from '../urlUtils.js';
+import { generateClickCode } from './clickCode.js';
 import type {
   A11yData,
   CleanupData,
@@ -1428,46 +1429,6 @@ async function execJS(options: {
   }
 }
 
-/**
- * Generate JavaScript code that finds elements and clicks the one at the given index.
- * Parameterized by the element-finding strategy: text content search or CSS selector.
- */
-function generateClickCode(
-  strategy:
-    | { type: 'text'; text: string; selector: string }
-    | { type: 'selector'; selector: string },
-  index: number
-): string {
-  // The element-finding expression differs, but the bounds-check + click + return is shared
-  const escapedSelector = JSON.stringify(strategy.selector);
-  let findExpression: string;
-  let notFoundMsg: string;
-
-  if (strategy.type === 'text') {
-    const escapedText = JSON.stringify(strategy.text);
-    findExpression = `Array.from(document.querySelectorAll(${escapedSelector})).filter(el => el.textContent?.includes(${escapedText}))`;
-    notFoundMsg = `"No element found with text: " + ${escapedText}`;
-  } else {
-    findExpression = `Array.from(document.querySelectorAll(${escapedSelector}))`;
-    notFoundMsg = `"No element found matching: " + ${escapedSelector}`;
-  }
-
-  return `
-      (() => {
-        const elements = ${findExpression};
-        if (elements.length === 0) {
-          return { success: false, error: ${notFoundMsg} };
-        }
-        const target = elements[${index}];
-        if (!target) {
-          return { success: false, error: "Index ${index} out of bounds, found " + elements.length + " elements" };
-        }
-        target.click();
-        return { success: true, clicked: target.tagName + (target.className ? "." + target.className.split(" ")[0] : ""), found: elements.length };
-      })()
-    `;
-}
-
 async function click(options: {
   selector?: string;
   text?: string;
@@ -1484,9 +1445,14 @@ async function click(options: {
   let description: string;
 
   if (text) {
-    const baseSelector = selector || '*';
     description = selector ? `"${text}" within ${selector}` : `"${text}"`;
-    clickCode = generateClickCode({ type: 'text', text, selector: baseSelector }, index);
+    // Explicit selector: the user chose the candidate scoping. Bare --text:
+    // leaf-most + clickable-preferred matching (see clickCode.ts) so the
+    // click lands on the button around the text, not on <html> (whose
+    // textContent also matches).
+    clickCode = selector
+      ? generateClickCode({ type: 'text', text, selector }, index)
+      : generateClickCode({ type: 'smart-text', text }, index);
   } else {
     description = `${selector}${index > 0 ? ` [${index}]` : ''}`;
     clickCode = generateClickCode({ type: 'selector', selector: selector! }, index);

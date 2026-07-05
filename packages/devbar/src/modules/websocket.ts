@@ -10,7 +10,7 @@ import {
   outlineToMarkdown,
 } from '@ytspar/sweetlink/browser/commands/outline';
 import { extractPageSchema, schemaToMarkdown } from '@ytspar/sweetlink/browser/commands/schema';
-import { toSafeWsPort } from '@ytspar/sweetlink/types';
+import { SWEETLINK_ACK_TIMEOUT_MS, toSafeWsPort } from '@ytspar/sweetlink/types';
 import { runA11yAudit } from '../accessibility.js';
 import {
   BASE_RECONNECT_DELAY_MS,
@@ -109,11 +109,29 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
   state.ws = ws;
   state.wsVerified = false;
 
+  // Require the server-info ack before treating the socket as connected.
+  // An OPEN socket is NOT a Sweetlink connection: dev-server upgrade
+  // handlers (e.g. Next's HMR endpoint reached through an HTTPS proxy's
+  // /__sweetlink path) accept arbitrary WS upgrades and swallow every
+  // message. No ack within the window → close, try the next candidate.
+  // The timer starts at `open` (a refused connection is handled by
+  // onclose; arming it earlier would double-schedule the candidate walk).
+  let verificationTimeout: ReturnType<typeof setTimeout> | undefined;
+
   ws.onopen = () => {
     state.debug.ws('WebSocket socket opened, awaiting server-info');
     // Report our location so the server can route targeted CLI commands
     // (--url) to the client that is actually on the requested page.
     ws.send(JSON.stringify({ type: 'browser-client-ready', url: window.location.href }));
+    verificationTimeout = setTimeout(() => {
+      if (state.wsVerified || state.destroyed) return;
+      state.debug.ws('No server-info ack — not a Sweetlink server; trying next candidate', {
+        targetUrl,
+      });
+      switchingTargets = true;
+      ws.close();
+      scheduleNextTarget(state, targetUrl);
+    }, SWEETLINK_ACK_TIMEOUT_MS);
   };
 
   ws.onmessage = async (event) => {
@@ -122,6 +140,7 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
 
       // Handle server-info for port matching
       if (message.type === 'server-info') {
+        clearTimeout(verificationTimeout);
         const serverAppPort = message.appPort as number | null;
         const serverMatchesApp = serverAppPort === null || serverAppPort === state.currentAppPort;
 
@@ -235,6 +254,7 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
   };
 
   ws.onclose = () => {
+    clearTimeout(verificationTimeout);
     // Only reset connection state if we were actually verified/connected
     if (state.wsVerified) {
       state.sweetlinkConnected = false;

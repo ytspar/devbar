@@ -84,6 +84,14 @@ function detectNextPort(): number {
  * - Starts the WebSocket server on `appPort + 6223`
  * - Registers graceful shutdown handlers
  * - No-ops in production
+ *
+ * Unlike the Vite plugin, no same-origin `/__sweetlink` endpoint can be
+ * exposed here: Next's dev HTTP server is not reachable from next.config,
+ * and its HMR upgrade handler accepts arbitrary WS upgrades — a proxy
+ * forwarding `/__sweetlink` to Next yields a socket that opens but never
+ * acks (a phantom acceptor). Clients therefore rely on the inlined
+ * NEXT_PUBLIC_SWEETLINK_* port hints (tried BEFORE any same-origin guess)
+ * and require the server-info ack before treating a socket as connected.
  */
 export function withSweetlink<T>(nextConfig: T, options?: WithSweetlinkOptions): T {
   if (process.env.NODE_ENV !== 'development') return nextConfig;

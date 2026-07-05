@@ -321,6 +321,31 @@ describe('Local Development URL Helpers', () => {
     ).toEqual(['wss://places.localhost/__sweetlink', `ws://localhost:${DEFAULT_WS_PORT}`]);
   });
 
+  it('tries a hinted port BEFORE the same-origin guess under a proxied origin', () => {
+    // Next + Portless: the plugin inlines the real WS port but serves no
+    // /__sweetlink endpoint — the proxy forwards that path to Next's HMR
+    // upgrade handler, which accepts arbitrary WS upgrades (a phantom
+    // acceptor). The known-good hinted port must come first so the client
+    // never strands on the phantom.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'places.localhost' },
+        { wsPort: '10264', fallbackPort: 10264 }
+      )
+    ).toEqual(['ws://localhost:10264', 'wss://places.localhost/__sweetlink']);
+  });
+
+  it('keeps a declared wsPath same-origin endpoint ahead of the hinted port', () => {
+    // Vite injects wsPath because its plugin really serves /__sweetlink on
+    // the app origin — a declared endpoint outranks port math.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'http:', port: '5173', host: 'localhost:5173' },
+        { wsPort: '11396', wsPath: SWEETLINK_WS_PATH, fallbackPort: 11396 }
+      )
+    ).toEqual(['ws://localhost:5173/__sweetlink', 'ws://localhost:11396']);
+  });
+
   it('creates same-origin websocket URLs for HTTP and HTTPS app origins', () => {
     expect(
       createSameOriginSweetlinkWsUrl({

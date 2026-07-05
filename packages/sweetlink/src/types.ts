@@ -25,6 +25,16 @@ export const PORT_RETRY_DELAY_MS = 100;
 export const SWEETLINK_WS_PATH = '/__sweetlink';
 
 /**
+ * How long a browser client waits for the server-info acknowledgment after
+ * the socket opens. An OPEN socket alone is NOT a Sweetlink connection —
+ * dev-server upgrade handlers (e.g. Next's HMR endpoint reached through an
+ * HTTPS proxy's /__sweetlink path) accept arbitrary WS upgrades, so a
+ * client that trusts `open` green-lights a socket that swallows every
+ * message. No ack within this window → close and try the next candidate.
+ */
+export const SWEETLINK_ACK_TIMEOUT_MS = 1500;
+
+/**
  * Ports browsers refuse to connect to (Chrome's restricted-port list from
  * net/base/port_util.cc; Firefox and Safari block near-identical sets).
  * A WebSocket to one of these fails with ERR_UNSAFE_PORT before it ever
@@ -213,11 +223,16 @@ export function createSameOriginSweetlinkWsUrl(
  * Shared by the devbar and the SweetlinkBridge so both agree on priority:
  *
  * 1. An explicit `wsUrl` hint (framework plugin or user option).
- * 2. The same-origin Sweetlink path — always when a `wsPath` hint was
- *    injected, and also whenever the page has no explicit port. Behind a
- *    local HTTPS proxy (Portless etc.) the location carries no usable port,
- *    so the conventional `/__sweetlink` endpoint is the only derivable one.
- * 3. Localhost port math as the last resort.
+ * 2. The same-origin path DECLARED via a `wsPath` hint — the plugin that
+ *    injected it (Vite) really serves that endpoint.
+ * 3. A `wsPort` hint (e.g. Next's inlined NEXT_PUBLIC_SWEETLINK_WS_PORT) —
+ *    the port the server actually bound.
+ * 4. The conventional same-origin `/__sweetlink` guess, only when the page
+ *    has no explicit port (proxied origin) and no wsPath declared it. This
+ *    comes AFTER the hinted port: under Next the proxy forwards the path to
+ *    the dev server, whose HMR upgrade handler accepts arbitrary WS
+ *    upgrades — a phantom acceptor that must never shadow a known-good port.
+ * 5. Derived localhost port math as the last resort.
  */
 export function buildSweetlinkWsUrlCandidates(
   location: SweetlinkLocationLike,
@@ -233,13 +248,19 @@ export function buildSweetlinkWsUrlCandidates(
     if (url && !urls.includes(url)) urls.push(url);
   };
 
+  const hintedPort = parsePortNumber(options.wsPort);
+
   add(options.wsUrl);
   if (options.wsPath) {
     add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
-  } else if (!parsePortNumber(location.port)) {
+  }
+  if (hintedPort) {
+    add(`ws://localhost:${hintedPort}`);
+  }
+  if (!options.wsPath && !parsePortNumber(location.port)) {
     add(createSameOriginSweetlinkWsUrl(location));
   }
-  add(`ws://localhost:${parsePortNumber(options.wsPort) ?? options.fallbackPort}`);
+  add(`ws://localhost:${hintedPort ?? options.fallbackPort}`);
   return urls;
 }
 

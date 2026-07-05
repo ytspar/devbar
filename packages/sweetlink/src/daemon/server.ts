@@ -1771,10 +1771,16 @@ export function startServer(options: StartServerOptions): Promise<void> {
   });
 }
 
+let shuttingDown = false;
+
 /**
  * Shut down the daemon: close browser, close HTTP server, call shutdown callback.
+ * Idempotent — a signal arriving while an API-triggered shutdown is already
+ * closing the browser must not race a second pass.
  */
 export async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.error('[Daemon] Shutting down...');
 
   if (idleTimer) {
@@ -1782,6 +1788,9 @@ export async function shutdown(): Promise<void> {
     idleTimer = null;
   }
 
+  // Close the browser BEFORE exiting. Skipping this leaves a zombie
+  // headless page alive and WS-connected to the sweetlink server — later
+  // Tier-1 screenshots then silently capture that page's stale URL.
   await closeBrowser();
 
   if (httpServer) {

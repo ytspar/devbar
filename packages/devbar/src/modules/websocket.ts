@@ -383,6 +383,9 @@ async function handleScreenshotCommand(
         width: canvas.width,
         height: canvas.height,
         selector: command.selector || 'body',
+        // Report where the capture was actually taken so the CLI can detect
+        // (and refuse) captures from a client sitting on the wrong page.
+        url: window.location.href,
       },
       timestamp: Date.now(),
     })

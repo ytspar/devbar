@@ -25,7 +25,7 @@ import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, resolveSweetlinkWsPortForAppPort } from '../types.js';
-import { SCREENSHOT_DIR } from '../urlUtils.js';
+import { SCREENSHOT_DIR, urlsEquivalent } from '../urlUtils.js';
 import type {
   A11yData,
   CleanupData,
@@ -459,14 +459,6 @@ async function sendCommand(
   });
 }
 
-/**
- * Compare two URLs ignoring trailing slashes.
- * Exported-style name for testability (re-implemented in tests).
- */
-function urlsMatch(a: string, b: string): boolean {
-  return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
-}
-
 const NAVIGATE_POLL_INTERVAL = 500; // ms between reconnection polls
 const NAVIGATE_DEFAULT_TIMEOUT = 10000; // 10s default
 
@@ -487,7 +479,7 @@ async function navigateBrowser(
     const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
     if (response.success && response.data != null) {
       const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
-      if (urlsMatch(currentUrl, url)) {
+      if (urlsEquivalent(currentUrl, url)) {
         console.log(`[Sweetlink] Browser already on ${url}`);
         return true;
       }
@@ -519,7 +511,7 @@ async function navigateBrowser(
       const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
       if (response.success && response.data != null) {
         const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
-        if (urlsMatch(currentUrl, url)) {
+        if (urlsEquivalent(currentUrl, url)) {
           // Give devbar time to fully initialize after page load
           await new Promise((resolve) => setTimeout(resolve, 1000));
           console.log(`[Sweetlink] Browser reconnected on ${url}`);
@@ -867,10 +859,31 @@ async function screenshot(options: {
       process.exit(1);
     }
 
+    const data = response.data as Record<string, unknown>;
+
+    // Tier-1 safety: the browser client reports the URL it actually
+    // captured. If --url was requested and the connected client is on a
+    // different page (e.g. a zombie headless page left behind by a stale
+    // daemon), never save the wrong capture silently — escalate to
+    // Playwright, which navigates for real.
+    const capturedUrl = typeof data.url === 'string' ? data.url : null;
+    if (options.url && capturedUrl && !urlsEquivalent(capturedUrl, options.url)) {
+      console.warn(
+        `[Sweetlink] ⚠ Connected browser is on ${capturedUrl}, not ${options.url} — discarding WebSocket capture`
+      );
+      if (options.forceWS) {
+        console.error(
+          '[Sweetlink] Refusing to save a capture of the wrong page (--force-ws prevents Playwright fallback)'
+        );
+        process.exit(1);
+      }
+      console.log('[Sweetlink] Escalating to Playwright for the requested URL');
+      return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (URL mismatch fallback)');
+    }
+
     // Save screenshot
     const outputPath = options.output || getDefaultScreenshotPath();
     ensureDir(outputPath);
-    const data = response.data as Record<string, unknown>;
     const base64Data = (data.screenshot as string).replace(/^data:image\/png;base64,/, '');
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 

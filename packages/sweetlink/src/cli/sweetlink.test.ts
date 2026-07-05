@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
+import { urlsEquivalent } from '../urlUtils.js';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — available inside vi.mock factories
@@ -2113,54 +2114,54 @@ describe('getArg edge cases', () => {
 });
 
 // ===========================================================================
-// 31. urlsMatch — pure function tests
+// 31. urlsEquivalent — shared URL comparison used by --url flows
 // ===========================================================================
 
-describe('urlsMatch', () => {
-  /**
-   * Re-implementation of the internal urlsMatch function from sweetlink.ts.
-   */
-  function urlsMatch(a: string, b: string): boolean {
-    return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
-  }
-
+describe('urlsEquivalent (CLI --url comparison)', () => {
   it('matches identical URLs', () => {
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3000')).toBe(true);
   });
 
   it('matches when one has trailing slash', () => {
-    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000/')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3000/')).toBe(true);
   });
 
   it('matches when both have trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000/')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000/')).toBe(true);
   });
 
   it('matches paths with trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(
+      true
+    );
   });
 
   it('does not match different paths', () => {
-    expect(urlsMatch('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(
+      false
+    );
   });
 
   it('preserves query params in comparison', () => {
-    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=1')).toBe(true);
-    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=2')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000?a=1', 'http://localhost:3000?a=1')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000?a=1', 'http://localhost:3000?a=2')).toBe(false);
   });
 
-  it('preserves hash fragments in comparison', () => {
-    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#top')).toBe(true);
-    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#bottom')).toBe(false);
+  it('ignores hash fragments (SPA routers differ on them)', () => {
+    expect(urlsEquivalent('http://localhost:3000#top', 'http://localhost:3000#top')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000#top', 'http://localhost:3000#bottom')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/about#x', 'http://localhost:3000/about')).toBe(
+      true
+    );
   });
 
   it('does not match different ports', () => {
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3001')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3001')).toBe(false);
   });
 
   it('strips multiple trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000///', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000///', 'http://localhost:3000')).toBe(true);
   });
 });
 
@@ -2275,6 +2276,100 @@ describe('screenshot --url navigation', () => {
 
     expect(errors.some((e) => e.includes('Could not navigate browser to'))).toBe(true);
     expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('saves the WS capture when the client reports the requested URL', async () => {
+    autoResponse.queue = [
+      // 1. Check current URL — already on target
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 2. Screenshot response reporting the matching capture URL
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-url-match.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(false);
+  });
+
+  it('refuses a WS capture of the wrong page with --force-ws (zombie client)', async () => {
+    autoResponse.queue = [
+      // 1. Check current URL — claims to be on target (a second/zombie
+      //    client can still answer the capture from a different page)
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 2. Screenshot response reporting a DIFFERENT capture URL
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/stale-page',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-url-mismatch.png',
+    ]);
+
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(true);
+    expect(errors.some((e) => e.includes('Refusing to save a capture of the wrong page'))).toBe(
+      true
+    );
+    // Note: the mocked process.exit doesn't halt execution, so we assert the
+    // exit code rather than the absence of later logs.
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('falls back to Playwright when the WS capture URL mismatches (no --force-ws)', async () => {
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/stale-page',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--output',
+      '/tmp/test-url-mismatch-fallback.png',
+    ]);
+
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(true);
+    expect(logs.some((l) => l.includes('Escalating to Playwright'))).toBe(true);
+    expect(vi.mocked(screenshotViaPlaywright)).toHaveBeenCalled();
   });
 });
 

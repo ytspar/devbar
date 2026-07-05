@@ -22,6 +22,7 @@ vi.mock('@ytspar/sweetlink/browser/commands/schema', () => ({
   schemaToMarkdown: vi.fn(() => ''),
 }));
 
+import { SWEETLINK_ACK_TIMEOUT_MS } from '@ytspar/sweetlink/types';
 import type { DevBarState } from './types.js';
 import { connectWebSocket, handleNotification } from './websocket.js';
 
@@ -231,7 +232,56 @@ describe('connectWebSocket', () => {
     vi.useRealTimers();
   });
 
-  it('sends browser-client-ready on open', () => {
+  it('abandons a phantom socket that opens but never sends server-info', () => {
+    // Behind an HTTPS proxy, /__sweetlink can be forwarded to the Next dev
+    // server whose HMR upgrade handler accepts arbitrary WS upgrades: the
+    // socket OPENS but no sweetlink ack ever arrives. The client must not
+    // green-light it — close and advance to the next candidate.
+    vi.useFakeTimers();
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({
+      baseWsPort: 10264,
+      wsUrlCandidates: ['wss://places.localhost/__sweetlink', 'ws://localhost:10264'],
+    } as Partial<DevBarState>);
+    connectWebSocket(state);
+
+    const phantom = instances[0];
+    expect(phantom.url).toBe('wss://places.localhost/__sweetlink');
+    phantom.onopen!({});
+
+    vi.advanceTimersByTime(SWEETLINK_ACK_TIMEOUT_MS + 1);
+    expect(phantom.close).toHaveBeenCalled();
+    expect(state.sweetlinkConnected).toBe(false);
+    expect(state.wsVerified).toBe(false);
+
+    // Advances to the next candidate (the hinted real port)
+    vi.advanceTimersByTime(200);
+    expect(instances[1].url).toBe('ws://localhost:10264');
+    vi.useRealTimers();
+  });
+
+  it('keeps a socket whose server-info ack arrived before the deadline', () => {
+    vi.useFakeTimers();
+    const { MockWebSocket, instances } = createMockWebSocketClass();
+    globalThis.WebSocket = MockWebSocket as any;
+
+    const state = createMockState({ baseWsPort: 9223 });
+    connectWebSocket(state);
+
+    const ws = instances[0];
+    ws.onopen!({});
+    ws.onmessage!({ data: JSON.stringify({ type: 'server-info', appPort: null }) });
+
+    vi.advanceTimersByTime(SWEETLINK_ACK_TIMEOUT_MS + 10);
+    expect(ws.close).not.toHaveBeenCalled();
+    expect(state.sweetlinkConnected).toBe(true);
+    expect(instances).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('sends browser-client-ready with the page location on open', () => {
     const { MockWebSocket, instances } = createMockWebSocketClass();
     globalThis.WebSocket = MockWebSocket as any;
 
@@ -241,7 +291,11 @@ describe('connectWebSocket', () => {
     const ws = instances[0];
     ws.onopen!({});
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'browser-client-ready' }));
+    // The reported URL lets the server route targeted CLI commands (--url)
+    // to the client that is actually on the requested page.
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'browser-client-ready', url: window.location.href })
+    );
   });
 
   it('verifies server on matching server-info and marks connected', () => {

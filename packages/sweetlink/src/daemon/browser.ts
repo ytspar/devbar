@@ -6,6 +6,7 @@
  * this keeps a single browser alive for the daemon's lifetime.
  */
 
+import { urlsEquivalent } from '../urlUtils.js';
 import { DEFAULT_VIEWPORT, parseViewport } from '../viewportUtils.js';
 import { installCursorHighlight } from './cursor.js';
 import { installListeners } from './listeners.js';
@@ -45,7 +46,6 @@ async function getPlaywright(): Promise<{ chromium: Chromium }> {
 let browser: Browser | null = null;
 let context: BrowserContext | null = null;
 let page: Page | null = null;
-let currentUrl: string | null = null;
 
 const NAVIGATION_TIMEOUT_MS = 30_000;
 const HIDE_DEVBAR_STYLE_ID = 'sweetlink-hide-devbar-for-screenshot';
@@ -119,20 +119,25 @@ export function getBrowserInstance(): Browser {
 }
 
 /**
- * Navigate to a URL if it differs from the current one.
+ * Navigate to a URL if the page isn't already there.
+ *
+ * Compares against the LIVE page.url() rather than a cached "last navigated
+ * URL": SPA client-side routing (e.g. a click that pushes /new) moves the
+ * page without any goto(), so a cache goes stale and silently skips
+ * navigation back to the requested URL. Trailing slashes and hash fragments
+ * are ignored in the comparison.
  */
 export async function navigateTo(url: string): Promise<void> {
   const p = getPage();
-  if (currentUrl === url) return;
+  if (urlsEquivalent(p.url(), url)) return;
 
   console.error(`[Daemon] Navigating to ${url}...`);
   try {
     await p.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
-    currentUrl = url;
   } catch (error) {
     console.error('[Daemon] Navigation error:', error instanceof Error ? error.message : error);
-    // Still update currentUrl — page may have partially loaded
-    currentUrl = url;
+    // Page may have partially loaded; callers proceed with whatever state
+    // the page is in — the next navigateTo() re-checks the live URL.
   }
 }
 
@@ -319,7 +324,6 @@ export async function closeBrowser(): Promise<void> {
     browser = null;
     context = null;
     page = null;
-    currentUrl = null;
     console.error('[Daemon] Browser closed.');
   }
 }

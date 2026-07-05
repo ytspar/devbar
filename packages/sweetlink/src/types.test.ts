@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  buildSweetlinkWsUrlCandidates,
   createSameOriginSweetlinkWsUrl,
   DEFAULT_WS_PORT,
   getErrorMessage,
@@ -20,6 +21,7 @@ import {
   isSaveScreenshotData,
   isSaveSettingsData,
   isSweetlinkCommand,
+  isUnsafeWsPort,
   localOriginMatchesAppPort,
   parsePortNumber,
   resolveAppPortFromLocalUrl,
@@ -27,6 +29,7 @@ import {
   resolveSweetlinkWsPortForAppPort,
   resolveSweetlinkWsPortFromLocation,
   SWEETLINK_WS_PATH,
+  toSafeWsPort,
   WS_PORT_OFFSET,
 } from './types.js';
 
@@ -241,6 +244,29 @@ describe('Local Development URL Helpers', () => {
     );
   });
 
+  it('skips browser-restricted ports when deriving websocket ports', () => {
+    // 443 + 6223 = 6666 (IRC) — Chrome refuses it with ERR_UNSAFE_PORT.
+    expect(isUnsafeWsPort(6666)).toBe(true);
+    expect(isUnsafeWsPort(9223)).toBe(false);
+    // toSafeWsPort clears the whole 6665-6669 IRC block in one hop.
+    expect(toSafeWsPort(6665)).toBe(6670);
+    expect(toSafeWsPort(6666)).toBe(6670);
+    expect(toSafeWsPort(9223)).toBe(9223);
+    // 442 + 6223 = 6665 → bumped past the restricted block.
+    expect(resolveSweetlinkWsPortForAppPort(442)).toBe(6670);
+  });
+
+  it('falls back to the default WS port behind proxies on protocol-default ports', () => {
+    // https://places.localhost (Portless) → location port '' → app port 443.
+    // Deriving 443 + 6223 = 6666 is both restricted AND wrong; the real dev
+    // server port is unknowable, so use the default WS port instead.
+    expect(resolveSweetlinkWsPortForAppPort(443)).toBe(DEFAULT_WS_PORT);
+    expect(resolveSweetlinkWsPortForAppPort(80)).toBe(DEFAULT_WS_PORT);
+    expect(resolveSweetlinkWsPortFromLocation({ protocol: 'https:', port: '' })).toBe(
+      DEFAULT_WS_PORT
+    );
+  });
+
   it('reads injected Sweetlink runtime config for proxied dev servers', () => {
     const config = getSweetlinkRuntimeConfig({
       __SWEETLINK__: {
@@ -253,6 +279,71 @@ describe('Local Development URL Helpers', () => {
     expect(config.appPort).toBe(4123);
     expect(config.wsPort).toBe(10346);
     expect(config.wsPath).toBe(SWEETLINK_WS_PATH);
+  });
+
+  it('reads NEXT_PUBLIC_SWEETLINK_* env hints injected by the Next.js plugin', () => {
+    process.env.NEXT_PUBLIC_SWEETLINK_APP_PORT = '4836';
+    process.env.NEXT_PUBLIC_SWEETLINK_WS_PORT = '11059';
+    try {
+      const config = getSweetlinkRuntimeConfig({});
+      expect(config.appPort).toBe('4836');
+      expect(config.wsPort).toBe('11059');
+    } finally {
+      delete process.env.NEXT_PUBLIC_SWEETLINK_APP_PORT;
+      delete process.env.NEXT_PUBLIC_SWEETLINK_WS_PORT;
+    }
+  });
+
+  it('orders WS candidates: explicit hint, same-origin path, then port math', () => {
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'http:', port: '5173', host: 'localhost:5173' },
+        { wsUrl: 'ws://localhost:11400', wsPath: SWEETLINK_WS_PATH, fallbackPort: 11396 }
+      )
+    ).toEqual(['ws://localhost:11400', 'ws://localhost:5173/__sweetlink', 'ws://localhost:11396']);
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'http:', port: '3000', host: 'localhost:3000' },
+        { wsPort: '9223', fallbackPort: 9223 }
+      )
+    ).toEqual(['ws://localhost:9223']);
+  });
+
+  it('always tries the same-origin path when the page has no explicit port', () => {
+    // Proxied HTTPS origin (Portless): port math cannot locate the server,
+    // so the conventional /__sweetlink endpoint must be attempted even
+    // without an injected wsPath hint.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'places.localhost' },
+        { fallbackPort: DEFAULT_WS_PORT }
+      )
+    ).toEqual(['wss://places.localhost/__sweetlink', `ws://localhost:${DEFAULT_WS_PORT}`]);
+  });
+
+  it('tries a hinted port BEFORE the same-origin guess under a proxied origin', () => {
+    // Next + Portless: the plugin inlines the real WS port but serves no
+    // /__sweetlink endpoint — the proxy forwards that path to Next's HMR
+    // upgrade handler, which accepts arbitrary WS upgrades (a phantom
+    // acceptor). The known-good hinted port must come first so the client
+    // never strands on the phantom.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'places.localhost' },
+        { wsPort: '10264', fallbackPort: 10264 }
+      )
+    ).toEqual(['ws://localhost:10264', 'wss://places.localhost/__sweetlink']);
+  });
+
+  it('keeps a declared wsPath same-origin endpoint ahead of the hinted port', () => {
+    // Vite injects wsPath because its plugin really serves /__sweetlink on
+    // the app origin — a declared endpoint outranks port math.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'http:', port: '5173', host: 'localhost:5173' },
+        { wsPort: '11396', wsPath: SWEETLINK_WS_PATH, fallbackPort: 11396 }
+      )
+    ).toEqual(['ws://localhost:5173/__sweetlink', 'ws://localhost:11396']);
   });
 
   it('creates same-origin websocket URLs for HTTP and HTTPS app origins', () => {

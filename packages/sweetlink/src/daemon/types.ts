@@ -126,6 +126,8 @@ export interface ScreenshotParams {
   viewport?: import('../viewportUtils.js').ViewportName | string;
   output?: string;
   hideDevbar?: boolean;
+  /** Explicit target URL (--url); the daemon navigates when the live page differs. */
+  url?: string;
 }
 
 export interface ScreenshotResponseData {
@@ -140,6 +142,8 @@ export interface ResponsiveScreenshotParams {
   fullPage?: boolean;
   output?: string;
   hideDevbar?: boolean;
+  /** Explicit target URL (--url); the daemon navigates when the live page differs. */
+  url?: string;
 }
 
 export interface ResponsiveScreenshotResponseData {

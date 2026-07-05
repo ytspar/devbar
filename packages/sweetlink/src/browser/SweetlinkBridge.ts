@@ -35,7 +35,7 @@ import {
 // ============================================================================
 
 import {
-  createSameOriginSweetlinkWsUrl,
+  buildSweetlinkWsUrlCandidates,
   DEFAULT_WS_PORT,
   getSweetlinkRuntimeConfig,
   MAX_PORT_RETRIES,
@@ -43,6 +43,8 @@ import {
   parsePortNumber,
   resolveAppPortFromRuntimeConfig,
   resolveSweetlinkWsPortForAppPort,
+  SWEETLINK_ACK_TIMEOUT_MS,
+  toSafeWsPort,
 } from '../types.js';
 
 /** HMR settings */
@@ -51,7 +53,6 @@ const DEFAULT_HMR_CAPTURE_DELAY_MS = 100;
 
 /** Reconnection settings */
 const RECONNECT_DELAY_MS = 2000;
-const VERIFICATION_TIMEOUT_MS = 1000;
 const PORT_SEARCH_FAIL_RETRY_MS = 3000;
 
 export interface SweetlinkBridgeConfig {
@@ -129,7 +130,7 @@ export class SweetlinkBridge {
       config.wsPort ??
       parsePortNumber(runtimeConfig.wsPort) ??
       resolveSweetlinkWsPortForAppPort(this.currentAppPort);
-    this.wsUrlCandidates = this.buildWsUrlCandidates(window.location, {
+    this.wsUrlCandidates = buildSweetlinkWsUrlCandidates(window.location, {
       wsUrl: config.wsUrl ?? runtimeConfig.wsUrl,
       wsPort: config.wsPort ?? config.basePort ?? runtimeConfig.wsPort,
       wsPath: config.wsPath ?? runtimeConfig.wsPath,
@@ -253,28 +254,6 @@ export class SweetlinkBridge {
     this.cleanupFunctions.push(cleanup);
   }
 
-  private buildWsUrlCandidates(
-    location: Location,
-    options: {
-      wsUrl?: string | null;
-      wsPort?: number | string | null;
-      wsPath?: string | null;
-      fallbackPort: number;
-    }
-  ): string[] {
-    const urls: string[] = [];
-    const add = (url: string | null | undefined): void => {
-      if (url && !urls.includes(url)) urls.push(url);
-    };
-
-    add(options.wsUrl);
-    if (options.wsPath) {
-      add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
-    }
-    add(`ws://localhost:${parsePortNumber(options.wsPort) ?? options.fallbackPort}`);
-    return urls;
-  }
-
   private getWsUrlForTarget(target: number | string): string {
     return typeof target === 'string' ? target : `ws://localhost:${target}`;
   }
@@ -309,7 +288,9 @@ export class SweetlinkBridge {
 
     const targetPort = this.getPortForTarget(targetUrl);
     if (targetPort !== null) {
-      const nextPort = targetPort + 1;
+      // Skip browser-restricted ports while scanning — the server-side port
+      // retry does the same, so both sides walk the same sequence.
+      const nextPort = toSafeWsPort(targetPort + 1);
       if (nextPort < this.basePort + this.maxPortRetries) {
         this.scheduleConnect(nextPort, delayMs);
         return true;
@@ -328,21 +309,31 @@ export class SweetlinkBridge {
     this.ws = ws;
     this.verified = false;
 
-    // Timeout for server-info response
-    const verificationTimeout = setTimeout(() => {
-      if (!this.verified && ws.readyState === WebSocket.OPEN) {
-        // Server didn't send server-info (old version) - accept for backwards compatibility
-        this.log(
-          `[Sweetlink] Server on ${wsUrl} is old version (no server-info). Accepting for backwards compatibility.`
-        );
-        this.verified = true;
-        this.connected = true;
-      }
-    }, VERIFICATION_TIMEOUT_MS);
+    // Require the server-info ack before treating the socket as connected.
+    // An OPEN socket is NOT a Sweetlink connection: dev-server upgrade
+    // handlers (e.g. Next's HMR endpoint reached through an HTTPS proxy's
+    // /__sweetlink path) accept arbitrary WS upgrades and swallow every
+    // message. No ack within the window → close, try the next candidate.
+    // The timer starts at `open` (a refused connection is handled by
+    // onclose; arming it earlier would double-schedule the candidate walk).
+    let verificationTimeout: ReturnType<typeof setTimeout> | undefined;
 
     ws.onopen = () => {
-      this.log(`[Sweetlink] Connected to server on ${wsUrl}`);
-      ws.send(JSON.stringify({ type: 'browser-client-ready' }));
+      this.log(`[Sweetlink] Socket open on ${wsUrl} — awaiting server-info ack`);
+      // Report our location so the server can route targeted CLI commands
+      // (--url) to the client that is actually on the requested page.
+      ws.send(JSON.stringify({ type: 'browser-client-ready', url: window.location.href }));
+      verificationTimeout = setTimeout(() => {
+        if (this.verified || !this.active) return;
+        this.log(
+          `[Sweetlink] No server-info ack from ${wsUrl} — not a Sweetlink server. Trying next candidate...`
+        );
+        switchingTargets = true;
+        ws.close();
+        if (!this.connectNextTarget(wsUrl)) {
+          this.scheduleConnect(this.basePort, PORT_SEARCH_FAIL_RETRY_MS);
+        }
+      }, SWEETLINK_ACK_TIMEOUT_MS);
     };
 
     ws.onmessage = async (event) => {
@@ -426,13 +417,18 @@ export class SweetlinkBridge {
       this.serverInfo = null;
       this.verified = false;
 
+      // We initiated this close while switching candidates (server-info
+      // mismatch or missing ack) and already scheduled the next target —
+      // don't let the generic reconnect below clobber that schedule.
+      if (switchingTargets) return;
+
       // If closed due to origin mismatch (code 4001), try next port immediately
       if (event.code === 4001) {
         this.log(`[Sweetlink] Origin mismatch from ${wsUrl}; trying next target...`);
         if (this.connectNextTarget(wsUrl)) return;
       }
 
-      if (!wasVerified && !switchingTargets && this.connectNextTarget(wsUrl)) {
+      if (!wasVerified && this.connectNextTarget(wsUrl)) {
         this.log(`[Sweetlink] Connection closed before verification from ${wsUrl}`);
         return;
       }

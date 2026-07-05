@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PORT_RETRY_DELAY_MS, SWEETLINK_ACK_TIMEOUT_MS } from '../types.js';
 import {
   destroySweetlinkBridge,
   getSweetlinkBridge,
@@ -177,7 +178,62 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
     // Simulate open
     ws.onopen?.();
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'browser-client-ready' }));
+    // The reported URL lets the server route targeted CLI commands (--url)
+    // to the client that is actually on the requested page.
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'browser-client-ready', url: window.location.href })
+    );
+  });
+
+  it('abandons a phantom socket that opens but never sends server-info', () => {
+    // Behind an HTTPS proxy, /__sweetlink can be forwarded to the Next dev
+    // server whose HMR upgrade handler accepts arbitrary WS upgrades: the
+    // socket OPENS but no sweetlink ack ever arrives. The bridge must not
+    // green-light it — close and advance to the next candidate.
+    vi.useFakeTimers();
+    try {
+      bridge.destroy();
+      (window as unknown as Record<string, unknown>).__SWEETLINK__ = {
+        appPort: 4041,
+        wsPort: 10264,
+        wsPath: '/__sweetlink',
+      };
+      bridge = new SweetlinkBridge();
+      bridge.init();
+
+      const phantom = MockWebSocket.instances[0];
+      expect(phantom.url).toContain('/__sweetlink');
+      phantom.onopen?.();
+
+      vi.advanceTimersByTime(SWEETLINK_ACK_TIMEOUT_MS + 1);
+      expect(phantom.close).toHaveBeenCalled();
+      expect(bridge.isConnected()).toBe(false);
+
+      // Advances to the hinted real port
+      vi.advanceTimersByTime(PORT_RETRY_DELAY_MS + 1);
+      expect(MockWebSocket.instances.at(-1)?.url).toBe('ws://localhost:10264');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a socket whose server-info ack arrived before the deadline', () => {
+    vi.useFakeTimers();
+    try {
+      bridge.init();
+      const ws = MockWebSocket.instances[0];
+      ws.onopen?.();
+      ws.onmessage?.({
+        data: JSON.stringify({ type: 'server-info', appPort: null, timestamp: Date.now() }),
+      });
+
+      vi.advanceTimersByTime(SWEETLINK_ACK_TIMEOUT_MS + 10);
+      expect(ws.close).not.toHaveBeenCalled();
+      expect(bridge.isConnected()).toBe(true);
+      expect(MockWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sets connected/verified on server-info matching app port', () => {

@@ -24,6 +24,49 @@ export const PORT_RETRY_DELAY_MS = 100;
 /** Same-origin WebSocket path used when an app server can proxy Sweetlink. */
 export const SWEETLINK_WS_PATH = '/__sweetlink';
 
+/**
+ * How long a browser client waits for the server-info acknowledgment after
+ * the socket opens. An OPEN socket alone is NOT a Sweetlink connection —
+ * dev-server upgrade handlers (e.g. Next's HMR endpoint reached through an
+ * HTTPS proxy's /__sweetlink path) accept arbitrary WS upgrades, so a
+ * client that trusts `open` green-lights a socket that swallows every
+ * message. No ack within this window → close and try the next candidate.
+ */
+export const SWEETLINK_ACK_TIMEOUT_MS = 1500;
+
+/**
+ * Ports browsers refuse to connect to (Chrome's restricted-port list from
+ * net/base/port_util.cc; Firefox and Safari block near-identical sets).
+ * A WebSocket to one of these fails with ERR_UNSAFE_PORT before it ever
+ * reaches the network — infamously, 443 + WS_PORT_OFFSET = 6666 (IRC).
+ * Any port derived by arithmetic MUST skip these, on the client and the
+ * server alike, or the two sides stop agreeing.
+ */
+export const UNSAFE_WS_PORTS: ReadonlySet<number> = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
+  103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465,
+  512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993,
+  995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668,
+  6669, 6697, 10080,
+]);
+
+/** Whether browsers would refuse a WebSocket connection to this port. */
+export function isUnsafeWsPort(port: number): boolean {
+  return UNSAFE_WS_PORTS.has(port);
+}
+
+/**
+ * Bump a derived port past any browser-restricted ports (e.g. 6666 → 6670,
+ * clearing the whole 6665-6669 IRC block). Idempotent for safe ports.
+ */
+export function toSafeWsPort(port: number): number {
+  let candidate = port;
+  while (UNSAFE_WS_PORTS.has(candidate)) {
+    candidate++;
+  }
+  return candidate;
+}
+
 // ============================================================================
 // Local Development URL Helpers
 // ============================================================================
@@ -66,7 +109,14 @@ export function resolveAppPortFromLocation(location: SweetlinkLocationLike): num
 
 export function resolveSweetlinkWsPortForAppPort(appPort: number | null | undefined): number {
   const parsedAppPort = parsePortNumber(appPort);
-  return parsedAppPort ? parsedAppPort + WS_PORT_OFFSET : DEFAULT_WS_PORT;
+  // Protocol-default ports mean the app sits behind a local HTTPS/HTTP proxy
+  // (e.g. Portless); the real dev-server port cannot be derived from the
+  // location, so fall back to the default WS port instead of computing
+  // garbage (443 + offset = 6666, a browser-restricted port).
+  if (!parsedAppPort || parsedAppPort === 80 || parsedAppPort === 443) {
+    return DEFAULT_WS_PORT;
+  }
+  return toSafeWsPort(parsedAppPort + WS_PORT_OFFSET);
 }
 
 export function resolveSweetlinkWsPortFromLocation(location: SweetlinkLocationLike): number {
@@ -77,9 +127,35 @@ function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 }
 
-function getProcessEnv(): Record<string, string | undefined> {
-  if (typeof process === 'undefined') return {};
-  return process.env;
+interface NextPublicSweetlinkEnv {
+  appPort?: string;
+  wsPort?: string;
+  wsUrl?: string;
+  wsPath?: string;
+}
+
+/**
+ * Read the `NEXT_PUBLIC_SWEETLINK_*` hints injected by the Next.js plugin.
+ *
+ * Next.js (webpack AND Turbopack) inlines public env vars into client
+ * bundles only when they are written as static member expressions
+ * (`process.env.NEXT_PUBLIC_X`). Reading them off an intermediate
+ * `process.env` object reference defeats the build-time replacement — the
+ * values never reach the browser — so each key must be spelled out
+ * literally here.
+ */
+function getNextPublicSweetlinkEnv(): NextPublicSweetlinkEnv {
+  try {
+    return {
+      appPort: process.env.NEXT_PUBLIC_SWEETLINK_APP_PORT,
+      wsPort: process.env.NEXT_PUBLIC_SWEETLINK_WS_PORT,
+      wsUrl: process.env.NEXT_PUBLIC_SWEETLINK_WS_URL,
+      wsPath: process.env.NEXT_PUBLIC_SWEETLINK_WS_PATH,
+    };
+  } catch {
+    // `process` does not exist in unbundled browser contexts.
+    return {};
+  }
 }
 
 function normalizeWsPath(value: unknown): string | null {
@@ -110,21 +186,19 @@ export function getSweetlinkRuntimeConfig(
 ): SweetlinkRuntimeConfig {
   const globalRecord = getRecord(globalValue);
   const nested = getRecord(globalRecord?.__SWEETLINK__);
-  const env = getProcessEnv();
-  const appPort =
-    globalRecord?.__SWEETLINK_APP_PORT__ ?? nested?.appPort ?? env.NEXT_PUBLIC_SWEETLINK_APP_PORT;
-  const wsPort =
-    globalRecord?.__SWEETLINK_WS_PORT__ ?? nested?.wsPort ?? env.NEXT_PUBLIC_SWEETLINK_WS_PORT;
+  const env = getNextPublicSweetlinkEnv();
+  const appPort = globalRecord?.__SWEETLINK_APP_PORT__ ?? nested?.appPort ?? env.appPort;
+  const wsPort = globalRecord?.__SWEETLINK_WS_PORT__ ?? nested?.wsPort ?? env.wsPort;
 
   return {
     appPort: typeof appPort === 'string' || typeof appPort === 'number' ? appPort : null,
     wsPort: typeof wsPort === 'string' || typeof wsPort === 'number' ? wsPort : null,
     wsUrl:
       normalizeWsUrl(globalRecord?.__SWEETLINK_WS_URL__ ?? nested?.wsUrl) ??
-      normalizeWsUrl(env.NEXT_PUBLIC_SWEETLINK_WS_URL),
+      normalizeWsUrl(env.wsUrl),
     wsPath:
       normalizeWsPath(globalRecord?.__SWEETLINK_WS_PATH__ ?? nested?.wsPath) ??
-      normalizeWsPath(env.NEXT_PUBLIC_SWEETLINK_WS_PATH),
+      normalizeWsPath(env.wsPath),
   };
 }
 
@@ -142,6 +216,52 @@ export function createSameOriginSweetlinkWsUrl(
   if (!location.host) return null;
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${location.host}${normalizeWsPath(path) ?? SWEETLINK_WS_PATH}`;
+}
+
+/**
+ * Build the ordered list of WebSocket endpoints a browser client should try.
+ * Shared by the devbar and the SweetlinkBridge so both agree on priority:
+ *
+ * 1. An explicit `wsUrl` hint (framework plugin or user option).
+ * 2. The same-origin path DECLARED via a `wsPath` hint — the plugin that
+ *    injected it (Vite) really serves that endpoint.
+ * 3. A `wsPort` hint (e.g. Next's inlined NEXT_PUBLIC_SWEETLINK_WS_PORT) —
+ *    the port the server actually bound.
+ * 4. The conventional same-origin `/__sweetlink` guess, only when the page
+ *    has no explicit port (proxied origin) and no wsPath declared it. This
+ *    comes AFTER the hinted port: under Next the proxy forwards the path to
+ *    the dev server, whose HMR upgrade handler accepts arbitrary WS
+ *    upgrades — a phantom acceptor that must never shadow a known-good port.
+ * 5. Derived localhost port math as the last resort.
+ */
+export function buildSweetlinkWsUrlCandidates(
+  location: SweetlinkLocationLike,
+  options: {
+    wsUrl?: string | null;
+    wsPort?: number | string | null;
+    wsPath?: string | null;
+    fallbackPort: number;
+  }
+): string[] {
+  const urls: string[] = [];
+  const add = (url: string | null | undefined): void => {
+    if (url && !urls.includes(url)) urls.push(url);
+  };
+
+  const hintedPort = parsePortNumber(options.wsPort);
+
+  add(options.wsUrl);
+  if (options.wsPath) {
+    add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
+  }
+  if (hintedPort) {
+    add(`ws://localhost:${hintedPort}`);
+  }
+  if (!options.wsPath && !parsePortNumber(location.port)) {
+    add(createSameOriginSweetlinkWsUrl(location));
+  }
+  add(`ws://localhost:${hintedPort ?? options.fallbackPort}`);
+  return urls;
 }
 
 export function isLocalDevelopmentHostname(hostname: string): boolean {
@@ -246,25 +366,35 @@ export interface ScreenshotOptions {
   a11y?: boolean;
 }
 
-export interface ScreenshotCommand {
+/**
+ * Optional CLI-provided target for client-executing commands: the URL of the
+ * page the command is meant for (from `--url`). The server uses it to pick
+ * the matching browser client when several are connected (pages from
+ * multiple projects can attach to one server); browser clients ignore it.
+ */
+export interface TargetedCommand {
+  targetUrl?: string;
+}
+
+export interface ScreenshotCommand extends TargetedCommand {
   type: 'screenshot';
   selector?: string;
   hideDevbar?: boolean;
   options?: ScreenshotOptions;
 }
 
-export interface QueryDomCommand {
+export interface QueryDomCommand extends TargetedCommand {
   type: 'query-dom';
   selector?: string;
   property?: string;
 }
 
-export interface GetLogsCommand {
+export interface GetLogsCommand extends TargetedCommand {
   type: 'get-logs';
   filter?: string;
 }
 
-export interface ExecJsCommand {
+export interface ExecJsCommand extends TargetedCommand {
   type: 'exec-js';
   code?: string;
 }
@@ -275,6 +405,11 @@ export interface GetNetworkCommand {
 
 export interface BrowserClientReadyCommand {
   type: 'browser-client-ready';
+  /**
+   * The page's current location. Lets the server route targeted commands to
+   * the client that is actually on the requested page.
+   */
+  url?: string;
 }
 
 /**
@@ -360,7 +495,7 @@ export interface RefreshOptions {
   hard?: boolean;
 }
 
-export interface RefreshCommand {
+export interface RefreshCommand extends TargetedCommand {
   type: 'refresh';
   options?: RefreshOptions;
 }

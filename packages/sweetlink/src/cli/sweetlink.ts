@@ -24,8 +24,16 @@ import { extractPort } from '../daemon/stateFile.js';
 import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
-import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
-import { SCREENSHOT_DIR } from '../urlUtils.js';
+import { findServerInfoFile } from '../server/discovery.js';
+import {
+  DEFAULT_WS_PORT,
+  MAX_PORT_RETRIES,
+  parseLocalDevelopmentUrl,
+  parsePortNumber,
+  resolveSweetlinkWsPortForAppPort,
+} from '../types.js';
+import { SCREENSHOT_DIR, selectClientForTargetUrl, urlsEquivalent } from '../urlUtils.js';
+import { generateClickCode } from './clickCode.js';
 import type {
   A11yData,
   CleanupData,
@@ -258,7 +266,7 @@ interface SweetlinkResponse {
 }
 
 let resolvedWsUrl: string | null = null;
-const DEFAULT_WS_URL = process.env.SWEETLINK_WS_URL || 'ws://localhost:9223';
+const DEFAULT_WS_URL = 'ws://localhost:9223';
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const SERVER_READY_TIMEOUT = 30000; // 30 seconds to wait for server
 const SERVER_POLL_INTERVAL = 500; // Poll every 500ms
@@ -270,6 +278,7 @@ const SCAN_PORT_END = 9233;
 interface ServerIdentity {
   port: number;
   appPort: number | null;
+  pid: number | null;
   gitBranch: string | null;
   appName: string | null;
 }
@@ -290,6 +299,7 @@ async function probeServerIdentity(port: number): Promise<ServerIdentity | null>
     return {
       port,
       appPort: data.appPort ?? null,
+      pid: typeof data.pid === 'number' ? data.pid : null,
       gitBranch: data.gitBranch ?? null,
       appName: data.appName ?? null,
     };
@@ -308,9 +318,9 @@ async function discoverServer(target: string): Promise<string> {
   for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
     probes.push(probeServerIdentity(port));
   }
-  // Also probe common offset ports (appPort + 6223)
+  // Also probe common offset ports (appPort + 6223, skipping unsafe ports)
   for (const appPort of COMMON_APP_PORTS) {
-    const wsPort = appPort + WS_PORT_OFFSET;
+    const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
     if (wsPort < SCAN_PORT_START || wsPort > SCAN_PORT_END) {
       probes.push(probeServerIdentity(wsPort));
     }
@@ -346,11 +356,63 @@ async function discoverServer(target: string): Promise<string> {
 }
 
 /**
- * Resolve the WebSocket URL to use. If --app was provided, scan for
- * a matching server. Otherwise use the default/env URL.
+ * Resolve this project's server from `.sweetlink/server.json` (written by
+ * the server at startup; walked up from cwd). The file can be stale after a
+ * crash, so it is only trusted when the info endpoint on that port answers
+ * as a sweetlink server whose pid/appPort agree with the file.
+ */
+async function resolveWsUrlFromServerInfoFile(): Promise<string | null> {
+  const found = findServerInfoFile(process.cwd());
+  if (!found) return null;
+  const { info } = found;
+
+  // With an explicit --url port that disagrees with the file's app port,
+  // the user means a different server — fall through to port math.
+  const urlArg = getArg('--url');
+  const urlPort = urlArg ? parsePortNumber(parseLocalDevelopmentUrl(urlArg)?.port) : null;
+  if (urlPort && info.appPort !== null && info.appPort !== urlPort) return null;
+
+  const identity = await probeServerIdentity(info.wsPort);
+  if (!identity) return null; // stale — nothing listening there anymore
+  if (identity.pid !== null && identity.pid !== info.pid) return null; // port reused
+  if (info.appPort !== null && identity.appPort !== null && identity.appPort !== info.appPort) {
+    return null; // port reused by another project's server
+  }
+
+  console.log(
+    `[Sweetlink] Using server from ${path.relative(process.cwd(), found.filePath) || found.filePath} (ws://localhost:${info.wsPort})`
+  );
+  return `ws://localhost:${info.wsPort}`;
+}
+
+/**
+ * Resolve the WebSocket URL to use, in order:
+ * 1. SWEETLINK_WS_URL env (explicit override)
+ * 2. A live `.sweetlink/server.json` written by this project's server
+ * 3. Port math from an explicit --url port (app port + offset)
+ * 4. The default ws://localhost:9223
  */
 async function getWsUrl(): Promise<string> {
   if (resolvedWsUrl) return resolvedWsUrl;
+
+  if (process.env.SWEETLINK_WS_URL) {
+    resolvedWsUrl = process.env.SWEETLINK_WS_URL;
+    return resolvedWsUrl;
+  }
+
+  const discovered = await resolveWsUrlFromServerInfoFile();
+  if (discovered) {
+    resolvedWsUrl = discovered;
+    return resolvedWsUrl;
+  }
+
+  const urlArg = getArg('--url');
+  const urlPort = urlArg ? parsePortNumber(parseLocalDevelopmentUrl(urlArg)?.port) : null;
+  if (urlPort) {
+    resolvedWsUrl = `ws://localhost:${resolveSweetlinkWsPortForAppPort(urlPort)}`;
+    return resolvedWsUrl;
+  }
+
   resolvedWsUrl = DEFAULT_WS_URL;
   return resolvedWsUrl;
 }
@@ -427,11 +489,70 @@ async function waitForServer(
   );
 }
 
+/**
+ * One-shot preflight for --url commands: verify a browser client that could
+ * plausibly be on the target page is attached to the server before
+ * dispatching, and surface an actionable error (listing the connected
+ * clients' locations) when every client is on a different page/origin.
+ * Old servers without per-client info skip the check silently.
+ */
+let targetClientPreflightDone = false;
+async function preflightTargetClients(targetUrl: string): Promise<void> {
+  if (targetClientPreflightDone) return;
+  targetClientPreflightDone = true;
+
+  let failure: string | null = null;
+  try {
+    const wsUrl = await getWsUrl();
+    const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch(httpUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      clients?: Array<{ type?: string; origin?: string | null; url?: string | null }>;
+    };
+    if (!Array.isArray(data?.clients)) return; // old server — no visibility
+    const browserClients = data.clients.filter((c) => c?.type === 'browser');
+    if (browserClients.length === 0) return; // "No browser client" paths handle this
+
+    const { match } = selectClientForTargetUrl(browserClients, targetUrl);
+    if (match === 'none') {
+      const locations = browserClients
+        .map((c) => c.url ?? c.origin ?? 'unknown location')
+        .join(', ');
+      failure =
+        `No connected browser client matches ${targetUrl}. ` +
+        `Connected client(s): ${locations}. ` +
+        'Open the page in a browser (or fix --url) and retry.';
+    } else if (match === 'unknown-location') {
+      console.warn(
+        `[Sweetlink] ⚠ Connected browser client has not reported its location ` +
+          `(older devbar build?) — cannot verify it is on ${targetUrl}`
+      );
+    }
+  } catch {
+    // Info endpoint unreachable or unparseable — fall through to normal
+    // command dispatch, which has its own failure handling.
+    return;
+  }
+  if (failure) {
+    console.error(`[Sweetlink] ${failure}`);
+    throw new Error(failure);
+  }
+}
+
 async function sendCommand(
   command: SweetlinkCommand,
   timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<SweetlinkResponse> {
   const wsUrl = await getWsUrl();
+  // Target the client at --url so a server with several attached pages
+  // (multi-project setups) never dispatches this command to a foreign page.
+  const targetUrl = getArg('--url');
+  if (targetUrl) await preflightTargetClients(targetUrl);
+  const payload = targetUrl ? { ...command, targetUrl } : command;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
 
@@ -441,7 +562,7 @@ async function sendCommand(
     }, timeoutMs);
 
     ws.on('open', () => {
-      ws.send(JSON.stringify(command));
+      ws.send(JSON.stringify(payload));
     });
 
     ws.on('message', (data: Buffer) => {
@@ -457,14 +578,6 @@ async function sendCommand(
       reject(error);
     });
   });
-}
-
-/**
- * Compare two URLs ignoring trailing slashes.
- * Exported-style name for testability (re-implemented in tests).
- */
-function urlsMatch(a: string, b: string): boolean {
-  return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
 }
 
 const NAVIGATE_POLL_INTERVAL = 500; // ms between reconnection polls
@@ -487,7 +600,7 @@ async function navigateBrowser(
     const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
     if (response.success && response.data != null) {
       const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
-      if (urlsMatch(currentUrl, url)) {
+      if (urlsEquivalent(currentUrl, url)) {
         console.log(`[Sweetlink] Browser already on ${url}`);
         return true;
       }
@@ -519,7 +632,7 @@ async function navigateBrowser(
       const response = await sendCommand({ type: 'exec-js', code: 'window.location.href' }, 3000);
       if (response.success && response.data != null) {
         const currentUrl = String((response.data as { result?: unknown }).result ?? response.data);
-        if (urlsMatch(currentUrl, url)) {
+        if (urlsEquivalent(currentUrl, url)) {
           // Give devbar time to fully initialize after page load
           await new Promise((resolve) => setTimeout(resolve, 1000));
           console.log(`[Sweetlink] Browser reconnected on ${url}`);
@@ -674,6 +787,9 @@ async function screenshot(options: {
       const resp = await daemonRequest(daemonState, 'screenshot-responsive', {
         fullPage: options.fullPage,
         hideDevbar: options.hideDevbar,
+        // Explicit --url only: the daemon re-navigates when the live page
+        // differs (SPA routing may have moved it since the last command).
+        url: options.url,
       });
       const data = resp.data as {
         screenshots: Array<{ width: number; height: number; screenshot: string; label: string }>;
@@ -708,6 +824,9 @@ async function screenshot(options: {
       padding: (options as { padding?: number }).padding,
       theme: (options as { theme?: string }).theme,
       hideDevbar: options.hideDevbar,
+      // Explicit --url only: the daemon re-navigates when the live page
+      // differs (SPA routing may have moved it since the last command).
+      url: options.url,
     });
     const data = resp.data as {
       screenshot: string;
@@ -861,10 +980,31 @@ async function screenshot(options: {
       process.exit(1);
     }
 
+    const data = response.data as Record<string, unknown>;
+
+    // Tier-1 safety: the browser client reports the URL it actually
+    // captured. If --url was requested and the connected client is on a
+    // different page (e.g. a zombie headless page left behind by a stale
+    // daemon), never save the wrong capture silently — escalate to
+    // Playwright, which navigates for real.
+    const capturedUrl = typeof data.url === 'string' ? data.url : null;
+    if (options.url && capturedUrl && !urlsEquivalent(capturedUrl, options.url)) {
+      console.warn(
+        `[Sweetlink] ⚠ Connected browser is on ${capturedUrl}, not ${options.url} — discarding WebSocket capture`
+      );
+      if (options.forceWS) {
+        console.error(
+          '[Sweetlink] Refusing to save a capture of the wrong page (--force-ws prevents Playwright fallback)'
+        );
+        process.exit(1);
+      }
+      console.log('[Sweetlink] Escalating to Playwright for the requested URL');
+      return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (URL mismatch fallback)');
+    }
+
     // Save screenshot
     const outputPath = options.output || getDefaultScreenshotPath();
     ensureDir(outputPath);
-    const data = response.data as Record<string, unknown>;
     const base64Data = (data.screenshot as string).replace(/^data:image\/png;base64,/, '');
     fs.writeFileSync(outputPath, Buffer.from(base64Data, 'base64'));
 
@@ -1289,46 +1429,6 @@ async function execJS(options: {
   }
 }
 
-/**
- * Generate JavaScript code that finds elements and clicks the one at the given index.
- * Parameterized by the element-finding strategy: text content search or CSS selector.
- */
-function generateClickCode(
-  strategy:
-    | { type: 'text'; text: string; selector: string }
-    | { type: 'selector'; selector: string },
-  index: number
-): string {
-  // The element-finding expression differs, but the bounds-check + click + return is shared
-  const escapedSelector = JSON.stringify(strategy.selector);
-  let findExpression: string;
-  let notFoundMsg: string;
-
-  if (strategy.type === 'text') {
-    const escapedText = JSON.stringify(strategy.text);
-    findExpression = `Array.from(document.querySelectorAll(${escapedSelector})).filter(el => el.textContent?.includes(${escapedText}))`;
-    notFoundMsg = `"No element found with text: " + ${escapedText}`;
-  } else {
-    findExpression = `Array.from(document.querySelectorAll(${escapedSelector}))`;
-    notFoundMsg = `"No element found matching: " + ${escapedSelector}`;
-  }
-
-  return `
-      (() => {
-        const elements = ${findExpression};
-        if (elements.length === 0) {
-          return { success: false, error: ${notFoundMsg} };
-        }
-        const target = elements[${index}];
-        if (!target) {
-          return { success: false, error: "Index ${index} out of bounds, found " + elements.length + " elements" };
-        }
-        target.click();
-        return { success: true, clicked: target.tagName + (target.className ? "." + target.className.split(" ")[0] : ""), found: elements.length };
-      })()
-    `;
-}
-
 async function click(options: {
   selector?: string;
   text?: string;
@@ -1345,9 +1445,14 @@ async function click(options: {
   let description: string;
 
   if (text) {
-    const baseSelector = selector || '*';
     description = selector ? `"${text}" within ${selector}` : `"${text}"`;
-    clickCode = generateClickCode({ type: 'text', text, selector: baseSelector }, index);
+    // Explicit selector: the user chose the candidate scoping. Bare --text:
+    // leaf-most + clickable-preferred matching (see clickCode.ts) so the
+    // click lands on the button around the text, not on <html> (whose
+    // textContent also matches).
+    clickCode = selector
+      ? generateClickCode({ type: 'text', text, selector }, index)
+      : generateClickCode({ type: 'smart-text', text }, index);
   } else {
     description = `${selector}${index > 0 ? ` [${index}]` : ''}`;
     clickCode = generateClickCode({ type: 'selector', selector: selector! }, index);
@@ -1643,7 +1748,7 @@ function getPortsToScan(): number[] {
 
   // Common app ports + offset (e.g., 3000 -> 9223, 5173 -> 11396)
   for (const appPort of COMMON_APP_PORTS) {
-    const wsPort = appPort + WS_PORT_OFFSET;
+    const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
     for (let i = 0; i <= MAX_PORT_RETRIES; i++) {
       ports.add(wsPort + i);
     }
@@ -2854,6 +2959,18 @@ function hasFlag(flag: string): boolean {
   return args.includes(flag);
 }
 
+/**
+ * Positional argument at `index`, or undefined when that token is a flag.
+ * Flags must never be consumed as positionals: `click --text "Save list"`
+ * used to take the literal `--text` as the positional selector, producing
+ * querySelectorAll("--text") and "No element found" for every documented
+ * `click --text ...` invocation.
+ */
+function getPositionalArg(index: number): string | undefined {
+  const value = args[index];
+  return value !== undefined && !value.startsWith('--') ? value : undefined;
+}
+
 // Per-command --help: `pnpm sweetlink screenshot --help`
 // Past the early-exit at the top of dispatch, commandType is non-null.
 if (hasFlag('--help') || hasFlag('-h')) {
@@ -3068,6 +3185,9 @@ async function handleInspectCmd(): Promise<unknown> {
     expectedOutcome: getArg('--expected'),
     actionTranscript,
     includeA11y: !hasFlag('--no-a11y'),
+    // Explicit --url only: the daemon re-navigates when the live page
+    // differs (SPA routing may have moved it since the last command).
+    url: getArg('--url'),
   });
   const data = resp.data as unknown as InspectData;
   const output = getArg('--output');
@@ -3135,7 +3255,7 @@ async function handleExecCmd(): Promise<unknown> {
 }
 
 async function handleClickCmd(): Promise<unknown> {
-  const clickTarget = getArg('--selector') ?? args[1];
+  const clickTarget = getArg('--selector') ?? getPositionalArg(1);
   const clickText = getArg('--text');
   const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
   const projRoot = findProjectRoot();
@@ -3570,8 +3690,8 @@ async function handleDaemonCmd(): Promise<unknown> {
 }
 
 async function handleFillCmd(): Promise<unknown> {
-  const fillTarget = getArg('--selector') ?? args[1];
-  const fillValue = getArg('--value') ?? args[2];
+  const fillTarget = getArg('--selector') ?? getPositionalArg(1);
+  const fillValue = getArg('--value') ?? getPositionalArg(2);
   if (!fillTarget) {
     console.error('[Sweetlink] Error: fill requires a target (@ref or --selector)');
     process.exit(1);
@@ -3603,6 +3723,9 @@ async function handleSnapshotCmd(): Promise<unknown> {
     interactive,
     diff: doDiff,
     annotate: doAnnotate,
+    // Explicit --url only: the daemon re-navigates when the live page
+    // differs (SPA routing may have moved it since the last command).
+    url: getArg('--url'),
   });
   const data = resp.data as {
     tree: string;

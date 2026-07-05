@@ -9,8 +9,8 @@
  */
 
 import * as crypto from 'crypto';
-import { setHeadedMode } from './browser.js';
-import { startServer } from './server.js';
+import { closeBrowser, setHeadedMode } from './browser.js';
+import { shutdown, startServer } from './server.js';
 import { extractPort, releaseLock, removeDaemonState, writeDaemonState } from './stateFile.js';
 import { DAEMON_PORT_MAX, DAEMON_PORT_MIN } from './types.js';
 import { registerGracefulShutdown } from './utils.js';
@@ -103,15 +103,30 @@ async function main(): Promise<void> {
 }
 
 // Handle graceful shutdown signals — same cleanup for SIGTERM and SIGINT.
+// Must go through shutdown() (which closes the Playwright browser) rather
+// than exiting directly: a bare process.exit() here left an orphaned
+// headless page alive and WS-connected to the sweetlink server, which later
+// Tier-1 screenshot commands silently captured instead of the real target.
 registerGracefulShutdown(() => {
   console.error('[Daemon] Received shutdown signal');
-  removeDaemonState(projectRoot, appPort);
-  releaseLock(projectRoot, appPort);
-  process.exit(0);
+  // Watchdog: never hang on a stuck browser close. unref() so it doesn't
+  // keep the process alive once cleanup finishes naturally.
+  const forceExit = setTimeout(() => process.exit(1), 5000);
+  forceExit.unref();
+  shutdown()
+    .catch(() => {})
+    .finally(() => {
+      // shutdown() normally exits via onShutdown; this is the fallback for
+      // signals that arrive before the server registered its callback.
+      removeDaemonState(projectRoot, appPort);
+      releaseLock(projectRoot, appPort);
+      process.exit(0);
+    });
 });
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error('[Daemon] Fatal error:', error);
+  await closeBrowser().catch(() => {});
   removeDaemonState(projectRoot, appPort);
   releaseLock(projectRoot, appPort);
   process.exit(1);

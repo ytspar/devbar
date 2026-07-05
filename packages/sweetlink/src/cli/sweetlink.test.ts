@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
+import { urlsEquivalent } from '../urlUtils.js';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — available inside vi.mock factories
@@ -132,6 +133,7 @@ vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
 }));
 
+import * as fs from 'fs';
 import { screenshotViaPlaywright } from '../playwright.js';
 
 // ---------------------------------------------------------------------------
@@ -763,6 +765,66 @@ describe('click command', () => {
     expect(sentData.type).toBe('exec-js');
     expect(sentData.code).toContain('querySelectorAll');
     expect(sentData.code).toContain('button.primary');
+  });
+
+  it("uses the '*' base selector for `click --text X` (flag is not a positional)", async () => {
+    // Regression: `click --text "Save list"` consumed the literal `--text`
+    // token as the positional selector, generating
+    // querySelectorAll("--text") — "No element found" for every documented
+    // --text invocation.
+    autoResponse.value = {
+      success: true,
+      data: { success: true, clicked: 'BUTTON.save', found: 1 },
+      timestamp: Date.now(),
+    };
+
+    await runCLI(['click', '--text', 'Save list']);
+
+    const ws = MockWebSocket.instances[0];
+    const sentData = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sentData.type).toBe('exec-js');
+    expect(sentData.code).toContain('querySelectorAll("*")');
+    expect(sentData.code).not.toContain('--text');
+    expect(sentData.code).toContain('Save list');
+  });
+
+  it('scopes `click <selector> --text X` to the positional selector', async () => {
+    autoResponse.value = {
+      success: true,
+      data: { success: true, clicked: 'BUTTON.save', found: 1 },
+      timestamp: Date.now(),
+    };
+
+    await runCLI(['click', 'button', '--text', 'Save list']);
+
+    const ws = MockWebSocket.instances[0];
+    const sentData = JSON.parse(ws.send.mock.calls[0][0]);
+    expect(sentData.code).toContain('querySelectorAll("button")');
+    expect(sentData.code).toContain('Save list');
+  });
+
+  it('never accepts a token starting with -- as the positional selector', async () => {
+    // With only a flag token after the command and no --text/--selector,
+    // click must report the missing-target error instead of trying to
+    // querySelectorAll a flag.
+    await runCLI(['click', '--index', '1']);
+
+    expect(errors.some((e) => e.includes('Either --selector or --text is required'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('fill command positional parsing', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  it('does not consume flag tokens as the target or value', async () => {
+    // `fill --value x` has no target; the old parsing took the literal
+    // `--value` token as the target and produced the wrong error.
+    await runCLI(['fill', '--value', 'hello']);
+
+    expect(errors.some((e) => e.includes('fill requires a target'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });
 
@@ -2113,54 +2175,54 @@ describe('getArg edge cases', () => {
 });
 
 // ===========================================================================
-// 31. urlsMatch — pure function tests
+// 31. urlsEquivalent — shared URL comparison used by --url flows
 // ===========================================================================
 
-describe('urlsMatch', () => {
-  /**
-   * Re-implementation of the internal urlsMatch function from sweetlink.ts.
-   */
-  function urlsMatch(a: string, b: string): boolean {
-    return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
-  }
-
+describe('urlsEquivalent (CLI --url comparison)', () => {
   it('matches identical URLs', () => {
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3000')).toBe(true);
   });
 
   it('matches when one has trailing slash', () => {
-    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3000/')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3000/')).toBe(true);
   });
 
   it('matches when both have trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000/', 'http://localhost:3000/')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000/')).toBe(true);
   });
 
   it('matches paths with trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(
+      true
+    );
   });
 
   it('does not match different paths', () => {
-    expect(urlsMatch('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(
+      false
+    );
   });
 
   it('preserves query params in comparison', () => {
-    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=1')).toBe(true);
-    expect(urlsMatch('http://localhost:3000?a=1', 'http://localhost:3000?a=2')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000?a=1', 'http://localhost:3000?a=1')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000?a=1', 'http://localhost:3000?a=2')).toBe(false);
   });
 
-  it('preserves hash fragments in comparison', () => {
-    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#top')).toBe(true);
-    expect(urlsMatch('http://localhost:3000#top', 'http://localhost:3000#bottom')).toBe(false);
+  it('ignores hash fragments (SPA routers differ on them)', () => {
+    expect(urlsEquivalent('http://localhost:3000#top', 'http://localhost:3000#top')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000#top', 'http://localhost:3000#bottom')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000/about#x', 'http://localhost:3000/about')).toBe(
+      true
+    );
   });
 
   it('does not match different ports', () => {
-    expect(urlsMatch('http://localhost:3000', 'http://localhost:3001')).toBe(false);
+    expect(urlsEquivalent('http://localhost:3000', 'http://localhost:3001')).toBe(false);
   });
 
   it('strips multiple trailing slashes', () => {
-    expect(urlsMatch('http://localhost:3000///', 'http://localhost:3000')).toBe(true);
+    expect(urlsEquivalent('http://localhost:3000///', 'http://localhost:3000')).toBe(true);
   });
 });
 
@@ -2276,6 +2338,100 @@ describe('screenshot --url navigation', () => {
     expect(errors.some((e) => e.includes('Could not navigate browser to'))).toBe(true);
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
+
+  it('saves the WS capture when the client reports the requested URL', async () => {
+    autoResponse.queue = [
+      // 1. Check current URL — already on target
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 2. Screenshot response reporting the matching capture URL
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-url-match.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Screenshot saved'))).toBe(true);
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(false);
+  });
+
+  it('refuses a WS capture of the wrong page with --force-ws (zombie client)', async () => {
+    autoResponse.queue = [
+      // 1. Check current URL — claims to be on target (a second/zombie
+      //    client can still answer the capture from a different page)
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // 2. Screenshot response reporting a DIFFERENT capture URL
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/stale-page',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-url-mismatch.png',
+    ]);
+
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(true);
+    expect(errors.some((e) => e.includes('Refusing to save a capture of the wrong page'))).toBe(
+      true
+    );
+    // Note: the mocked process.exit doesn't halt execution, so we assert the
+    // exit code rather than the absence of later logs.
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('falls back to Playwright when the WS capture URL mismatches (no --force-ws)', async () => {
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 1920,
+          height: 1080,
+          url: 'http://localhost:3000/stale-page',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--output',
+      '/tmp/test-url-mismatch-fallback.png',
+    ]);
+
+    expect(warns.some((w) => w.includes('Connected browser is on'))).toBe(true);
+    expect(logs.some((l) => l.includes('Escalating to Playwright'))).toBe(true);
+    expect(vi.mocked(screenshotViaPlaywright)).toHaveBeenCalled();
+  });
 });
 
 // ===========================================================================
@@ -2330,5 +2486,135 @@ describe('exec --url navigation', () => {
     );
 
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 35. getWsUrl — project-local server discovery (.sweetlink/server.json)
+// ===========================================================================
+
+describe('server discovery via .sweetlink/server.json', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  function mockServerInfoFile(info: Record<string, unknown>) {
+    const fsMock = vi.mocked(fs);
+    fsMock.existsSync.mockImplementation((p) => String(p).endsWith('server.json'));
+    fsMock.readFileSync.mockImplementation(((p: unknown) =>
+      String(p).endsWith('server.json')
+        ? JSON.stringify(info)
+        : JSON.stringify({ dependencies: { '@ytspar/sweetlink': '*' } })) as never);
+  }
+
+  it('connects to the port advertised by a live server.json', async () => {
+    mockServerInfoFile({ wsPort: 10888, appPort: 3000, pid: 4242, startedAt: '', version: '' });
+    // Info endpoint confirms the file: same pid and app port
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: '@ytspar/sweetlink', pid: 4242, appPort: 3000 }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      // exec-js URL check — already on target
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // screenshot response
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Using server from'))).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(true);
+  });
+
+  it('ignores a stale server.json and falls back to --url port math', async () => {
+    mockServerInfoFile({ wsPort: 10888, appPort: 3000, pid: 4242, startedAt: '', version: '' });
+    // Nothing sweetlink-shaped answers on the advertised port
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: 'some-other-server' }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery-stale.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Using server from'))).toBe(false);
+    // 3000 + 6223 = 9223 — derived from the explicit --url port
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:9223')).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(false);
+  });
+
+  it("skips a server.json whose app port disagrees with the explicit --url", async () => {
+    // The file belongs to an app on port 4665; the user asked about :3000.
+    mockServerInfoFile({ wsPort: 10888, appPort: 4665, pid: 4242, startedAt: '', version: '' });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: '@ytspar/sweetlink', pid: 4242, appPort: 4665 }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery-mismatch.png',
+    ]);
+
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:9223')).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(false);
   });
 });

@@ -20,7 +20,7 @@
  */
 
 import { closeSweetlink, initSweetlink } from './server/index.js';
-import { WS_PORT_OFFSET } from './types.js';
+import { resolveSweetlinkWsPortForAppPort } from './types.js';
 
 export interface WithSweetlinkOptions {
   /**
@@ -84,12 +84,22 @@ function detectNextPort(): number {
  * - Starts the WebSocket server on `appPort + 6223`
  * - Registers graceful shutdown handlers
  * - No-ops in production
+ *
+ * Unlike the Vite plugin, no same-origin `/__sweetlink` endpoint can be
+ * exposed here: Next's dev HTTP server is not reachable from next.config,
+ * and its HMR upgrade handler accepts arbitrary WS upgrades — a proxy
+ * forwarding `/__sweetlink` to Next yields a socket that opens but never
+ * acks (a phantom acceptor). Clients therefore rely on the inlined
+ * NEXT_PUBLIC_SWEETLINK_* port hints (tried BEFORE any same-origin guess)
+ * and require the server-info ack before treating a socket as connected.
  */
 export function withSweetlink<T>(nextConfig: T, options?: WithSweetlinkOptions): T {
   if (process.env.NODE_ENV !== 'development') return nextConfig;
 
   const appPort = options?.port ?? detectNextPort();
-  const wsPort = appPort + WS_PORT_OFFSET;
+  // Shared resolver: skips browser-restricted ports so the port the server
+  // binds always matches what the browser client derives (and can reach).
+  const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
 
   initSweetlink({
     port: wsPort,

@@ -726,12 +726,32 @@ initSweetlinkBridge({
 | `hmrScreenshots` | `boolean` | `false` | Auto-capture on HMR updates |
 | `debug` | `boolean` | `false` | Enable verbose connection logging |
 
+## Server Discovery
+
+The WebSocket server writes `<projectRoot>/.sweetlink/server.json` on startup
+(`{ wsPort, appPort, publicUrl, pid, startedAt, version }`) and removes it on
+shutdown. The CLI resolves its server in this order:
+
+1. `SWEETLINK_WS_URL` env (explicit override)
+2. A live `.sweetlink/server.json` found walking up from the cwd — validated
+   against the server's info endpoint (pid/appPort), so stale files from
+   crashed servers are ignored
+3. Port derived from an explicit `--url` port (app port + 6223)
+4. The default `ws://localhost:9223`
+
+This keeps the CLI pinned to *this* project's server when several projects run
+sweetlink at once (especially behind proxied URLs with no derivable port).
+
+Add `.sweetlink/` to your `.gitignore` — it holds machine- and run-specific
+state (`server.json`, `daemon-<port>.json`, recordings, inspect artifacts).
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SWEETLINK_WS_PORT` | `9223` | WebSocket server port |
-| `SWEETLINK_WS_URL` | `ws://localhost:9223` | WebSocket URL (CLI) |
+| `SWEETLINK_WS_URL` | `ws://localhost:9223` | WebSocket URL (CLI); overrides `.sweetlink/server.json` discovery |
+| `SWEETLINK_APP_URL` / `PORTLESS_URL` | — | Public (proxied) app URL; declares the origin allowed to connect and is recorded as `publicUrl` in `server.json` |
 | `CHROME_CDP_PORT` | `9222` | Chrome DevTools Protocol port |
 | `CHROME_CDP_URL` | `http://127.0.0.1:9222` | CDP URL |
 

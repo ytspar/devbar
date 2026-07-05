@@ -6,9 +6,110 @@ import {
   HMR_SCREENSHOT_DIR,
   MAX_LOG_MESSAGE_LENGTH,
   MAX_SLUG_LENGTH,
+  normalizeUrlForComparison,
   SCREENSHOT_DIR,
+  selectClientForTargetUrl,
   truncateMessage,
+  urlsEquivalent,
 } from './urlUtils.js';
+
+describe('urlsEquivalent', () => {
+  it('matches identical URLs', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/list/abc', 'https://places.localhost/list/abc')
+    ).toBe(true);
+  });
+
+  it('ignores trailing slashes', () => {
+    expect(urlsEquivalent('http://localhost:3000/about/', 'http://localhost:3000/about')).toBe(
+      true
+    );
+    expect(urlsEquivalent('http://localhost:3000/', 'http://localhost:3000')).toBe(true);
+  });
+
+  it('ignores hash fragments', () => {
+    expect(
+      urlsEquivalent('http://localhost:3000/about#section', 'http://localhost:3000/about')
+    ).toBe(true);
+  });
+
+  it('keeps query strings significant', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/list/abc?v=2', 'https://places.localhost/list/abc')
+    ).toBe(false);
+    expect(
+      urlsEquivalent(
+        'https://places.localhost/list/abc?v=2',
+        'https://places.localhost/list/abc?v=2'
+      )
+    ).toBe(true);
+  });
+
+  it('distinguishes different paths (SPA navigation)', () => {
+    expect(
+      urlsEquivalent('https://places.localhost/new?remix=abc', 'https://places.localhost/list/abc')
+    ).toBe(false);
+  });
+
+  it('falls back to string normalization for non-URLs', () => {
+    expect(urlsEquivalent('about:blank', 'about:blank')).toBe(true);
+    expect(normalizeUrlForComparison('not a url/')).toBe('not a url');
+  });
+});
+
+describe('selectClientForTargetUrl', () => {
+  const target = 'https://places.localhost/list/abc';
+
+  it('prefers the client whose reported URL matches exactly', () => {
+    const clients = [
+      { url: 'https://places.localhost/new', origin: 'https://places.localhost' },
+      { url: 'https://places.localhost/list/abc/', origin: 'https://places.localhost' },
+    ];
+    expect(selectClientForTargetUrl(clients, target)).toEqual({ index: 1, match: 'exact' });
+  });
+
+  it('falls back to a same-origin client when no exact match exists', () => {
+    const clients = [
+      { url: 'http://localhost:3000/', origin: 'http://localhost:3000' },
+      { url: 'https://places.localhost/new', origin: 'https://places.localhost' },
+    ];
+    expect(selectClientForTargetUrl(clients, target)).toEqual({ index: 1, match: 'origin' });
+  });
+
+  it('matches on the handshake origin when the client reported no URL', () => {
+    const clients = [{ origin: 'https://places.localhost' }];
+    expect(selectClientForTargetUrl(clients, target)).toEqual({ index: 0, match: 'origin' });
+  });
+
+  it('never selects a client on a foreign page or origin (multi-project isolation)', () => {
+    // The observed contamination: an el-lander page (localhost:3000)
+    // attached to placeswhere's server. It must never receive commands
+    // targeting https://places.localhost.
+    const clients = [
+      { url: 'http://localhost:3000/', origin: 'http://localhost:3000' },
+      { origin: 'http://localhost:3000' },
+    ];
+    expect(selectClientForTargetUrl(clients, target)).toEqual({ index: -1, match: 'none' });
+  });
+
+  it('uses an unknown-location client only when nothing better exists', () => {
+    const unknownOnly = [{ url: null, origin: null }];
+    expect(selectClientForTargetUrl(unknownOnly, target)).toEqual({
+      index: 0,
+      match: 'unknown-location',
+    });
+
+    const unknownPlusExact = [{ url: null, origin: null }, { url: target }];
+    expect(selectClientForTargetUrl(unknownPlusExact, target)).toEqual({
+      index: 1,
+      match: 'exact',
+    });
+  });
+
+  it('returns none for an empty client list', () => {
+    expect(selectClientForTargetUrl([], target)).toEqual({ index: -1, match: 'none' });
+  });
+});
 
 describe('constants', () => {
   it('MAX_SLUG_LENGTH is 50', () => {

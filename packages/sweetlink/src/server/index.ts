@@ -51,6 +51,7 @@ import { selectClientForTargetUrl } from '../urlUtils.js';
 
 // Import constants
 import { PACKAGE_INFO, SCREENSHOT_REQUEST_TIMEOUT_MS } from './constants.js';
+import { removeServerInfoFile, writeServerInfoFile } from './discovery.js';
 
 // Import handlers
 import {
@@ -372,6 +373,19 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
           console.log(
             `[Sweetlink] Note: Using alternative port (original ${options.port} was in use)`
           );
+        }
+        // Advertise this server to project-local CLIs. With several projects
+        // running sweetlink at once, port guessing can land on a foreign
+        // server; the file pins the CLI to THIS project's port.
+        if (projectRoot) {
+          writeServerInfoFile(projectRoot, {
+            wsPort: port,
+            appPort: associatedAppPort,
+            publicUrl: publicOrigins[0],
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+            version: PACKAGE_INFO.version,
+          });
         }
         options.onReady?.(port);
         setupServerHandlers(server);
@@ -1402,6 +1416,10 @@ export function closeSweetlink(): Promise<void> {
     }
 
     console.log('[Sweetlink] Closing WebSocket server on port', activePort);
+
+    // Stop advertising this server (pid-checked so a slow shutdown never
+    // deletes a freshly restarted server's file)
+    if (projectRoot) removeServerInfoFile(projectRoot);
 
     // Broadcast shutdown notice to all connected clients before closing.
     // CLI clients monitoring this connection can use this to abort in-flight work.

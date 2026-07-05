@@ -97,10 +97,17 @@ vi.mock('./subscriptions.js', () => ({
   pendingScreenshotRequests: new Map(),
 }));
 
+// Mock discovery so unit tests never write .sweetlink/server.json to disk
+vi.mock('./discovery.js', () => ({
+  writeServerInfoFile: vi.fn(),
+  removeServerInfoFile: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Import after mocks are in place
 // ---------------------------------------------------------------------------
 
+import { removeServerInfoFile, writeServerInfoFile } from './discovery.js';
 import {
   closeSweetlink,
   getAssociatedAppPort,
@@ -377,6 +384,41 @@ describe('Sweetlink server module', () => {
 
       await initDefault({ port: 9400 });
       expect(getSweetlinkPort()).toBe(9400);
+    });
+  });
+
+  // ========================================================================
+  // Project-local discovery (.sweetlink/server.json)
+  // ========================================================================
+
+  describe('server info file lifecycle', () => {
+    it('writes .sweetlink/server.json on startup with the bound port', async () => {
+      await initDefault({ port: 9500, appPort: 4665 });
+
+      expect(vi.mocked(writeServerInfoFile)).toHaveBeenCalledWith(
+        process.cwd(),
+        expect.objectContaining({
+          wsPort: 9500,
+          appPort: 4665,
+          pid: process.pid,
+        })
+      );
+    });
+
+    it('includes the declared public URL when one is configured', async () => {
+      await initDefault({ appPort: 4665, publicUrl: 'https://places.localhost' });
+
+      expect(vi.mocked(writeServerInfoFile)).toHaveBeenCalledWith(
+        process.cwd(),
+        expect.objectContaining({ publicUrl: 'https://places.localhost' })
+      );
+    });
+
+    it('removes the server info file on shutdown', async () => {
+      await initDefault();
+      await closeSweetlink();
+
+      expect(vi.mocked(removeServerInfoFile)).toHaveBeenCalledWith(process.cwd());
     });
   });
 

@@ -133,6 +133,7 @@ vi.mock('fs', () => ({
   writeFileSync: vi.fn(),
 }));
 
+import * as fs from 'fs';
 import { screenshotViaPlaywright } from '../playwright.js';
 
 // ---------------------------------------------------------------------------
@@ -2425,5 +2426,135 @@ describe('exec --url navigation', () => {
     );
 
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 35. getWsUrl — project-local server discovery (.sweetlink/server.json)
+// ===========================================================================
+
+describe('server discovery via .sweetlink/server.json', () => {
+  beforeEach(setup);
+  afterEach(teardown);
+
+  function mockServerInfoFile(info: Record<string, unknown>) {
+    const fsMock = vi.mocked(fs);
+    fsMock.existsSync.mockImplementation((p) => String(p).endsWith('server.json'));
+    fsMock.readFileSync.mockImplementation(((p: unknown) =>
+      String(p).endsWith('server.json')
+        ? JSON.stringify(info)
+        : JSON.stringify({ dependencies: { '@ytspar/sweetlink': '*' } })) as never);
+  }
+
+  it('connects to the port advertised by a live server.json', async () => {
+    mockServerInfoFile({ wsPort: 10888, appPort: 3000, pid: 4242, startedAt: '', version: '' });
+    // Info endpoint confirms the file: same pid and app port
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: '@ytspar/sweetlink', pid: 4242, appPort: 3000 }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      // exec-js URL check — already on target
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      // screenshot response
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Using server from'))).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(true);
+  });
+
+  it('ignores a stale server.json and falls back to --url port math', async () => {
+    mockServerInfoFile({ wsPort: 10888, appPort: 3000, pid: 4242, startedAt: '', version: '' });
+    // Nothing sweetlink-shaped answers on the advertised port
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: 'some-other-server' }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery-stale.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('Using server from'))).toBe(false);
+    // 3000 + 6223 = 9223 — derived from the explicit --url port
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:9223')).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(false);
+  });
+
+  it("skips a server.json whose app port disagrees with the explicit --url", async () => {
+    // The file belongs to an app on port 4665; the user asked about :3000.
+    mockServerInfoFile({ wsPort: 10888, appPort: 4665, pid: 4242, startedAt: '', version: '' });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: '@ytspar/sweetlink', pid: 4242, appPort: 4665 }),
+    } as unknown as Response);
+
+    autoResponse.queue = [
+      { success: true, data: { result: 'http://localhost:3000/about' }, timestamp: Date.now() },
+      {
+        success: true,
+        data: {
+          screenshot: 'data:image/png;base64,iVBORw0KGgo=',
+          width: 100,
+          height: 100,
+          url: 'http://localhost:3000/about',
+        },
+        timestamp: Date.now(),
+      },
+    ];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--force-ws',
+      '--output',
+      '/tmp/test-discovery-mismatch.png',
+    ]);
+
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:9223')).toBe(true);
+    expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(false);
   });
 });

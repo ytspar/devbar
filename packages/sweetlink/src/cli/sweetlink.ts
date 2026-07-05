@@ -24,7 +24,14 @@ import { extractPort } from '../daemon/stateFile.js';
 import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
-import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, resolveSweetlinkWsPortForAppPort } from '../types.js';
+import { findServerInfoFile } from '../server/discovery.js';
+import {
+  DEFAULT_WS_PORT,
+  MAX_PORT_RETRIES,
+  parseLocalDevelopmentUrl,
+  parsePortNumber,
+  resolveSweetlinkWsPortForAppPort,
+} from '../types.js';
 import { SCREENSHOT_DIR, selectClientForTargetUrl, urlsEquivalent } from '../urlUtils.js';
 import type {
   A11yData,
@@ -258,7 +265,7 @@ interface SweetlinkResponse {
 }
 
 let resolvedWsUrl: string | null = null;
-const DEFAULT_WS_URL = process.env.SWEETLINK_WS_URL || 'ws://localhost:9223';
+const DEFAULT_WS_URL = 'ws://localhost:9223';
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const SERVER_READY_TIMEOUT = 30000; // 30 seconds to wait for server
 const SERVER_POLL_INTERVAL = 500; // Poll every 500ms
@@ -270,6 +277,7 @@ const SCAN_PORT_END = 9233;
 interface ServerIdentity {
   port: number;
   appPort: number | null;
+  pid: number | null;
   gitBranch: string | null;
   appName: string | null;
 }
@@ -290,6 +298,7 @@ async function probeServerIdentity(port: number): Promise<ServerIdentity | null>
     return {
       port,
       appPort: data.appPort ?? null,
+      pid: typeof data.pid === 'number' ? data.pid : null,
       gitBranch: data.gitBranch ?? null,
       appName: data.appName ?? null,
     };
@@ -346,11 +355,63 @@ async function discoverServer(target: string): Promise<string> {
 }
 
 /**
- * Resolve the WebSocket URL to use. If --app was provided, scan for
- * a matching server. Otherwise use the default/env URL.
+ * Resolve this project's server from `.sweetlink/server.json` (written by
+ * the server at startup; walked up from cwd). The file can be stale after a
+ * crash, so it is only trusted when the info endpoint on that port answers
+ * as a sweetlink server whose pid/appPort agree with the file.
+ */
+async function resolveWsUrlFromServerInfoFile(): Promise<string | null> {
+  const found = findServerInfoFile(process.cwd());
+  if (!found) return null;
+  const { info } = found;
+
+  // With an explicit --url port that disagrees with the file's app port,
+  // the user means a different server — fall through to port math.
+  const urlArg = getArg('--url');
+  const urlPort = urlArg ? parsePortNumber(parseLocalDevelopmentUrl(urlArg)?.port) : null;
+  if (urlPort && info.appPort !== null && info.appPort !== urlPort) return null;
+
+  const identity = await probeServerIdentity(info.wsPort);
+  if (!identity) return null; // stale — nothing listening there anymore
+  if (identity.pid !== null && identity.pid !== info.pid) return null; // port reused
+  if (info.appPort !== null && identity.appPort !== null && identity.appPort !== info.appPort) {
+    return null; // port reused by another project's server
+  }
+
+  console.log(
+    `[Sweetlink] Using server from ${path.relative(process.cwd(), found.filePath) || found.filePath} (ws://localhost:${info.wsPort})`
+  );
+  return `ws://localhost:${info.wsPort}`;
+}
+
+/**
+ * Resolve the WebSocket URL to use, in order:
+ * 1. SWEETLINK_WS_URL env (explicit override)
+ * 2. A live `.sweetlink/server.json` written by this project's server
+ * 3. Port math from an explicit --url port (app port + offset)
+ * 4. The default ws://localhost:9223
  */
 async function getWsUrl(): Promise<string> {
   if (resolvedWsUrl) return resolvedWsUrl;
+
+  if (process.env.SWEETLINK_WS_URL) {
+    resolvedWsUrl = process.env.SWEETLINK_WS_URL;
+    return resolvedWsUrl;
+  }
+
+  const discovered = await resolveWsUrlFromServerInfoFile();
+  if (discovered) {
+    resolvedWsUrl = discovered;
+    return resolvedWsUrl;
+  }
+
+  const urlArg = getArg('--url');
+  const urlPort = urlArg ? parsePortNumber(parseLocalDevelopmentUrl(urlArg)?.port) : null;
+  if (urlPort) {
+    resolvedWsUrl = `ws://localhost:${resolveSweetlinkWsPortForAppPort(urlPort)}`;
+    return resolvedWsUrl;
+  }
+
   resolvedWsUrl = DEFAULT_WS_URL;
   return resolvedWsUrl;
 }

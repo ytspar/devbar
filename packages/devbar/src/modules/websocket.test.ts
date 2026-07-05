@@ -231,7 +231,7 @@ describe('connectWebSocket', () => {
     vi.useRealTimers();
   });
 
-  it('sends browser-client-ready on open', () => {
+  it('sends browser-client-ready with the page location on open', () => {
     const { MockWebSocket, instances } = createMockWebSocketClass();
     globalThis.WebSocket = MockWebSocket as any;
 
@@ -241,7 +241,11 @@ describe('connectWebSocket', () => {
     const ws = instances[0];
     ws.onopen!({});
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'browser-client-ready' }));
+    // The reported URL lets the server route targeted CLI commands (--url)
+    // to the client that is actually on the requested page.
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'browser-client-ready', url: window.location.href })
+    );
   });
 
   it('verifies server on matching server-info and marks connected', () => {

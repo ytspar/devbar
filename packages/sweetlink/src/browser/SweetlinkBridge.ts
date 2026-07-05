@@ -323,7 +323,9 @@ export class SweetlinkBridge {
 
     ws.onopen = () => {
       this.log(`[Sweetlink] Connected to server on ${wsUrl}`);
-      ws.send(JSON.stringify({ type: 'browser-client-ready' }));
+      // Report our location so the server can route targeted CLI commands
+      // (--url) to the client that is actually on the requested page.
+      ws.send(JSON.stringify({ type: 'browser-client-ready', url: window.location.href }));
     };
 
     ws.onmessage = async (event) => {

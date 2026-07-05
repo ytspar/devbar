@@ -345,25 +345,35 @@ export interface ScreenshotOptions {
   a11y?: boolean;
 }
 
-export interface ScreenshotCommand {
+/**
+ * Optional CLI-provided target for client-executing commands: the URL of the
+ * page the command is meant for (from `--url`). The server uses it to pick
+ * the matching browser client when several are connected (pages from
+ * multiple projects can attach to one server); browser clients ignore it.
+ */
+export interface TargetedCommand {
+  targetUrl?: string;
+}
+
+export interface ScreenshotCommand extends TargetedCommand {
   type: 'screenshot';
   selector?: string;
   hideDevbar?: boolean;
   options?: ScreenshotOptions;
 }
 
-export interface QueryDomCommand {
+export interface QueryDomCommand extends TargetedCommand {
   type: 'query-dom';
   selector?: string;
   property?: string;
 }
 
-export interface GetLogsCommand {
+export interface GetLogsCommand extends TargetedCommand {
   type: 'get-logs';
   filter?: string;
 }
 
-export interface ExecJsCommand {
+export interface ExecJsCommand extends TargetedCommand {
   type: 'exec-js';
   code?: string;
 }
@@ -374,6 +384,11 @@ export interface GetNetworkCommand {
 
 export interface BrowserClientReadyCommand {
   type: 'browser-client-ready';
+  /**
+   * The page's current location. Lets the server route targeted commands to
+   * the client that is actually on the requested page.
+   */
+  url?: string;
 }
 
 /**
@@ -459,7 +474,7 @@ export interface RefreshOptions {
   hard?: boolean;
 }
 
-export interface RefreshCommand {
+export interface RefreshCommand extends TargetedCommand {
   type: 'refresh';
   options?: RefreshOptions;
 }

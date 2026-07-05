@@ -177,7 +177,11 @@ describe('SweetlinkBridge - init / destroy lifecycle', () => {
     // Simulate open
     ws.onopen?.();
 
-    expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'browser-client-ready' }));
+    // The reported URL lets the server route targeted CLI commands (--url)
+    // to the client that is actually on the requested page.
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'browser-client-ready', url: window.location.href })
+    );
   });
 
   it('sets connected/verified on server-info matching app port', () => {

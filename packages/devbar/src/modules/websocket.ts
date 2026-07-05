@@ -111,7 +111,9 @@ export function connectWebSocket(state: DevBarState, port?: number | string): vo
 
   ws.onopen = () => {
     state.debug.ws('WebSocket socket opened, awaiting server-info');
-    ws.send(JSON.stringify({ type: 'browser-client-ready' }));
+    // Report our location so the server can route targeted CLI commands
+    // (--url) to the client that is actually on the requested page.
+    ws.send(JSON.stringify({ type: 'browser-client-ready', url: window.location.href }));
   };
 
   ws.onmessage = async (event) => {

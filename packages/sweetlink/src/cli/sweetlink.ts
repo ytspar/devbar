@@ -25,7 +25,7 @@ import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
 import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, resolveSweetlinkWsPortForAppPort } from '../types.js';
-import { SCREENSHOT_DIR, urlsEquivalent } from '../urlUtils.js';
+import { SCREENSHOT_DIR, selectClientForTargetUrl, urlsEquivalent } from '../urlUtils.js';
 import type {
   A11yData,
   CleanupData,
@@ -427,11 +427,70 @@ async function waitForServer(
   );
 }
 
+/**
+ * One-shot preflight for --url commands: verify a browser client that could
+ * plausibly be on the target page is attached to the server before
+ * dispatching, and surface an actionable error (listing the connected
+ * clients' locations) when every client is on a different page/origin.
+ * Old servers without per-client info skip the check silently.
+ */
+let targetClientPreflightDone = false;
+async function preflightTargetClients(targetUrl: string): Promise<void> {
+  if (targetClientPreflightDone) return;
+  targetClientPreflightDone = true;
+
+  let failure: string | null = null;
+  try {
+    const wsUrl = await getWsUrl();
+    const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch(httpUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!response.ok) return;
+    const data = (await response.json()) as {
+      clients?: Array<{ type?: string; origin?: string | null; url?: string | null }>;
+    };
+    if (!Array.isArray(data?.clients)) return; // old server — no visibility
+    const browserClients = data.clients.filter((c) => c?.type === 'browser');
+    if (browserClients.length === 0) return; // "No browser client" paths handle this
+
+    const { match } = selectClientForTargetUrl(browserClients, targetUrl);
+    if (match === 'none') {
+      const locations = browserClients
+        .map((c) => c.url ?? c.origin ?? 'unknown location')
+        .join(', ');
+      failure =
+        `No connected browser client matches ${targetUrl}. ` +
+        `Connected client(s): ${locations}. ` +
+        'Open the page in a browser (or fix --url) and retry.';
+    } else if (match === 'unknown-location') {
+      console.warn(
+        `[Sweetlink] ⚠ Connected browser client has not reported its location ` +
+          `(older devbar build?) — cannot verify it is on ${targetUrl}`
+      );
+    }
+  } catch {
+    // Info endpoint unreachable or unparseable — fall through to normal
+    // command dispatch, which has its own failure handling.
+    return;
+  }
+  if (failure) {
+    console.error(`[Sweetlink] ${failure}`);
+    throw new Error(failure);
+  }
+}
+
 async function sendCommand(
   command: SweetlinkCommand,
   timeoutMs: number = DEFAULT_TIMEOUT
 ): Promise<SweetlinkResponse> {
   const wsUrl = await getWsUrl();
+  // Target the client at --url so a server with several attached pages
+  // (multi-project setups) never dispatches this command to a foreign page.
+  const targetUrl = getArg('--url');
+  if (targetUrl) await preflightTargetClients(targetUrl);
+  const payload = targetUrl ? { ...command, targetUrl } : command;
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
 
@@ -441,7 +500,7 @@ async function sendCommand(
     }, timeoutMs);
 
     ws.on('open', () => {
-      ws.send(JSON.stringify(command));
+      ws.send(JSON.stringify(payload));
     });
 
     ws.on('message', (data: Buffer) => {

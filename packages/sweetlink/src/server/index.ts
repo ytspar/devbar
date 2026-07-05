@@ -43,9 +43,11 @@ import {
   isSaveScreenshotData,
   isSaveSettingsData,
   localOriginMatchesAppPort,
+  parseLocalDevelopmentUrl,
   SWEETLINK_WS_PATH,
   toSafeWsPort,
 } from '../types.js';
+import { selectClientForTargetUrl } from '../urlUtils.js';
 
 // Import constants
 import { PACKAGE_INFO, SCREENSHOT_REQUEST_TIMEOUT_MS } from './constants.js';
@@ -142,10 +144,17 @@ let attachedWss: WebSocketServer | null = null;
 let httpServer: ReturnType<typeof createServer> | null = null;
 let activePort: number | null = null;
 let associatedAppPort: number | null = null;
+// Public (proxied) origins this server legitimately serves, e.g. a Portless
+// HTTPS front like https://places.localhost. Sourced from the publicUrl
+// option or the SWEETLINK_APP_URL / PORTLESS_URL env vars.
+let publicOrigins: string[] = [];
 let projectRoot: string | null = null;
 let gitBranch: string | undefined;
 let appName: string | undefined;
-const clients = new Map<WebSocket, { type: 'browser' | 'cli'; id: string; origin?: string }>();
+const clients = new Map<
+  WebSocket,
+  { type: 'browser' | 'cli'; id: string; origin?: string; url?: string }
+>();
 
 // FIFO queue of CLI clients waiting for a response from a given browser.
 // Keyed by browser WS; the head of the queue receives the next response.
@@ -206,6 +215,54 @@ export interface InitSweetlinkOptions {
   appServer?: HttpServer | HttpsServer;
   /** Path for the same-origin WebSocket endpoint. Default: /__sweetlink */
   wsPath?: string;
+  /**
+   * Public (proxied) URL the app is served on, e.g. a Portless HTTPS front
+   * like https://places.localhost. Browser clients from this origin are
+   * accepted. Defaults to SWEETLINK_APP_URL / PORTLESS_URL when set.
+   */
+  publicUrl?: string;
+}
+
+/** Resolve the declared public/proxy origins from options and environment. */
+function resolvePublicOrigins(explicit?: string): string[] {
+  const candidates = [explicit, process.env.SWEETLINK_APP_URL, process.env.PORTLESS_URL];
+  const origins = new Set<string>();
+  for (const candidate of candidates) {
+    const url = parseLocalDevelopmentUrl(candidate);
+    if (url) origins.add(url.origin);
+  }
+  return [...origins];
+}
+
+/**
+ * Whether a browser client's Origin is one this server legitimately serves:
+ * the same host the WS upgrade arrived on (same-origin /__sweetlink
+ * endpoint), a declared public/proxy origin, or a local origin resolving to
+ * the associated app port. With no associated app port there is nothing to
+ * pin to, so any local origin is accepted (CLI-only environments).
+ *
+ * This is the isolation gate for multi-project setups: without it, a
+ * neighboring project's devbar port-scans onto this server and CLI commands
+ * silently execute against the wrong app's page.
+ */
+export function isOriginServedByApp(
+  origin: string,
+  opts: {
+    appPort: number | null;
+    publicOrigins: readonly string[];
+    requestHost?: string | null;
+  }
+): boolean {
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (opts.requestHost && parsedOrigin.host.toLowerCase() === opts.requestHost) return true;
+  if (opts.publicOrigins.includes(parsedOrigin.origin)) return true;
+  if (opts.appPort === null) return true;
+  return localOriginMatchesAppPort(origin, opts.appPort);
 }
 
 /**
@@ -240,6 +297,12 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
       console.log(`[Sweetlink] Associated with app on port ${associatedAppPort}`);
     }
 
+    // Declared public/proxy origins (Portless etc.) allowed to connect
+    publicOrigins = resolvePublicOrigins(options.publicUrl);
+    if (publicOrigins.length > 0) {
+      console.log(`[Sweetlink] Public origin(s): ${publicOrigins.join(', ')}`);
+    }
+
     const tryPort = (port: number) => {
       attempts++;
 
@@ -257,9 +320,17 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
               status: 'running',
               port: port,
               appPort: associatedAppPort,
+              pid: process.pid,
               gitBranch: gitBranch ?? null,
               appName: appName ?? null,
               connectedClients: clients.size,
+              // Per-client identity so CLIs can verify a client on the
+              // requested page is attached before dispatching commands.
+              clients: Array.from(clients.values()).map((info) => ({
+                type: info.type,
+                origin: info.origin ?? null,
+                url: info.url ?? null,
+              })),
               uptime: process.uptime(),
             },
             null,
@@ -351,7 +422,7 @@ interface MessageHandlerContext {
   /** The client ID string */
   clientId: string;
   /** Client info from the clients map */
-  clientInfo: { type: 'browser' | 'cli'; id: string; origin?: string } | undefined;
+  clientInfo: { type: 'browser' | 'cli'; id: string; origin?: string; url?: string } | undefined;
   /** Whether this client is a browser client */
   isBrowserClient: boolean;
 }
@@ -421,9 +492,17 @@ function browserCommand<TData, TResult>(opts: {
 // ============================================================================
 
 /** Handle browser client identification */
-function handleBrowserClientReady(_command: SweetlinkCommand, ctx: MessageHandlerContext): boolean {
+function handleBrowserClientReady(command: SweetlinkCommand, ctx: MessageHandlerContext): boolean {
   const clientInfo = clients.get(ctx.ws);
-  clients.set(ctx.ws, { type: 'browser', id: ctx.clientId, origin: clientInfo?.origin });
+  // Track the page's reported location so targeted commands (--url) can be
+  // dispatched to the client that is actually on the requested page.
+  const reportedUrl = (command as { url?: unknown }).url;
+  clients.set(ctx.ws, {
+    type: 'browser',
+    id: ctx.clientId,
+    origin: clientInfo?.origin,
+    url: typeof reportedUrl === 'string' && reportedUrl ? reportedUrl : undefined,
+  });
   console.log(`[Sweetlink] Browser client identified: ${ctx.clientId}`);
 
   // Send server info back to the browser so it can verify connection
@@ -1070,11 +1149,11 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
   if (ctx.clientInfo?.type === 'cli') {
     console.log(`[Sweetlink] Received command from CLI: ${command.type}`);
 
-    const browserClients = Array.from(clients.entries())
-      .filter(([, info]) => info.type === 'browser')
-      .map(([client]) => client);
+    const browserEntries = Array.from(clients.entries()).filter(
+      ([, info]) => info.type === 'browser'
+    );
 
-    if (browserClients.length === 0) {
+    if (browserEntries.length === 0) {
       ctx.ws.send(
         JSON.stringify({
           success: false,
@@ -1085,7 +1164,41 @@ function forwardMessage(ctx: MessageHandlerContext, command: SweetlinkCommand): 
       return;
     }
 
-    const browserWs = browserClients[0]!;
+    // Targeted dispatch: when the CLI names the page it means (--url →
+    // command.targetUrl), pick the client actually on that page rather than
+    // whichever connected first — several projects' pages can be attached.
+    let browserWs = browserEntries[0]![0];
+    const targetUrl = (command as { targetUrl?: unknown }).targetUrl;
+    if (typeof targetUrl === 'string' && targetUrl) {
+      const { index, match } = selectClientForTargetUrl(
+        browserEntries.map(([, info]) => ({ url: info.url, origin: info.origin })),
+        targetUrl
+      );
+      if (index === -1) {
+        const locations = browserEntries
+          .map(([, info]) => info.url ?? info.origin ?? 'unknown location')
+          .join(', ');
+        ctx.ws.send(
+          JSON.stringify({
+            success: false,
+            error:
+              `No connected browser client matches ${targetUrl}. ` +
+              `Connected client(s): ${locations}. ` +
+              'Open the page in a browser (or fix --url) and retry.',
+            timestamp: Date.now(),
+          } as SweetlinkResponse)
+        );
+        return;
+      }
+      if (match === 'unknown-location') {
+        console.warn(
+          `[Sweetlink] Dispatching to a client that has not reported its location ` +
+            `(older devbar build?) — cannot verify it is on ${targetUrl}`
+        );
+      }
+      browserWs = browserEntries[index]![0];
+    }
+
     const queue = cliClientQueues.get(browserWs) ?? [];
     queue.push(ctx.ws);
     cliClientQueues.set(browserWs, queue);
@@ -1118,22 +1231,6 @@ function originMatchesRequestHost(origin: string, req: IncomingMessage): boolean
 
   try {
     return new URL(origin).host.toLowerCase() === requestHost;
-  } catch {
-    return false;
-  }
-}
-
-function shouldWarnAboutOriginPort(origin: string, req: IncomingMessage): boolean {
-  if (originMatchesRequestHost(origin, req)) return false;
-
-  try {
-    const hostname = new URL(origin).hostname.toLowerCase();
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname === '[::1]'
-    );
   } catch {
     return false;
   }
@@ -1177,16 +1274,31 @@ function setupServerHandlers(server: WebSocketServer): void {
         return;
       }
 
-      // Direct localhost origins should usually match the app port. Named proxy
-      // origins (Portless, LAN mode) expose a proxy port, so matching here would
-      // produce noisy false positives.
-      if (associatedAppPort !== null && shouldWarnAboutOriginPort(origin, req)) {
-        if (!localOriginMatchesAppPort(origin, associatedAppPort)) {
-          console.warn(
-            `[Sweetlink] Connection from unexpected port: ${origin} (expected port: ${associatedAppPort})`
-          );
-          // Still allow but warn - strict mode could reject here
-        }
+      // Identity gate: only accept browser clients from origins this server
+      // actually serves. Devbar clients (especially older builds) port-scan
+      // for servers, so a neighboring project's page can otherwise attach
+      // here and CLI commands silently execute against the wrong app.
+      // Close code 4001 tells scanning clients to move on to the next port.
+      if (
+        !isOriginServedByApp(origin, {
+          appPort: associatedAppPort,
+          publicOrigins,
+          requestHost: getRequestHost(req),
+        })
+      ) {
+        const served = [
+          associatedAppPort !== null ? `app port ${associatedAppPort}` : null,
+          ...publicOrigins,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        console.log(
+          `[Sweetlink] Rejecting client from ${origin}: this server serves ${served}. ` +
+            'If this origin is a proxy for the app, declare it via PORTLESS_URL, ' +
+            'SWEETLINK_APP_URL, or initSweetlink({ publicUrl }).'
+        );
+        ws.close(4001, 'Origin not served by this Sweetlink server');
+        return;
       }
     }
 
@@ -1205,6 +1317,17 @@ function setupServerHandlers(server: WebSocketServer): void {
         }
 
         const clientInfo = clients.get(ws);
+
+        // Opportunistically refresh the browser client's last known location
+        // from response metadata (e.g. screenshot responses carry data.url) —
+        // SPA routing moves the page without a new browser-client-ready.
+        if (clientInfo?.type === 'browser') {
+          const data = (command as unknown as { data?: unknown }).data;
+          const dataUrl =
+            data && typeof data === 'object' ? (data as { url?: unknown }).url : undefined;
+          if (typeof dataUrl === 'string' && dataUrl) clientInfo.url = dataUrl;
+        }
+
         const ctx: MessageHandlerContext = {
           ws,
           rawMessage: message,

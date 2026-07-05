@@ -451,14 +451,44 @@ describe('Sweetlink server module', () => {
       expect(ws.close).not.toHaveBeenCalled();
     });
 
-    it('allows Portless custom .test origins', async () => {
-      await initDefault({ appPort: 4123 });
+    it('allows Portless custom .test origins when declared via publicUrl', async () => {
+      await initDefault({ appPort: 4123, publicUrl: 'https://security1000.test' });
       const ws = makeClientSocket();
       const req = makeRequest('https://security1000.test');
 
       mockWssInstance.emit('connection', ws, req);
 
       expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    it('rejects undeclared proxy origins when an app port is pinned', async () => {
+      // A proxy origin that hides the internal port can belong to ANY
+      // project; without a publicUrl/PORTLESS_URL declaration the server
+      // cannot tell it apart from a neighboring project's page.
+      await initDefault({ appPort: 4123 });
+      const ws = makeClientSocket();
+      const req = makeRequest('https://security1000.test');
+
+      mockWssInstance.emit('connection', ws, req);
+
+      expect(ws.close).toHaveBeenCalledWith(4001, 'Origin not served by this Sweetlink server');
+    });
+
+    it('allows proxy origins declared via the PORTLESS_URL env var', async () => {
+      const previous = process.env.PORTLESS_URL;
+      process.env.PORTLESS_URL = 'https://places.localhost';
+      try {
+        await initDefault({ appPort: 4665 });
+        const ws = makeClientSocket();
+        const req = makeRequest('https://places.localhost');
+
+        mockWssInstance.emit('connection', ws, req);
+
+        expect(ws.close).not.toHaveBeenCalled();
+      } finally {
+        if (previous === undefined) delete process.env.PORTLESS_URL;
+        else process.env.PORTLESS_URL = previous;
+      }
     });
 
     it('allows same-origin proxy endpoints for arbitrary local hostnames', async () => {
@@ -511,19 +541,18 @@ describe('Sweetlink server module', () => {
       expect(ws.close).not.toHaveBeenCalled();
     });
 
-    it('allows connections from unexpected localhost port but warns', async () => {
-      // When appPort is set to 3000 but connection comes from :5173
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it("rejects clients from a different project's localhost port", async () => {
+      // appPort pinned to 3000 but the page lives on :5173 — that's another
+      // project's dev server. Old devbar builds port-scan onto foreign
+      // servers; accepting them lets CLI commands execute against the
+      // wrong app's page.
       await initDefault({ appPort: 3000 });
       const ws = makeClientSocket();
       const req = makeRequest('http://localhost:5173');
 
       mockWssInstance.emit('connection', ws, req);
 
-      // Should NOT be rejected (just warned)
-      expect(ws.close).not.toHaveBeenCalled();
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
-      consoleSpy.mockRestore();
+      expect(ws.close).toHaveBeenCalledWith(4001, 'Origin not served by this Sweetlink server');
     });
 
     it('does not warn about port mismatch when appPort matches', async () => {
@@ -550,17 +579,14 @@ describe('Sweetlink server module', () => {
       consoleSpy.mockRestore();
     });
 
-    it('does not warn when a named Portless origin hides the internal app port', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      await initDefault({ appPort: 4123 });
+    it('allows a named Portless origin that hides the internal port when declared', async () => {
+      await initDefault({ appPort: 4123, publicUrl: 'https://security1000.localhost' });
       const ws = makeClientSocket();
       const req = makeRequest('https://security1000.localhost');
 
       mockWssInstance.emit('connection', ws, req);
 
       expect(ws.close).not.toHaveBeenCalled();
-      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('unexpected port'));
-      consoleSpy.mockRestore();
     });
 
     it('does not perform port matching when appPort is not set', async () => {
@@ -659,6 +685,95 @@ describe('Sweetlink server module', () => {
       const sent = JSON.parse(ws.send.mock.calls[0][0]);
       expect(sent.success).toBe(false);
       expect(sent.error).toBeDefined();
+    });
+
+    it('routes targeted commands to the browser client on the requested page', async () => {
+      await initDefault({ appPort: 3000 });
+
+      const pageA = connectClient();
+      pageA.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({ type: 'browser-client-ready', url: 'http://localhost:3000/a' })
+        )
+      );
+      const pageB = connectClient();
+      pageB.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({ type: 'browser-client-ready', url: 'http://localhost:3000/b' })
+        )
+      );
+
+      // CLI client (no Origin header)
+      const cli = makeClientSocket();
+      mockWssInstance.emit('connection', cli, makeRequest(undefined));
+      cli.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({
+            type: 'query-dom',
+            selector: 'h1',
+            targetUrl: 'http://localhost:3000/b',
+          })
+        )
+      );
+
+      await vi.waitFor(() => {
+        expect(pageB.send).toHaveBeenCalledWith(expect.stringContaining('query-dom'));
+      });
+      // First-connected client must NOT receive the command
+      expect(pageA.send).not.toHaveBeenCalledWith(expect.stringContaining('query-dom'));
+    });
+
+    it('fails targeted commands with a client listing when no client matches', async () => {
+      await initDefault({ appPort: 3000 });
+
+      const page = connectClient();
+      page.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({ type: 'browser-client-ready', url: 'http://localhost:3000/home' })
+        )
+      );
+
+      const cli = makeClientSocket();
+      mockWssInstance.emit('connection', cli, makeRequest(undefined));
+      cli.emit(
+        'message',
+        Buffer.from(
+          JSON.stringify({
+            type: 'exec-js',
+            code: '1+1',
+            targetUrl: 'https://places.localhost/list/abc',
+          })
+        )
+      );
+
+      await vi.waitFor(() => {
+        expect(cli.send).toHaveBeenCalled();
+      });
+      const sent = JSON.parse(cli.send.mock.calls[0][0]);
+      expect(sent.success).toBe(false);
+      expect(sent.error).toContain('No connected browser client matches');
+      expect(sent.error).toContain('http://localhost:3000/home');
+      // The mismatched page must never receive the command
+      expect(page.send).not.toHaveBeenCalledWith(expect.stringContaining('exec-js'));
+    });
+
+    it('keeps untargeted commands routing to the first browser client', async () => {
+      await initDefault({ appPort: 3000 });
+
+      const page = connectClient();
+      page.emit('message', Buffer.from(JSON.stringify({ type: 'browser-client-ready' })));
+
+      const cli = makeClientSocket();
+      mockWssInstance.emit('connection', cli, makeRequest(undefined));
+      cli.emit('message', Buffer.from(JSON.stringify({ type: 'query-dom', selector: 'h1' })));
+
+      await vi.waitFor(() => {
+        expect(page.send).toHaveBeenCalledWith(expect.stringContaining('query-dom'));
+      });
     });
 
     it('cleans up subscriptions on client disconnect', async () => {

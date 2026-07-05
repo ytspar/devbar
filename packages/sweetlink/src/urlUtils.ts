@@ -87,6 +87,73 @@ export function urlsEquivalent(a: string, b: string): boolean {
 }
 
 // ============================================================================
+// Browser Client Selection
+// ============================================================================
+
+/** Location info tracked per connected browser client. */
+export interface BrowserClientLocation {
+  /** Last URL the client reported (browser-client-ready / response metadata). */
+  url?: string | null;
+  /** Origin header captured at the WebSocket handshake. */
+  origin?: string | null;
+}
+
+export type BrowserClientMatch = 'exact' | 'origin' | 'unknown-location' | 'none';
+
+function safeOrigin(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick the browser client a command targeting `targetUrl` should dispatch to.
+ *
+ * Ranking: a client whose reported location matches exactly
+ * (`urlsEquivalent`) wins, then one on the same origin, then one that never
+ * reported a location or origin (old builds — callers should warn). Clients
+ * that reported a DIFFERENT page or origin are never eligible: multiple
+ * projects' pages can be attached to one server, and dispatching to a
+ * foreign page silently executes commands against the wrong app.
+ *
+ * Returns `index: -1, match: 'none'` when no client is eligible.
+ */
+export function selectClientForTargetUrl(
+  clients: readonly BrowserClientLocation[],
+  targetUrl: string
+): { index: number; match: BrowserClientMatch } {
+  const targetOrigin = safeOrigin(targetUrl);
+  let originIndex = -1;
+  let unknownIndex = -1;
+
+  for (let i = 0; i < clients.length; i++) {
+    const client = clients[i]!;
+    if (client.url) {
+      if (urlsEquivalent(client.url, targetUrl)) return { index: i, match: 'exact' };
+      if (originIndex === -1 && targetOrigin && safeOrigin(client.url) === targetOrigin) {
+        originIndex = i;
+      }
+      continue;
+    }
+    const clientOrigin = safeOrigin(client.origin);
+    if (clientOrigin) {
+      if (originIndex === -1 && targetOrigin && clientOrigin === targetOrigin) {
+        originIndex = i;
+      }
+      continue; // known origin that doesn't match — never a blind fallback
+    }
+    if (unknownIndex === -1) unknownIndex = i;
+  }
+
+  if (originIndex !== -1) return { index: originIndex, match: 'origin' };
+  if (unknownIndex !== -1) return { index: unknownIndex, match: 'unknown-location' };
+  return { index: -1, match: 'none' };
+}
+
+// ============================================================================
 // Timestamp Formatting
 // ============================================================================
 

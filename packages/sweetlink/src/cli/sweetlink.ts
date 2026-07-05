@@ -24,7 +24,7 @@ import { extractPort } from '../daemon/stateFile.js';
 import { ensureDir } from '../daemon/utils.js';
 import { screenshotViaPlaywright } from '../playwright.js';
 import { getCardHeaderPreset, getNavigationPreset, measureViaPlaywright } from '../ruler.js';
-import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, WS_PORT_OFFSET } from '../types.js';
+import { DEFAULT_WS_PORT, MAX_PORT_RETRIES, resolveSweetlinkWsPortForAppPort } from '../types.js';
 import { SCREENSHOT_DIR } from '../urlUtils.js';
 import type {
   A11yData,
@@ -308,9 +308,9 @@ async function discoverServer(target: string): Promise<string> {
   for (let port = SCAN_PORT_START; port <= SCAN_PORT_END; port++) {
     probes.push(probeServerIdentity(port));
   }
-  // Also probe common offset ports (appPort + 6223)
+  // Also probe common offset ports (appPort + 6223, skipping unsafe ports)
   for (const appPort of COMMON_APP_PORTS) {
-    const wsPort = appPort + WS_PORT_OFFSET;
+    const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
     if (wsPort < SCAN_PORT_START || wsPort > SCAN_PORT_END) {
       probes.push(probeServerIdentity(wsPort));
     }
@@ -1643,7 +1643,7 @@ function getPortsToScan(): number[] {
 
   // Common app ports + offset (e.g., 3000 -> 9223, 5173 -> 11396)
   for (const appPort of COMMON_APP_PORTS) {
-    const wsPort = appPort + WS_PORT_OFFSET;
+    const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
     for (let i = 0; i <= MAX_PORT_RETRIES; i++) {
       ports.add(wsPort + i);
     }

@@ -35,7 +35,7 @@ import {
 // ============================================================================
 
 import {
-  createSameOriginSweetlinkWsUrl,
+  buildSweetlinkWsUrlCandidates,
   DEFAULT_WS_PORT,
   getSweetlinkRuntimeConfig,
   MAX_PORT_RETRIES,
@@ -43,6 +43,7 @@ import {
   parsePortNumber,
   resolveAppPortFromRuntimeConfig,
   resolveSweetlinkWsPortForAppPort,
+  toSafeWsPort,
 } from '../types.js';
 
 /** HMR settings */
@@ -129,7 +130,7 @@ export class SweetlinkBridge {
       config.wsPort ??
       parsePortNumber(runtimeConfig.wsPort) ??
       resolveSweetlinkWsPortForAppPort(this.currentAppPort);
-    this.wsUrlCandidates = this.buildWsUrlCandidates(window.location, {
+    this.wsUrlCandidates = buildSweetlinkWsUrlCandidates(window.location, {
       wsUrl: config.wsUrl ?? runtimeConfig.wsUrl,
       wsPort: config.wsPort ?? config.basePort ?? runtimeConfig.wsPort,
       wsPath: config.wsPath ?? runtimeConfig.wsPath,
@@ -253,28 +254,6 @@ export class SweetlinkBridge {
     this.cleanupFunctions.push(cleanup);
   }
 
-  private buildWsUrlCandidates(
-    location: Location,
-    options: {
-      wsUrl?: string | null;
-      wsPort?: number | string | null;
-      wsPath?: string | null;
-      fallbackPort: number;
-    }
-  ): string[] {
-    const urls: string[] = [];
-    const add = (url: string | null | undefined): void => {
-      if (url && !urls.includes(url)) urls.push(url);
-    };
-
-    add(options.wsUrl);
-    if (options.wsPath) {
-      add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
-    }
-    add(`ws://localhost:${parsePortNumber(options.wsPort) ?? options.fallbackPort}`);
-    return urls;
-  }
-
   private getWsUrlForTarget(target: number | string): string {
     return typeof target === 'string' ? target : `ws://localhost:${target}`;
   }
@@ -309,7 +288,9 @@ export class SweetlinkBridge {
 
     const targetPort = this.getPortForTarget(targetUrl);
     if (targetPort !== null) {
-      const nextPort = targetPort + 1;
+      // Skip browser-restricted ports while scanning — the server-side port
+      // retry does the same, so both sides walk the same sequence.
+      const nextPort = toSafeWsPort(targetPort + 1);
       if (nextPort < this.basePort + this.maxPortRetries) {
         this.scheduleConnect(nextPort, delayMs);
         return true;

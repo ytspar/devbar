@@ -20,7 +20,7 @@
  */
 
 import { closeSweetlink, initSweetlink } from './server/index.js';
-import { WS_PORT_OFFSET } from './types.js';
+import { resolveSweetlinkWsPortForAppPort } from './types.js';
 
 export interface WithSweetlinkOptions {
   /**
@@ -89,7 +89,9 @@ export function withSweetlink<T>(nextConfig: T, options?: WithSweetlinkOptions):
   if (process.env.NODE_ENV !== 'development') return nextConfig;
 
   const appPort = options?.port ?? detectNextPort();
-  const wsPort = appPort + WS_PORT_OFFSET;
+  // Shared resolver: skips browser-restricted ports so the port the server
+  // binds always matches what the browser client derives (and can reach).
+  const wsPort = resolveSweetlinkWsPortForAppPort(appPort);
 
   initSweetlink({
     port: wsPort,

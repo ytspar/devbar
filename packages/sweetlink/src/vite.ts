@@ -17,7 +17,7 @@
 
 import type { Plugin } from 'vite';
 import { closeSweetlink, initSweetlink } from './server/index.js';
-import { SWEETLINK_WS_PATH, WS_PORT_OFFSET } from './types.js';
+import { resolveSweetlinkWsPortForAppPort, SWEETLINK_WS_PATH } from './types.js';
 
 export interface SweetlinkPluginOptions {
   /**
@@ -59,7 +59,7 @@ export interface SweetlinkPluginOptions {
  */
 export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
   let appPort = 5173;
-  let actualWsPort = appPort + WS_PORT_OFFSET;
+  let actualWsPort = resolveSweetlinkWsPortForAppPort(appPort);
   const wsPath = options.wsPath ?? SWEETLINK_WS_PATH;
 
   return {
@@ -76,8 +76,9 @@ export function sweetlink(options: SweetlinkPluginOptions = {}): Plugin {
         const vitePort = typeof address === 'object' && address ? address.port : 5173;
         appPort = vitePort;
 
-        // Calculate WebSocket port (matches GlobalDevBar's calculation)
-        const wsPort = options.port ?? vitePort + WS_PORT_OFFSET;
+        // Calculate WebSocket port (matches GlobalDevBar's calculation,
+        // including the skip over browser-restricted ports)
+        const wsPort = options.port ?? resolveSweetlinkWsPortForAppPort(vitePort);
         actualWsPort = wsPort;
 
         initSweetlink({

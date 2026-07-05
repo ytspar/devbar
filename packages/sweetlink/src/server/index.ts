@@ -44,6 +44,7 @@ import {
   isSaveSettingsData,
   localOriginMatchesAppPort,
   SWEETLINK_WS_PATH,
+  toSafeWsPort,
 } from '../types.js';
 
 // Import constants
@@ -271,7 +272,8 @@ export function initSweetlink(options: InitSweetlinkOptions): Promise<WebSocketS
         if (error.code === 'EADDRINUSE') {
           localHttpServer.close();
           if (attempts < maxRetries) {
-            const nextPort = port + 1;
+            // Skip browser-restricted ports — clients scanning for us do too.
+            const nextPort = toSafeWsPort(port + 1);
             console.log(`[Sweetlink] Port ${port} in use, trying ${nextPort}...`);
             tryPort(nextPort);
           } else {

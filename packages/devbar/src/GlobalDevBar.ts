@@ -18,7 +18,7 @@
 
 import { ConsoleCapture, type LogChangeListener } from '@ytspar/sweetlink/browser/consoleCapture';
 import {
-  createSameOriginSweetlinkWsUrl,
+  buildSweetlinkWsUrlCandidates,
   getSweetlinkRuntimeConfig,
   parsePortNumber,
   resolveAppPortFromRuntimeConfig,
@@ -78,30 +78,9 @@ export type {
 
 // html2canvas is lazy-loaded via getHtml2Canvas() to avoid bundling ~400KB upfront
 
-function buildSweetlinkWsUrlCandidates(
-  location: Location,
-  options: {
-    wsUrl?: string | null;
-    wsPort?: number | string | null;
-    wsPath?: string | null;
-    fallbackPort: number;
-  }
-): string[] {
-  const urls: string[] = [];
-  const add = (url: string | null | undefined): void => {
-    if (url && !urls.includes(url)) urls.push(url);
-  };
-
-  add(options.wsUrl);
-  if (options.wsPath) {
-    add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
-  }
-
-  const directPort = parsePortNumber(options.wsPort) ?? options.fallbackPort;
-  add(`ws://localhost:${directPort}`);
-
-  return urls;
-}
+// WS URL candidate ordering (hint → same-origin /__sweetlink → port math) is
+// shared with SweetlinkBridge via buildSweetlinkWsUrlCandidates from
+// @ytspar/sweetlink/types.
 
 // ============================================================================
 // Console Capture (single implementation from @ytspar/sweetlink)

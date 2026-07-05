@@ -10,6 +10,7 @@ import {
   outlineToMarkdown,
 } from '@ytspar/sweetlink/browser/commands/outline';
 import { extractPageSchema, schemaToMarkdown } from '@ytspar/sweetlink/browser/commands/schema';
+import { toSafeWsPort } from '@ytspar/sweetlink/types';
 import { runA11yAudit } from '../accessibility.js';
 import {
   BASE_RECONNECT_DELAY_MS,
@@ -81,7 +82,9 @@ function scheduleNextTarget(
 
   const targetPort = getPortForTarget(targetUrl);
   if (targetPort !== null) {
-    const nextPort = targetPort + 1;
+    // Skip browser-restricted ports while scanning — the server-side port
+    // retry does the same, so both sides walk the same sequence.
+    const nextPort = toSafeWsPort(targetPort + 1);
     if (nextPort < state.baseWsPort + MAX_PORT_RETRIES) {
       setTimeout(() => connectWebSocket(state, nextPort), delayMs);
       return;

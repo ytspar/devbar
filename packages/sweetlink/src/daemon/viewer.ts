@@ -175,7 +175,7 @@ export async function generateViewer(
   .main { display: flex; flex: 1; overflow: hidden; }
   .video-pane { flex: 62%; display: flex; flex-direction: column; border-right: 1px solid var(--color-border); position: relative; }
   .video-container { flex: 1; position: relative; background: var(--color-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-  .video-container video, .video-container img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); }
+  .video-container video, .video-container img { max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; object-fit: contain; border-radius: var(--radius-sm); }
   .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
   .controls { height: 56px; background: var(--color-bg-card); border-top: 1px solid var(--color-border); display: flex; flex-direction: column; padding: 4px 16px; flex-shrink: 0; }
   .scrub-track { position: relative; height: 10px; background: var(--color-border-subtle); border-radius: 5px; margin-bottom: 6px; cursor: pointer; border: 1px solid var(--color-border); }

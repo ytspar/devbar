@@ -39,9 +39,29 @@ const STYLE_ID = 'devbar-hide-framework-dev-indicator';
 // missing and shift the failure to the dangerous direction.
 const HIDE_CSS = '[data-next-badge][data-error="false"]{display:none !important;}';
 
-function injectIntoShadow(portal: Element): void {
+// A portal element can be inserted a frame before its shadow root attaches. The
+// light-DOM observer sees the insertion (shadow still null) but never the later
+// shadow attach — that's a shadow-DOM mutation it can't observe — so on a
+// *quiescent* captured page (no further mutations to self-heal) the injection
+// would be dropped and the resting badge would leak into the screenshot. Retry
+// for a bounded handful of frames, then give up so a never-attaching portal
+// can't spin forever.
+const MAX_SHADOW_RETRIES = 10;
+
+function scheduleRetry(fn: () => void): void {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(fn);
+  } else {
+    setTimeout(fn, 16);
+  }
+}
+
+function injectIntoShadow(portal: Element, retriesLeft: number = MAX_SHADOW_RETRIES): void {
   const root = (portal as HTMLElement).shadowRoot;
-  if (!root) return;
+  if (!root) {
+    if (retriesLeft > 0) scheduleRetry(() => injectIntoShadow(portal, retriesLeft - 1));
+    return;
+  }
   if (root.querySelector(`#${STYLE_ID}`)) return;
   const style = document.createElement('style');
   style.id = STYLE_ID;

@@ -52,12 +52,20 @@ jobs:
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         env:
           HAS_PAT: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
-          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          # Full outputs object: in this manifest (multi-package) setup the tags
+          # live in per-path outputs (`packages/devbar--tag_name`, …), not the
+          # single top-level `tag_name`, so read them all out of the JSON.
+          RELEASES_JSON: ${{ toJSON(steps.release.outputs) }}
+          FALLBACK_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           if [ "$HAS_PAT" = "true" ]; then
-            echo "RELEASE_PLEASE_TOKEN present — the release tag push will trigger release.yml → npm publish."
+            echo "RELEASE_PLEASE_TOKEN present — the release tag push(es) will trigger release.yml → npm publish."
             exit 0
           fi
-          TAG="${TAG_NAME:-<the-new-tag>}"
-          echo "::error title=Release created but will NOT auto-publish::release-please created a release using the fallback GITHUB_TOKEN. GitHub mutes workflow triggers for bot-pushed tags, so release.yml (npm publish) will not run and the new version is tagged but unpublished. Fix: set the RELEASE_PLEASE_TOKEN PAT (this workflow's header / DEV-6469). Recover this release now by re-pushing the tag from a real credential: git push origin :refs/tags/${TAG} && git push origin refs/tags/${TAG}"
+          # Every released tag (manifest mode → one per bumped package), else the
+          # single-package tag_name, else a placeholder.
+          TAGS=$(printf '%s' "$RELEASES_JSON" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | paste -sd' ' -)
+          [ -z "$TAGS" ] && TAGS="$FALLBACK_TAG"
+          [ -z "$TAGS" ] && TAGS="<the-new-tag(s)>"
+          echo "::error title=Release created but will NOT auto-publish::release-please created release(s) using the fallback GITHUB_TOKEN. GitHub mutes workflow triggers for bot-pushed tags, so release.yml (npm publish) will not run and the new version(s) are tagged but unpublished. Fix: set the RELEASE_PLEASE_TOKEN PAT (this workflow's header / DEV-6469). Recover now by re-pushing each tag from a real credential: for t in ${TAGS}; do git push origin :refs/tags/\$t && git push origin refs/tags/\$t; done"
           exit 1

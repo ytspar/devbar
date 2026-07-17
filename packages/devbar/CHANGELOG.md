@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.3](https://github.com/ytspar/devbar/compare/devbar-v1.18.2...devbar-v1.18.3) (2026-07-17)
+
+
+### Bug Fixes
+
+* **devbar:** retry badge-hide injection for quiescent captures ([#35](https://github.com/ytspar/devbar/issues/35)) ([fc8bb93](https://github.com/ytspar/devbar/commit/fc8bb93f6ed1503c48a9bbd43deb85e413153cd8))
+
 ## [1.18.2](https://github.com/ytspar/devbar/compare/devbar-v1.18.1...devbar-v1.18.2) (2026-07-17)
 
 

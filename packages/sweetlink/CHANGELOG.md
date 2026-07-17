@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.4](https://github.com/ytspar/devbar/compare/sweetlink-v1.26.3...sweetlink-v1.26.4) (2026-07-17)
+
+
+### Bug Fixes
+
+* **sweetlink:** keep wide images/video inside the HTML review viewers ([#30](https://github.com/ytspar/devbar/issues/30)) ([f3e7a55](https://github.com/ytspar/devbar/commit/f3e7a558dbdd79da14fede397797990fd7e20a79))
+
 ## [1.26.3](https://github.com/ytspar/devbar/compare/sweetlink-v1.26.2...sweetlink-v1.26.3) (2026-07-05)
 
 

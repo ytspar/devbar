@@ -37,6 +37,7 @@ import {
 import { DebugLogger, normalizeDebugConfig } from './debug.js';
 // Import module functions
 import { registerAnnotateControl } from './modules/annotate.js';
+import { suppressFrameworkDevIndicators } from './modules/frameworkDevIndicators.js';
 import { setupKeyboardShortcuts } from './modules/keyboard.js';
 import { setupBreakpointDetection, setupPerformanceMonitoring } from './modules/performance.js';
 import { render as moduleRender } from './modules/rendering/index.js';
@@ -263,6 +264,7 @@ export class GlobalDevBar {
 
   // Console log listener for real-time badge updates
   private logChangeListener: LogChangeListener | null = null;
+  private disposeFrameworkIndicators: (() => void) | null = null;
 
   constructor(options: GlobalDevBarOptions = {}) {
     // Initialize debug config first so we can log during construction
@@ -433,6 +435,12 @@ export class GlobalDevBar {
     // Inject animation and utility CSS
     this.injectStyles();
 
+    // Hide the framework's own floating dev indicator (Next.js dev-tools badge).
+    // It duplicates the devbar and, in a bottom corner, overlaps page content
+    // and pollutes screenshots — and it lives in a shadow root no capture
+    // pipeline can reach from the outside (see frameworkDevIndicators.ts).
+    this.disposeFrameworkIndicators = suppressFrameworkDevIndicators();
+
     // Copy captured logs
     this.consoleLogs = consoleCapture.getLogs();
     this.debug.lifecycle('Copied console logs', { count: this.consoleLogs.length });
@@ -533,6 +541,12 @@ export class GlobalDevBar {
     if (this.logChangeListener) {
       consoleCapture.removeListener(this.logChangeListener);
       this.logChangeListener = null;
+    }
+
+    // Stop watching for the framework dev indicator
+    if (this.disposeFrameworkIndicators) {
+      this.disposeFrameworkIndicators();
+      this.disposeFrameworkIndicators = null;
     }
 
     // Restore console

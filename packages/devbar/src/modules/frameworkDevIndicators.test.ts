@@ -78,6 +78,27 @@ describe('suppressFrameworkDevIndicators', () => {
     dispose();
   });
 
+  it('retries injection when the shadow root attaches after the portal mounts', async () => {
+    // Portal present but shadow root not yet attached — the quiescent-capture
+    // race. The observer fires on this light-DOM insertion (shadow still null);
+    // the later shadow attach is invisible to it, so only the bounded retry
+    // saves the injection.
+    const portal = document.createElement('nextjs-portal');
+    document.body.appendChild(portal);
+
+    const dispose = suppressFrameworkDevIndicators();
+
+    // Shadow root + badge attach a beat later, with no further light-DOM change.
+    const root = portal.attachShadow({ mode: 'open' });
+    root.appendChild(makeBadge(false));
+
+    // Let the retry frames run.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(root.querySelector(`#${STYLE_ID}`)).not.toBeNull();
+    dispose();
+  });
+
   it('does not inject twice into the same shadow root', () => {
     const { portal, root } = makePortalWithButton();
     document.body.appendChild(portal);

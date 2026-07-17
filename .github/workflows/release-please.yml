@@ -37,7 +37,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # A release-please tag created with the fallback GITHUB_TOKEN cannot
+      # trigger release.yml — GitHub mutes workflow triggers on refs it pushes
+      # with GITHUB_TOKEN — so the npm publish silently never runs (DEV-6469).
+      # If a release was created without RELEASE_PLEASE_TOKEN, fail loudly with
+      # the recovery steps instead of leaving the version tagged-but-unpublished.
+      - name: Guard against silent no-publish (missing RELEASE_PLEASE_TOKEN)
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          HAS_PAT: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+        run: |
+          if [ "$HAS_PAT" = "true" ]; then
+            echo "RELEASE_PLEASE_TOKEN present — the release tag push will trigger release.yml → npm publish."
+            exit 0
+          fi
+          TAG="${TAG_NAME:-<the-new-tag>}"
+          echo "::error title=Release created but will NOT auto-publish::release-please created a release using the fallback GITHUB_TOKEN. GitHub mutes workflow triggers for bot-pushed tags, so release.yml (npm publish) will not run and the new version is tagged but unpublished. Fix: set the RELEASE_PLEASE_TOKEN PAT (this workflow's header / DEV-6469). Recover this release now by re-pushing the tag from a real credential: git push origin :refs/tags/${TAG} && git push origin refs/tags/${TAG}"
+          exit 1

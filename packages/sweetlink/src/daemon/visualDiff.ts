@@ -101,10 +101,10 @@ export async function visualDiff(
   button{background:#334155;color:#e2e8f0;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;font:inherit}
   button.active{background:#0ea5e9;color:#000}
   main{display:flex;gap:8px;padding:8px;flex-wrap:wrap;justify-content:center}
-  figure{margin:0;flex:1;min-width:300px;max-width:700px}
+  figure{margin:0;flex:1;min-width:min(300px,100%);max-width:700px}
   figcaption{font-size:13px;color:#94a3b8;padding:4px 0 8px}
-  img{display:block;max-width:100%;border:1px solid #334155}
-  .stack{position:relative;display:inline-block;max-width:100%}
+  img{display:block;max-width:100%;height:auto;border:1px solid #334155}
+  .stack{position:relative;display:inline-block;max-width:100%;overflow:hidden}
   .stack img{position:absolute;top:0;left:0}
   .stack img:first-child{position:relative}
   .stack img.overlay{mix-blend-mode:difference;filter:invert(1)}

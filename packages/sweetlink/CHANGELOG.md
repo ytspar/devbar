@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.27.0](https://github.com/ytspar/devbar/compare/sweetlink-v1.26.4...sweetlink-v1.27.0) (2026-07-21)
+
+
+### Features
+
+* **sweetlink:** add --batch to capture many frames in one process ([c1fb107](https://github.com/ytspar/devbar/commit/c1fb107d5ff30e46b628c256797526cb4692ac5b))
+
+
+### Bug Fixes
+
+* **sweetlink:** reuse the daemon browser and honour Portless URLs ([51054c5](https://github.com/ytspar/devbar/commit/51054c50fbb1bdea306321e24df03e27db0334f0))
+
 ## [1.26.4](https://github.com/ytspar/devbar/compare/sweetlink-v1.26.3...sweetlink-v1.26.4) (2026-07-17)
 
 

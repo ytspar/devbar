@@ -32,7 +32,12 @@ import {
   parsePortNumber,
   resolveSweetlinkWsPortForAppPort,
 } from '../types.js';
-import { SCREENSHOT_DIR, selectClientForTargetUrl, urlsEquivalent } from '../urlUtils.js';
+import {
+  defaultDevUrl,
+  SCREENSHOT_DIR,
+  selectClientForTargetUrl,
+  urlsEquivalent,
+} from '../urlUtils.js';
 import { generateClickCode } from './clickCode.js';
 import type {
   A11yData,
@@ -728,6 +733,73 @@ async function takePlaywrightScreenshot(
   };
 }
 
+/**
+ * Screenshot when no browser client is connected, preferring the persistent daemon.
+ *
+ * `takePlaywrightScreenshot` cold-launches a browser per invocation (~2s). That is
+ * fine for a one-off, but the automated callers — visual-evidence gallery frames,
+ * batch capture runs — take dozens of shots in a row and pay it every single time.
+ * They never pass `--hifi`, so they never reached the persistent daemon that exists
+ * for exactly this case and serves repeat shots in ~150ms.
+ *
+ * Worse, the daemon was unreachable precisely where it helps most: the routes those
+ * captures target render without devbar, so there is never a connected browser
+ * client and the WebSocket path always escalates here.
+ *
+ * So make the warm path the default rather than an opt-in flag, and fall back to a
+ * standalone launch whenever the daemon can't serve the request. The returned
+ * `method` names the engine that actually served the frame, so a silent regression
+ * back to per-frame launches is visible in the log rather than invisible.
+ */
+async function takeScreenshotPreferDaemon(
+  options: {
+    selector?: string;
+    output?: string;
+    fullPage?: boolean;
+    viewport?: string;
+    hover?: boolean;
+    hideDevbar?: boolean;
+    url?: string;
+  },
+  targetUrl: string,
+  fallbackMethod: string
+): Promise<ScreenshotData> {
+  // --hover is a standalone-Playwright capability; the daemon screenshot request
+  // has no hover support, so don't route those through it.
+  if (!options.hover) {
+    try {
+      const daemonState = await ensureDaemon(findProjectRoot(), targetUrl);
+      const resp = await daemonRequest(daemonState, 'screenshot', {
+        selector: options.selector,
+        fullPage: options.fullPage,
+        viewport: options.viewport,
+        hideDevbar: options.hideDevbar,
+        url: options.url || targetUrl,
+      });
+      const data = resp.data as { screenshot: string; width: number; height: number };
+      const outputPath = options.output || getDefaultScreenshotPath();
+      ensureDir(outputPath);
+      fs.writeFileSync(outputPath, Buffer.from(data.screenshot, 'base64'));
+      const method = 'Daemon (auto-escalation)';
+      reportScreenshotSuccess(outputPath, data.width, data.height, method, options.selector);
+      return {
+        path: getRelativePath(outputPath),
+        width: data.width,
+        height: data.height,
+        method,
+        selector: options.selector,
+        ...(options.hideDevbar ? { devbarHidden: true } : {}),
+      };
+    } catch (error) {
+      console.warn(
+        `[Sweetlink] Daemon unavailable (${error instanceof Error ? error.message : error}) — falling back to a standalone browser`
+      );
+    }
+  }
+
+  return await takePlaywrightScreenshot(options, fallbackMethod);
+}
+
 async function screenshot(options: {
   selector?: string;
   output?: string;
@@ -756,7 +828,7 @@ async function screenshot(options: {
     options.viewport = `${options.width}x${height}`;
   }
 
-  const targetUrl = options.url || 'http://localhost:3000';
+  const targetUrl = options.url || defaultDevUrl();
 
   // Auto-wait for server if --wait flag is set or if URL is provided
   // This eliminates the need for external sleep workarounds
@@ -888,7 +960,11 @@ async function screenshot(options: {
   // This prevents launching a headless browser only to discover the dev server is dead.
   const serverAlive = await checkSweetlinkAlive();
   if (!serverAlive && !options.forceCDP) {
-    console.warn('[Sweetlink] Sweetlink server not responding — will use Playwright standalone');
+    // Not necessarily a fault: pages rendered without devbar (isolated component
+    // render routes, production builds) never host a Sweetlink server. Say what
+    // happens next rather than implying a standalone launch is the only option —
+    // the escalation path prefers the persistent daemon.
+    console.warn('[Sweetlink] No Sweetlink server on the page — capturing via browser automation');
   }
 
   // Check if CDP is available (unless force WS is specified)
@@ -937,9 +1013,14 @@ async function screenshot(options: {
         console.error('[Sweetlink] Could not navigate browser to', options.url);
         process.exit(1);
       }
-      // Auto-escalate to Playwright (opens browser, navigates, screenshots)
-      console.log('[Sweetlink] No browser for navigation — escalating to Playwright');
-      return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (auto-escalation)');
+      // Auto-escalate (opens browser, navigates, screenshots), preferring the
+      // persistent daemon so a batch of frames doesn't relaunch a browser each time.
+      console.log('[Sweetlink] No browser for navigation — escalating');
+      return await takeScreenshotPreferDaemon(
+        playwrightOpts,
+        targetUrl,
+        'Playwright (auto-escalation)'
+      );
     }
   }
 
@@ -963,10 +1044,14 @@ async function screenshot(options: {
       // Auto-escalate to Playwright when no browser client is connected
       // This happens after dev server restart when browser page hasn't been refreshed
       if (response.error?.includes('No browser client connected')) {
-        console.log('[Sweetlink] No browser client - auto-escalating to Playwright');
+        console.log('[Sweetlink] No browser client - auto-escalating');
 
         try {
-          return await takePlaywrightScreenshot(playwrightOpts, 'Playwright (auto-escalation)');
+          return await takeScreenshotPreferDaemon(
+            playwrightOpts,
+            targetUrl,
+            'Playwright (auto-escalation)'
+          );
         } catch (playwrightError) {
           console.error(
             '[Sweetlink] Playwright fallback also failed:',
@@ -1335,7 +1420,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
 
     if (contexts.length > 0) {
       const pages = contexts[0]!.pages();
-      const devUrl = new URL(process.env.SWEETLINK_DEV_URL || 'http://localhost:3000');
+      const devUrl = new URL(defaultDevUrl());
       const devHost = devUrl.hostname;
       const devPort = devUrl.port || (devUrl.protocol === 'https:' ? '443' : '80');
       page = pages.find(
@@ -1350,7 +1435,7 @@ async function execViaPlaywright(code: string): Promise<unknown> {
     if (!page) {
       const context = contexts[0] || (await browser.newContext());
       page = await context.newPage();
-      await page.goto(process.env.SWEETLINK_DEV_URL || 'http://localhost:3000', {
+      await page.goto(defaultDevUrl(), {
         waitUntil: 'domcontentloaded',
       });
     }
@@ -2924,7 +3009,7 @@ async function runOneBatchCapture(cap: Record<string, unknown>): Promise<unknown
   }
 
   if (mode === 'screenshot') {
-    const targetUrl = (cap.url as string | undefined) ?? 'http://localhost:3000';
+    const targetUrl = (cap.url as string | undefined) ?? defaultDevUrl();
     const projRoot = findProjectRoot();
     const state = await ensureDaemon(projRoot, targetUrl);
     const resp = await daemonRequest(state, 'screenshot', {
@@ -3087,7 +3172,7 @@ function printErrorContext(error: unknown): void {
  * Handle the `wait` command: wait for a server to be ready.
  */
 async function handleWaitCommand(): Promise<WaitData> {
-  const waitUrl = getArg('--url') || 'http://localhost:3000';
+  const waitUrl = getArg('--url') || defaultDevUrl();
   const waitTimeout = getArg('--timeout')
     ? parseInt(getArg('--timeout')!, 10)
     : SERVER_READY_TIMEOUT;
@@ -3109,7 +3194,7 @@ async function handleWaitCommand(): Promise<WaitData> {
  * Handle the `status` command: quick non-blocking server health check.
  */
 async function handleStatusCommand(): Promise<StatusData> {
-  const statusUrl = getArg('--url') || 'http://localhost:3000';
+  const statusUrl = getArg('--url') || defaultDevUrl();
   try {
     const parsedUrl = new URL(statusUrl);
     const healthCheckUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
@@ -3170,7 +3255,7 @@ async function handleScreenshotCmd(): Promise<unknown> {
 
 async function handleInspectCmd(): Promise<unknown> {
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const state = await ensureDaemon(projRoot, targetUrl);
   const actionTranscript: Array<{ action: string; target?: string; result?: string }> = [];
   args.forEach((arg, index) => {
@@ -3259,7 +3344,7 @@ async function handleClickCmd(): Promise<unknown> {
   const clickText = getArg('--text');
   const clickIndex = getArg('--index') ? parseInt(getArg('--index')!, 10) : 0;
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
 
   // Route @e refs to daemon
   if (clickTarget && /^@e\d+$/.test(clickTarget)) {
@@ -3285,9 +3370,7 @@ async function handleClickCmd(): Promise<unknown> {
           index: clickIndex,
         });
         const data = resp.data as { clicked?: string; found?: number; index?: number };
-        console.log(
-          `[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`
-        );
+        console.log(`[Sweetlink] Clicked (recording): ${data.clicked ?? clickTarget ?? clickText}`);
         return {
           clicked: data.clicked ?? 'unknown',
           found: data.found ?? 1,
@@ -3309,7 +3392,7 @@ async function handleClickCmd(): Promise<unknown> {
 async function handleNetworkCmd(): Promise<unknown> {
   if (hasFlag('--failed')) {
     const projRoot = findProjectRoot();
-    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const targetUrl = getArg('--url') ?? defaultDevUrl();
     const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
     const state = await ensureDaemon(projRoot, targetUrl);
     const resp = await daemonRequest(state, 'network-read', {
@@ -3388,7 +3471,7 @@ async function handleSetupCmd(): Promise<unknown> {
 
 async function handleConsoleCmd(): Promise<unknown> {
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const errorsOnly = hasFlag('--errors');
   const lastN = getArg('--last') ? parseInt(getArg('--last')!, 10) : undefined;
   const state = await ensureDaemon(projRoot, targetUrl);
@@ -3412,7 +3495,7 @@ async function handleConsoleCmd(): Promise<unknown> {
 async function handleSessionsCmd(): Promise<unknown> {
   const sub = args[1];
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const state = await ensureDaemon(projRoot, targetUrl);
   const resp = await daemonRequest(state, 'sessions-list');
   const data = resp.data as {
@@ -3576,7 +3659,7 @@ async function handleDemoCmd(): Promise<unknown> {
   }
 
   if (sub === 'screenshot') {
-    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const targetUrl = getArg('--url') ?? defaultDevUrl();
     const caption = getArg('--caption') ?? 'Screenshot';
     const daemonState = await ensureDaemon(projRoot, targetUrl);
     const resp = await daemonRequest(daemonState, 'screenshot', {});
@@ -3593,7 +3676,7 @@ async function handleDemoCmd(): Promise<unknown> {
   }
 
   if (sub === 'snapshot') {
-    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const targetUrl = getArg('--url') ?? defaultDevUrl();
     const daemonState = await ensureDaemon(projRoot, targetUrl);
     const resp = await daemonRequest(daemonState, 'snapshot', { interactive: true });
     const data = resp.data as { tree: string };
@@ -3659,7 +3742,7 @@ async function handleDaemonCmd(): Promise<unknown> {
   // so honour --url for status/stop too — otherwise they look up the
   // un-suffixed `daemon.json` and miss the daemon that `start`
   // wrote with --url.
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const appPort = extractPort(targetUrl);
   if (subcommand === 'stop') {
     const stopped = await stopDaemon(projRoot, appPort);
@@ -3702,19 +3785,21 @@ async function handleFillCmd(): Promise<unknown> {
   }
   if (/^@e\d+$/.test(fillTarget)) {
     const projRoot = findProjectRoot();
-    const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+    const targetUrl = getArg('--url') ?? defaultDevUrl();
     const state = await ensureDaemon(projRoot, targetUrl);
     await daemonRequest(state, 'fill-ref', { ref: fillTarget, value: fillValue });
     console.log(`[Sweetlink] Filled ${fillTarget} with "${fillValue}"`);
     return { clicked: fillTarget, found: 1, index: 0 } satisfies ClickData;
   }
-  console.error('[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.');
+  console.error(
+    '[Sweetlink] Error: fill currently only supports @e refs. Run `snapshot -i` first.'
+  );
   process.exit(1);
 }
 
 async function handleSnapshotCmd(): Promise<unknown> {
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const interactive = hasFlag('-i') || hasFlag('--interactive');
   const doDiff = hasFlag('-D') || hasFlag('--diff');
   const doAnnotate = hasFlag('-a') || hasFlag('--annotate');
@@ -3964,9 +4049,7 @@ async function handleSimCmd(): Promise<unknown> {
     `[Sweetlink] ${recResult.recordingClosed ? '✓' : '⚠'} ${getRelativePath(output)} · ` +
       `${recResult.durationSec.toFixed(1)}s · ${sizeKb}KB · ${recResult.device} · exit=${recResult.exitCode}` +
       tapSuffix +
-      (recResult.recordingClosed
-        ? ''
-        : ' (recording was force-killed; mp4 may be incomplete)')
+      (recResult.recordingClosed ? '' : ' (recording was force-killed; mp4 may be incomplete)')
   );
 
   const result = {
@@ -4066,7 +4149,7 @@ async function handleTermCmd(): Promise<unknown> {
 
 async function handleRecordCmd(): Promise<unknown> {
   const projRoot = findProjectRoot();
-  const targetUrl = getArg('--url') ?? 'http://localhost:3000';
+  const targetUrl = getArg('--url') ?? defaultDevUrl();
   const subcommand = args[1];
   const state = await ensureDaemon(projRoot, targetUrl);
 
@@ -4082,8 +4165,7 @@ async function handleRecordCmd(): Promise<unknown> {
     const resp = await daemonRequest(state, 'record-start', params);
     const data = resp.data as { sessionId: string; label?: string };
     console.log(
-      `[Sweetlink] Recording started: ${data.sessionId}` +
-        (data.label ? ` (${data.label})` : '')
+      `[Sweetlink] Recording started: ${data.sessionId}${data.label ? ` (${data.label})` : ''}`
     );
     return data;
   }
@@ -4181,9 +4263,7 @@ async function handleRecordCmd(): Promise<unknown> {
           throw new Error(`Unknown verb '${verb}'. Allowed: click, fill, press, sleep.`);
         }
       } catch (err) {
-        console.error(
-          `  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`
-        );
+        console.error(`  ✗ step "${step}" failed: ${err instanceof Error ? err.message : err}`);
         // Continue to record-stop so the partial recording is preserved.
       }
     }

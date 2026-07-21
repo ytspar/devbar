@@ -9,6 +9,7 @@
  */
 
 import * as crypto from 'crypto';
+import { defaultDevUrl } from '../urlUtils.js';
 import { closeBrowser, setHeadedMode } from './browser.js';
 import { shutdown, startServer } from './server.js';
 import { extractPort, releaseLock, removeDaemonState, writeDaemonState } from './stateFile.js';
@@ -28,7 +29,7 @@ function hasFlag(name: string): boolean {
   return args.includes(name);
 }
 
-const url = getArg('--url') ?? 'http://localhost:3000';
+const url = getArg('--url') ?? defaultDevUrl();
 const projectRoot = getArg('--project-root') ?? process.cwd();
 const headed = hasFlag('--headed');
 const appPort = extractPort(url);

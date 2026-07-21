@@ -454,25 +454,17 @@ describe('showHelp', () => {
   // pulls dynamic imports through `daemon/utils.js` and can drift past
   // the default 5s timeout under heavy parallel load. 15s is plenty for
   // the actual work (~500ms in isolation).
-  it(
-    'displays help when --help flag is passed',
-    async () => {
-      await runCLI(['--help']);
-      expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
-      expect(exitSpy).toHaveBeenCalledWith(0);
-    },
-    15_000
-  );
+  it('displays help when --help flag is passed', async () => {
+    await runCLI(['--help']);
+    expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  }, 15_000);
 
-  it(
-    'displays help when -h flag is passed',
-    async () => {
-      await runCLI(['-h']);
-      expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
-      expect(exitSpy).toHaveBeenCalledWith(0);
-    },
-    15_000
-  );
+  it('displays help when -h flag is passed', async () => {
+    await runCLI(['-h']);
+    expect(logs.some((l) => l.includes('Sweetlink CLI'))).toBe(true);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  }, 15_000);
 
   it('displays help when no command is given', async () => {
     await runCLI([]);
@@ -2199,9 +2191,7 @@ describe('urlsEquivalent (CLI --url comparison)', () => {
   });
 
   it('does not match different paths', () => {
-    expect(urlsEquivalent('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(
-      false
-    );
+    expect(urlsEquivalent('http://localhost:3000/about', 'http://localhost:3000/home')).toBe(false);
   });
 
   it('preserves query params in comparison', () => {
@@ -2307,7 +2297,7 @@ describe('screenshot --url navigation', () => {
     expect(logs.some((l) => l.includes('Navigating browser to'))).toBe(false);
   });
 
-  it('auto-escalates to Playwright when no browser connected', async () => {
+  it('auto-escalates to browser automation when no browser connected', async () => {
     // null in queue = ECONNREFUSED (no browser connected)
     autoResponse.queue = [null];
 
@@ -2319,7 +2309,25 @@ describe('screenshot --url navigation', () => {
       '/tmp/test-escalate.png',
     ]);
 
-    expect(logs.some((l) => l.includes('escalating to Playwright'))).toBe(true);
+    expect(logs.some((l) => l.includes('escalating'))).toBe(true);
+  });
+
+  it('does not promise a standalone launch when the page has no Sweetlink server', async () => {
+    // Pages rendered without devbar (isolated component render routes, production
+    // builds) never host a Sweetlink server. The pre-flight notice must not claim a
+    // standalone browser is what happens next — escalation prefers the persistent
+    // daemon, and the old wording sent people hunting for a dead dev server.
+    autoResponse.queue = [null];
+
+    await runCLI([
+      'screenshot',
+      '--url',
+      'http://localhost:3000/about',
+      '--output',
+      '/tmp/test-noserver.png',
+    ]);
+
+    expect(logs.some((l) => l.includes('will use Playwright standalone'))).toBe(false);
   });
 
   it('errors with --force-ws when no browser connected for navigation', async () => {
@@ -2582,7 +2590,7 @@ describe('server discovery via .sweetlink/server.json', () => {
     expect(MockWebSocket.instances.some((w) => w.url === 'ws://localhost:10888')).toBe(false);
   });
 
-  it("skips a server.json whose app port disagrees with the explicit --url", async () => {
+  it('skips a server.json whose app port disagrees with the explicit --url', async () => {
     // The file belongs to an app on port 4665; the user asked about :3000.
     mockServerInfoFile({ wsPort: 10888, appPort: 4665, pid: 4242, startedAt: '', version: '' });
     globalThis.fetch = vi.fn().mockResolvedValue({

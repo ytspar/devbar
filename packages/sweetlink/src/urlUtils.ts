@@ -15,6 +15,29 @@ export const MAX_SLUG_LENGTH = 50;
 /** Maximum length for log messages in summaries */
 export const MAX_LOG_MESSAGE_LENGTH = 200;
 
+/** Last-resort dev server URL when nothing else identifies the target. */
+export const FALLBACK_DEV_URL = 'http://localhost:3000';
+
+/**
+ * The dev server URL to target when the caller passes no explicit `--url`.
+ *
+ * Port 3000 stopped being a safe assumption once apps moved behind Portless,
+ * which gives every app a stable `https://<name>.localhost` route and assigns
+ * the underlying port dynamically. Portless exports `PORTLESS_URL` into the
+ * process it runs, so when we are running under it that value — not 3000 — is
+ * the app the user means. Defaulting to 3000 there means `sweetlink status`
+ * reports on a port nothing is listening to, and every URL-less command aims at
+ * the wrong app.
+ *
+ * Precedence: an explicit `SWEETLINK_DEV_URL` override wins (the pre-existing
+ * escape hatch, and it may point somewhere Portless doesn't know about), then
+ * the Portless-provided route, then the historical default so projects not
+ * using Portless are unaffected.
+ */
+export function defaultDevUrl(env: Record<string, string | undefined> = process.env): string {
+  return env.SWEETLINK_DEV_URL || env.PORTLESS_URL || FALLBACK_DEV_URL;
+}
+
 // ============================================================================
 // Slug Generation
 // ============================================================================

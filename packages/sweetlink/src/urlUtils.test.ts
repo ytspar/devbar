@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  defaultDevUrl,
   formatTimestampForFilename,
   generateBaseFilename,
   generateSlugFromUrl,
@@ -323,5 +324,28 @@ describe('truncateMessage', () => {
 
   it('handles custom limit of 0', () => {
     expect(truncateMessage('hello', 0)).toBe('');
+  });
+});
+
+describe('defaultDevUrl', () => {
+  it('uses the Portless route when running under Portless', () => {
+    // Portless assigns the underlying port dynamically and exports the stable
+    // route; assuming 3000 aims every URL-less command at the wrong app.
+    expect(defaultDevUrl({ PORTLESS_URL: 'https://my-app.localhost:1355' })).toBe(
+      'https://my-app.localhost:1355'
+    );
+  });
+
+  it('lets SWEETLINK_DEV_URL override Portless', () => {
+    expect(
+      defaultDevUrl({
+        SWEETLINK_DEV_URL: 'http://localhost:4321',
+        PORTLESS_URL: 'https://my-app.localhost:1355',
+      })
+    ).toBe('http://localhost:4321');
+  });
+
+  it('falls back to port 3000 when neither is set', () => {
+    expect(defaultDevUrl({})).toBe('http://localhost:3000');
   });
 });

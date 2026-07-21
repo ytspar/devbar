@@ -13,6 +13,7 @@ import {
   HOVER_TRANSITION_DELAY_MS,
   SELECTOR_TIMEOUT_MS,
 } from './screenshotConstants.js';
+import { defaultDevUrl } from './urlUtils.js';
 import { parseViewport } from './viewportUtils.js';
 
 // ============================================================================
@@ -20,7 +21,7 @@ import { parseViewport } from './viewportUtils.js';
 // ============================================================================
 
 const CDP_URL = process.env.CHROME_CDP_URL || 'http://127.0.0.1:9222';
-const DEFAULT_DEV_URL = process.env.SWEETLINK_DEV_URL || 'http://localhost:3000';
+const DEFAULT_DEV_URL = defaultDevUrl();
 
 /** Timeouts */
 const NETWORK_IDLE_TIMEOUT_MS = 10000;

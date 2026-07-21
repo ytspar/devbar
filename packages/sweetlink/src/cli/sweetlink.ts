@@ -11,6 +11,11 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { WebSocket } from 'ws';
+import {
+  type BatchScreenshotItem,
+  type BatchScreenshotResult,
+  parseBatchManifest,
+} from '../batchManifest.js';
 import { detectCDP, getNetworkRequestsViaCDP } from '../cdp.js';
 import {
   DaemonRequestError,
@@ -1113,6 +1118,113 @@ async function screenshot(options: {
     console.error('[Sweetlink] Error:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
+}
+
+/**
+ * Capture many frames in one process against one browser.
+ *
+ * Even with the daemon serving frames, driving a batch as N separate CLI
+ * invocations pays Node startup and module load per frame — which dominates once
+ * the browser launch is gone. Callers that already know their whole frame list
+ * (visual-evidence capture plans, gallery sweeps) can hand it over once and get
+ * a single process, a single daemon handshake, and a single server-ready wait.
+ *
+ * One frame failing does not abort the batch: a capture plan is more useful with
+ * 25 of 26 frames plus a named failure than with nothing, and the caller decides
+ * whether a partial set is acceptable.
+ */
+async function screenshotBatch(options: {
+  items: BatchScreenshotItem[];
+  defaults: {
+    fullPage?: boolean;
+    hideDevbar?: boolean;
+    viewport?: string;
+    selector?: string;
+  };
+  wait?: boolean;
+  waitTimeout?: number;
+}): Promise<{ engine: string; captured: BatchScreenshotResult[]; failed: number }> {
+  const { items, defaults } = options;
+  const firstUrl = items[0]!.url;
+
+  if (options.wait !== false) {
+    try {
+      await waitForServer(firstUrl, options.waitTimeout || SERVER_READY_TIMEOUT);
+    } catch (error) {
+      console.error(
+        '[Sweetlink] Server not available:',
+        error instanceof Error ? error.message : error
+      );
+      process.exit(1);
+    }
+  }
+
+  const resolve = (item: BatchScreenshotItem) => ({
+    selector: item.selector ?? defaults.selector,
+    fullPage: item.fullPage ?? defaults.fullPage,
+    viewport: item.viewport ?? defaults.viewport,
+    hideDevbar: item.hideDevbar ?? defaults.hideDevbar,
+  });
+
+  // One handshake for the whole batch. If the daemon can't start we still run
+  // every frame in this process — slower per frame, but the caller keeps the
+  // single-invocation win instead of the batch failing outright.
+  let daemonState: Awaited<ReturnType<typeof ensureDaemon>> | null = null;
+  try {
+    daemonState = await ensureDaemon(findProjectRoot(), firstUrl);
+  } catch (error) {
+    console.warn(
+      `[Sweetlink] Daemon unavailable (${error instanceof Error ? error.message : error}) — running the batch against standalone browsers`
+    );
+  }
+
+  const engine = daemonState ? 'Daemon (batch)' : 'Playwright (batch fallback)';
+  const captured: BatchScreenshotResult[] = [];
+
+  for (const [index, item] of items.entries()) {
+    const shared = resolve(item);
+    try {
+      if (daemonState) {
+        const resp = await daemonRequest(daemonState, 'screenshot', {
+          ...shared,
+          url: item.url,
+        });
+        const data = resp.data as { screenshot: string; width: number; height: number };
+        ensureDir(item.output);
+        fs.writeFileSync(item.output, Buffer.from(data.screenshot, 'base64'));
+        captured.push({
+          url: item.url,
+          output: getRelativePath(item.output),
+          ok: true,
+          width: data.width,
+          height: data.height,
+        });
+      } else {
+        const result = await takePlaywrightScreenshot(
+          { ...shared, output: item.output, url: item.url },
+          'Playwright (batch fallback)'
+        );
+        captured.push({
+          url: item.url,
+          output: result.path,
+          ok: true,
+          width: result.width,
+          height: result.height,
+        });
+      }
+      console.log(`[Sweetlink] [${index + 1}/${items.length}] ${item.url}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      captured.push({ url: item.url, output: item.output, ok: false, error: message });
+      console.warn(`[Sweetlink] [${index + 1}/${items.length}] FAILED ${item.url} — ${message}`);
+    }
+  }
+
+  const failed = captured.filter((c) => !c.ok).length;
+  console.log(
+    `[Sweetlink] ✓ Batch complete: ${captured.length - failed}/${captured.length} frames via ${engine}`
+  );
+  return { engine, captured, failed };
 }
 
 async function queryDOM(options: {
@@ -2283,8 +2395,16 @@ const COMMAND_HELP: Record<string, string> = {
         - Auto-launches headless browser if no browser connected
 
     Options:
-      --url <url>                 Navigate browser to URL before capturing (default: http://localhost:3000)
+      --url <url>                 Navigate browser to URL before capturing
+                                  (default: $SWEETLINK_DEV_URL, else $PORTLESS_URL, else http://localhost:3000)
                                   Navigates connected browser via WS; if none connected, opens one via Playwright
+      --batch <path|->            Capture many frames in ONE process from a JSON manifest
+                                  ('-' reads stdin). Array of { url, output, selector?,
+                                  fullPage?, viewport?, hideDevbar? }; per-item values win,
+                                  the other flags here supply defaults. One server wait and
+                                  one daemon handshake for the whole set — use this instead
+                                  of a shell loop, which pays Node startup per frame.
+                                  A failed frame is reported and the batch continues.
       --selector <css-selector>   CSS selector of element to screenshot
       --output <path>             Output file path (default: screenshot-<timestamp>.png)
       --full-page                 Capture full scrollable page (default: viewport only)
@@ -3231,6 +3351,27 @@ async function handleStatusCommand(): Promise<StatusData> {
 type CommandHandler = () => Promise<unknown>;
 
 async function handleScreenshotCmd(): Promise<unknown> {
+  // --batch takes a manifest of frames and captures them all in this one
+  // process. Per-frame flags in the manifest win; the top-level flags below
+  // supply the defaults, so `--hide-devbar --full-page --batch plan.json`
+  // behaves like the same flags repeated on every item.
+  const batchPath = getArg('--batch');
+  if (batchPath) {
+    const raw =
+      batchPath === '-' ? fs.readFileSync(0, 'utf-8') : fs.readFileSync(batchPath, 'utf-8');
+    return screenshotBatch({
+      items: parseBatchManifest(raw),
+      defaults: {
+        fullPage: hasFlag('--full-page'),
+        hideDevbar: hasFlag('--hide-devbar'),
+        viewport: getArg('--viewport'),
+        selector: getArg('--selector'),
+      },
+      wait: !hasFlag('--no-wait'),
+      waitTimeout: getArg('--wait-timeout') ? parseInt(getArg('--wait-timeout')!, 10) : undefined,
+    });
+  }
+
   return screenshot({
     selector: getArg('--selector'),
     output: getArg('--output'),

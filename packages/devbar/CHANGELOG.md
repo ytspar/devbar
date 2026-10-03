@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.4](https://github.com/ytspar/devbar/compare/devbar-v1.18.3...devbar-v1.18.4) (2026-10-03)
+
+
+### Bug Fixes
+
+* **devbar:** restore mobile touch targets ([#39](https://github.com/ytspar/devbar/issues/39)) ([57a406d](https://github.com/ytspar/devbar/commit/57a406d369520c53ba0a3277553ffc223ba8cb4f))
+
 ## [1.18.3](https://github.com/ytspar/devbar/compare/devbar-v1.18.2...devbar-v1.18.3) (2026-07-17)
 
 

@@ -888,7 +888,7 @@ export const DEVBAR_STYLES = `
   }
   .devbar-actions {
     display: grid;
-    grid-template-columns: repeat(5, 32px);
+    grid-template-columns: repeat(5, 44px);
     justify-content: center;
     justify-items: center;
     align-items: center;
@@ -904,10 +904,17 @@ export const DEVBAR_STYLES = `
     display: none;
   }
   .devbar-actions button {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  /* Compact mode mounts its controls directly under the toolbar root instead
+     of inside .devbar-actions. Keep the icon small while expanding its real
+     hit box to the same mobile floor. */
+  [data-devbar] > button {
+    min-width: 44px !important;
+    min-height: 44px !important;
   }
   .devbar-actions button svg {
     width: 14px;
@@ -922,7 +929,7 @@ export const DEVBAR_STYLES = `
     padding: 0 !important;
   }
   .devbar-custom-control {
-    min-height: 0 !important;
+    min-height: 44px !important;
     max-width: 100% !important;
     padding: 0.25rem 0.5rem !important;
     font-size: 0.5625rem !important;

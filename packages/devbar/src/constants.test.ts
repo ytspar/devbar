@@ -197,17 +197,18 @@ describe('DEVBAR_STYLES responsive custom controls', () => {
     expect(customStatusBlock).not.toContain('flex: 1 1 auto');
   });
 
-  it('uses compact simulated-mobile controls instead of touch-sized controls', () => {
+  it('keeps mobile toolbar controls at the 44px touch-target floor', () => {
     const mobileStart = DEVBAR_STYLES.indexOf('@media (max-width: 639px)');
     const mobileBlock = DEVBAR_STYLES.slice(mobileStart);
 
-    expect(mobileBlock).toContain('grid-template-columns: repeat(5, 32px)');
-    expect(mobileBlock).toContain('width: 32px !important');
-    expect(mobileBlock).toContain('min-height: 0 !important');
+    expect(mobileBlock).toContain('grid-template-columns: repeat(5, 44px)');
+    expect(mobileBlock).toContain('width: 44px !important');
+    expect(mobileBlock).toContain('min-height: 44px !important');
+    expect(mobileBlock).toContain('[data-devbar] > button');
     expect(mobileBlock).toContain('.devbar-custom-controls-inline');
     expect(mobileBlock).toContain('padding: 0 !important');
-    expect(mobileBlock).not.toContain('grid-template-columns: repeat(5, 44px)');
-    expect(mobileBlock).not.toContain('min-height: 44px !important');
+    expect(mobileBlock).not.toContain('grid-template-columns: repeat(5, 32px)');
+    expect(mobileBlock).not.toContain('min-height: 32px !important');
   });
 });
 

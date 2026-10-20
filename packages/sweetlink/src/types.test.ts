@@ -321,6 +321,35 @@ describe('Local Development URL Helpers', () => {
     ).toEqual(['wss://places.localhost/__sweetlink', `ws://localhost:${DEFAULT_WS_PORT}`]);
   });
 
+  it('never probes ws://localhost from a remote origin', () => {
+    // Factory preview hostnames / tunnels: the Sweetlink daemon is not on the
+    // viewer's machine. A localhost dial always fails and, on macOS 15+,
+    // raises a per-origin Local Network permission prompt — so remote origins
+    // must only attempt same-origin endpoints.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'el-lander-codex-fe-175-b4bb5088-9234029b--73f0bb2e052f-7b28053c.wip.enrichlayer.com' },
+        { fallbackPort: 10396 }
+      )
+    ).toEqual(['wss://el-lander-codex-fe-175-b4bb5088-9234029b--73f0bb2e052f-7b28053c.wip.enrichlayer.com/__sweetlink']);
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'preview.example.com' },
+        { wsPath: SWEETLINK_WS_PATH, fallbackPort: DEFAULT_WS_PORT }
+      )
+    ).toEqual(['wss://preview.example.com/__sweetlink']);
+    // An explicit wsUrl override is honored regardless of origin — it is a
+    // deliberate operator configuration, not a probe. The same-origin default
+    // may still follow as a secondary candidate; the invariant is that no
+    // ws://localhost probe appears.
+    expect(
+      buildSweetlinkWsUrlCandidates(
+        { protocol: 'https:', port: '', host: 'preview.example.com' },
+        { wsUrl: 'wss://relay.example.com/sweetlink', fallbackPort: DEFAULT_WS_PORT }
+      )
+    ).toEqual(['wss://relay.example.com/sweetlink', 'wss://preview.example.com/__sweetlink']);
+  });
+
   it('tries a hinted port BEFORE the same-origin guess under a proxied origin', () => {
     // Next + Portless: the plugin inlines the real WS port but serves no
     // /__sweetlink endpoint — the proxy forwards that path to Next's HMR

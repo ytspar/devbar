@@ -249,19 +249,35 @@ export function buildSweetlinkWsUrlCandidates(
   };
 
   const hintedPort = parsePortNumber(options.wsPort);
+  // Only probe ws://localhost:* when the page itself is served from a local
+  // hostname. On remote origins (factory preview hostnames, tunnels) the
+  // daemon is not on the viewer's machine: the probe always fails and, on
+  // macOS 15+, triggers a per-origin Local Network permission prompt.
+  const localOrigin = isLocalDevelopmentHostname(locationHostname(location));
 
   add(options.wsUrl);
   if (options.wsPath) {
     add(createSameOriginSweetlinkWsUrl(location, options.wsPath));
   }
-  if (hintedPort) {
+  if (hintedPort && localOrigin) {
     add(`ws://localhost:${hintedPort}`);
   }
   if (!options.wsPath && !parsePortNumber(location.port)) {
     add(createSameOriginSweetlinkWsUrl(location));
   }
-  add(`ws://localhost:${hintedPort ?? options.fallbackPort}`);
+  if (localOrigin) {
+    add(`ws://localhost:${hintedPort ?? options.fallbackPort}`);
+  }
   return urls;
+}
+
+function locationHostname(location: SweetlinkLocationLike): string {
+  if (!location.host) return '';
+  try {
+    return new URL(`${location.protocol}//${location.host}`).hostname;
+  } catch {
+    return '';
+  }
 }
 
 export function isLocalDevelopmentHostname(hostname: string): boolean {

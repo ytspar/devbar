@@ -92,6 +92,6 @@
     "1.2.0": "Outline and schema tools moved from devbar, modal UX",
     "1.1.0": "Auto-detect save location, browser download mode",
     "1.0.0": "Initial release \u2014 screenshots, logs, HMR capture, CLI",
-    "1.27.1": "Stop probing ws://localhost:* from remote page origins. The Sweetlink client's candidate list always ended with a localhost fallback, which on factory preview hostnames and tunnel URLs dials the viewer's own machine: it always fails, and on macOS 15+ it triggers a per-origin Local Network permission prompt. The devbar and bridge now only add localhost candidates when the page itself is served from a local hostname (localhost/127.0.0.1/*.localhost/*.test); remote origins attempt same-origin endpoints only."
+    "1.28.0": "Stop probing ws://localhost:* from remote page origins. The Sweetlink client's candidate list always ended with a localhost fallback, which on factory preview hostnames and tunnel URLs dials the viewer's own machine: it always fails, and on macOS 15+ it triggers a per-origin Local Network permission prompt. The devbar and bridge now only add localhost candidates when the page itself is served from a local hostname (localhost/127.0.0.1/*.localhost/*.test); remote origins attempt same-origin endpoints only."
   }
 }

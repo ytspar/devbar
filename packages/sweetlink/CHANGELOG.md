@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.29.0](https://github.com/ytspar/devbar/compare/sweetlink-v1.28.0...sweetlink-v1.29.0) (2026-10-20)
+
+
+### Features
+
+* **sweetlink:** optional capture sinks (s3/http/module) ([#46](https://github.com/ytspar/devbar/issues/46)) ([36d3693](https://github.com/ytspar/devbar/commit/36d3693cb6831cdf1fac2c9cdd840a8ac92002dd))
+
 ## [1.28.0](https://github.com/ytspar/devbar/compare/sweetlink-v1.27.1...sweetlink-v1.28.0) (2026-10-20)
 
 

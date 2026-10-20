@@ -5,9 +5,10 @@
  */
 
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { extractBase64FromDataUrl } from '../../browser/screenshotUtils.js';
 import { generateBaseFilename, SCREENSHOT_DIR } from '../../urlUtils.js';
+import { dispatchCaptureArtifact, type CaptureArtifactKind } from '../../daemon/captureSinks.js';
 import { getProjectRoot } from '../index.js';
 
 /**
@@ -62,10 +63,24 @@ export async function handleSaveScreenshot(data: {
   // Generate filename with timestamp using shared utility
   const baseFilename = generateBaseFilename('screenshot', timestamp);
 
+  const dispatch = (kind: CaptureArtifactKind, filePath: string, contentType: string) =>
+    void dispatchCaptureArtifact({
+      kind,
+      filename: basename(filePath),
+      localPath: filePath,
+      contentType,
+      meta: {
+        url,
+        viewport: { width, height },
+        capturedAt: new Date(timestamp).toISOString(),
+      },
+    });
+
   // Save screenshot
   const screenshotPath = join(dir, `${baseFilename}.jpg`);
   const base64Data = extractBase64FromDataUrl(screenshot);
   await fs.writeFile(screenshotPath, Buffer.from(base64Data, 'base64'));
+  dispatch('screenshot', screenshotPath, 'image/jpeg');
 
   // Calculate console summary
   let consoleSummary: ScreenshotMetadata['consoleSummary'] | undefined;
@@ -95,6 +110,7 @@ export async function handleSaveScreenshot(data: {
   };
   await fs.writeFile(metricsPath, JSON.stringify(metadata, null, 2), 'utf-8');
   console.log(`[Sweetlink] Screenshot metadata saved: ${metricsPath}`);
+  dispatch('metadata', metricsPath, 'application/json');
 
   // Save console logs only if provided
   if (logs && Array.isArray(logs) && logs.length > 0) {
@@ -117,6 +133,7 @@ export async function handleSaveScreenshot(data: {
 
     await fs.writeFile(logsPath, logsContent, 'utf-8');
     console.log(`[Sweetlink] Console logs saved: ${logsPath}`);
+    dispatch('logs', logsPath, 'text/plain');
 
     // Save as JSON for programmatic access
     const logsJsonPath = join(dir, `${baseFilename}-logs.json`);
@@ -134,6 +151,7 @@ export async function handleSaveScreenshot(data: {
     };
     await fs.writeFile(logsJsonPath, JSON.stringify(logsJson, null, 2), 'utf-8');
     console.log(`[Sweetlink] Console logs JSON saved: ${logsJsonPath}`);
+    dispatch('logs', logsJsonPath, 'application/json');
   }
 
   // Save a11y report if provided
@@ -141,6 +159,7 @@ export async function handleSaveScreenshot(data: {
     const a11yPath = join(dir, `${baseFilename}-a11y.json`);
     await fs.writeFile(a11yPath, JSON.stringify(data.a11y, null, 2), 'utf-8');
     console.log(`[Sweetlink] Accessibility report saved: ${a11yPath}`);
+    dispatch('a11y', a11yPath, 'application/json');
   } else if (data.a11y) {
     console.log('[Sweetlink] Accessibility check passed (no violations)');
   }
